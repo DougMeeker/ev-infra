@@ -1,0 +1,48 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+.eggs/
+
+# Virtual environments
+venv/
+.env/
+.env.local
+
+# Distribution / build
+build/
+dist/
+
+# Unit test / coverage reports
+.coverage*
+htmlcov/
+.pytest_cache/
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+
+# SQL / SQLite databases
+*.sqlite3
+*.db
+
+# Logs
+*.log
+
+# Alembic cache
+alembic.ini.old
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor settings
+.vscode/
+.idea/
+
+# dotenv (already covered) but keep explicit
+.env
+
+# Ignore compiled migrations cache
+migrations/__pycache__/
