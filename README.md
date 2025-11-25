@@ -161,3 +161,141 @@ alembic upgrade head
 
 ### Frontend
 `SiteDetails` now displays bills and allows creation/edit/delete. Ensure backend running on port 5000.
+
+### Map Zoom & Location Fields
+
+The Home page table includes a 🔍 button in the Map column. Clicking it pans and zooms the map to the selected site.
+
+New Site fields for California locations:
+ - `address` (street address)
+ - `city`
+
+State is omitted (all sites are in CA). These fields are returned in site JSON and editable in the Site Details form.
+
+Migration required for new columns:
+```powershell
+cd backend
+alembic upgrade head
+```
+
+Example site JSON fragment:
+```json
+{
+  "id": 12,
+  "name": "West Valley Depot",
+  "address": "123 Industrial Way",
+  "city": "Fresno",
+  "latitude": 36.7378,
+  "longitude": -119.7871
+}
+```
+
+## Equipment & Usage Feature
+
+Adds three new tables:
+
+- `equipment_catalog` (MC master list)
+  - `mc_code` (PK), `description`, `status`, `revised_date`, `energy_per_mile` (kWh per mile, nullable until set)
+- `equipment`
+  - `id`, `site_id` (FK), `equipment_identifier`, `mc_code` (FK to catalog), `department_id`, `annual_miles`, `downtime_hours`, timestamps
+- `equipment_usage`
+  - `id`, `equipment_id` (FK), `year`, `miles`, timestamps (unique per equipment/year)
+
+### Migration
+Run after pulling:
+```powershell
+cd backend
+alembic upgrade head
+```
+
+### Populate Catalog
+Refresh from `ActiveCatalog.csv` (upserts description/status/revised_date, preserves existing `energy_per_mile` values):
+```powershell
+Invoke-RestMethod -Method Post http://localhost:5000/api/catalog/refresh
+```
+Or via curl:
+```powershell
+curl -X POST http://localhost:5000/api/catalog/refresh
+```
+
+### Set Energy per Mile
+Update an MC entry's energy factor:
+```powershell
+curl -X PUT http://localhost:5000/api/catalog/00490 -H "Content-Type: application/json" -d '{"energy_per_mile":1.2}'
+```
+
+### Equipment Endpoints
+List site equipment (default last year):
+`GET /api/sites/<site_id>/equipment?year=2024`
+
+Create equipment:
+`POST /api/sites/<site_id>/equipment {"mc_code":"00490","equipment_identifier":"Unit-42","department_id":5}`
+
+Upsert usage (miles for a year):
+`POST /api/sites/equipment/<equipment_id>/usage {"year":2024,"miles":15432.7}`
+
+Site energy aggregation:
+`GET /api/sites/<site_id>/equipment/energy?year=2024`
+Returns totals and per-equipment energy: `miles * energy_per_mile`.
+
+### Frontend
+`SiteDetails` now includes an Equipment section:
+- Add equipment by MC code.
+- Enter prior-year miles and save.
+- Displays per-equipment and total site energy (kWh) for last year.
+
+### Workflow to Use Feature
+1. Run migration (includes annual miles & downtime fields as of latest revision).
+2. Refresh catalog.
+3. Set `energy_per_mile` for relevant MC codes.
+4. Add equipment to each site.
+5. Enter last year's miles per equipment.
+6. View aggregated kWh in Site Details Equipment section.
+
+### Assumptions
+- `energy_per_mile` is kWh consumed per mile for that MC category.
+- Last year = `current_year - 1` unless `year` query param supplied.
+- Miles without an energy factor yield `null` energy until factor is set.
+- If `annual_miles` set on equipment it overrides usage entries for energy calculations.
+- `downtime_hours` reduces operating hours from 8760 when computing average kW = annual_energy_kWh / (8760 - downtime_hours).
+
+### Future Enhancements (Optional)
+- Bulk import equipment usage.
+- Support partial-year mileage (store monthly usage table).
+- Historical energy trends endpoint.
+- Permission model for department-specific edits.
+
+## Catalog Manager UI
+
+A new page at `/catalog` allows:
+- Uploading a CSV file to refresh catalog (`/api/catalog/upload`).
+- Refreshing from server-side `ActiveCatalog.csv` (`/api/catalog/refresh`).
+- Inline editing of description, status, and `energy_per_mile`.
+- Sorting and filtering by MC or description.
+- Delete unused catalog entries (only if no equipment references MC).
+
+### Upload Endpoint
+`POST /api/catalog/upload` (multipart/form-data, field name: `file`)
+Response: `{ "message": "Catalog uploaded", "added": <int>, "updated": <int> }`
+
+Client sample (PowerShell):
+```powershell
+Invoke-WebRequest -Method Post -InFile .\ActiveCatalog.csv -ContentType 'multipart/form-data' -Uri http://localhost:5000/api/catalog/upload -Form @{ file = Get-Item .\ActiveCatalog.csv }
+```
+
+Simpler with curl:
+```powershell
+curl -F file=@ActiveCatalog.csv http://localhost:5000/api/catalog/upload
+```
+
+### Editing Energy Factors
+Inline edits call `PUT /api/catalog/<mc_code>` with JSON, e.g.:
+```powershell
+curl -X PUT http://localhost:5000/api/catalog/00490 -H "Content-Type: application/json" -d '{"energy_per_mile":1.25, "status":"Available"}'
+```
+
+### Notes
+- Upload does not clear existing `energy_per_mile` values; they persist unless overwritten via PUT.
+- CSV expected headers: `MC,Equipment Description,Status,Revised`.
+- Invalid or empty MC rows are skipped silently.
+- Delete endpoint: `DELETE /api/catalog/<mc_code>` returns error if equipment exists for MC.

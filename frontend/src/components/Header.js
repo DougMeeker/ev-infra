@@ -13,6 +13,9 @@ const Header = () => {
           <NavLink to="/" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Home
           </NavLink>
+          <NavLink to="/catalog" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
+            Catalog
+          </NavLink>
         </nav>
       </div>
     </header>

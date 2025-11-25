@@ -57,6 +57,33 @@ const MapView = ({ sites, focusSiteId }) => {
     }
   };
 
+  // Helper to build an icon on-demand (retains leaflet base class; adds diagnostics)
+  const buildIconForSite = (site) => {
+    const cap = site.available_capacity_kw;
+    const capClass = typeof cap === 'number'
+      ? (cap < 200 ? 'cap-low' : cap < 800 ? 'cap-mid' : 'cap-high')
+      : 'cap-unknown';
+    try {
+      const colorMap = {
+        'cap-low': '#dc2626',
+        'cap-mid': '#ca8a04',
+        'cap-high': '#16a34a',
+        'cap-unknown': '#64748b'
+      };
+      const bg = colorMap[capClass] || '#64748b';
+      return L.divIcon({
+        className: `leaflet-div-icon capacity-marker ${capClass}`,
+        html: `<span style="background:${bg};display:block;width:100%;height:100%;border-radius:50%;"></span>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+        popupAnchor: [0, -10]
+      });
+    } catch (e) {
+      console.warn('Failed to build custom icon, falling back', e);
+      return new L.Icon.Default();
+    }
+  };
+
   return (
     <MapContainer center={center} zoom={6} style={{ height: "500px", width: "100%", borderRadius: 'var(--radius)', border: '1px solid var(--card-border)' }}>
       <TileLayer
@@ -67,15 +94,36 @@ const MapView = ({ sites, focusSiteId }) => {
   <ClickHandler onMapClick={handleMapClick} />
   <FocusHelper focusSite={focusSite} />
 
-      {sites.map((site) => (
-        <Marker key={site.id} position={[site.latitude, site.longitude]}>
-          <Popup>
-            <strong>{site.name}</strong><br />
-            Utility: {site.utility}<br />
-            Meter #: {site.meter_number}
-          </Popup>
-        </Marker>
-      ))}
+      {sites.filter(s => s.latitude !== null && s.latitude !== undefined && s.longitude !== null && s.longitude !== undefined).map(site => {
+        const cap = site.available_capacity_kw;
+        const capClass = typeof cap === 'number'
+          ? (cap < 200 ? 'cap-low' : cap < 800 ? 'cap-mid' : 'cap-high')
+          : 'cap-unknown';
+        return (
+          <Marker
+            key={site.id}
+            position={[site.latitude, site.longitude]}
+            icon={buildIconForSite(site)}
+          >
+            <Popup className={capClass}>
+              <div className="popup-site">
+                <div className="popup-header">
+                  <strong>{site.name}</strong>
+                </div>
+                <div className="popup-body">
+                  <div><span className="popup-label">Available kW:</span> {cap ?? '—'}</div>
+                  <div><span className="popup-label">Peak kW (Yr):</span> {site.last_year_peak_kw ?? '—'}</div>
+                  <div><span className="popup-label">Capacity kW:</span> {site.theoretical_capacity_kw ?? '—'}</div>
+                  <div><span className="popup-label">Utility:</span> {site.utility || '—'}</div>
+                  <div><span className="popup-label">Meter #:</span> {site.meter_number || '—'}</div>
+                  <div><span className="popup-label">Contact:</span> {site.contact_name ? `${site.contact_name}${site.contact_phone ? ' ('+site.contact_phone+')' : ''}` : '—'}</div>
+                  <div><span className="popup-label">Location:</span> {site.address ? `${site.address}${site.city ? ', '+site.city : ''}` : (site.city || '—')}</div>
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
 
       {newMarker && (
         <Marker position={[newMarker.latitude, newMarker.longitude]}>
