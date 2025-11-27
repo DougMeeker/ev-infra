@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { getSites, getAggregateMetrics } from "../api";
-import { Link } from "react-router-dom";
+import { getSites, getAggregateMetrics, getProjects, getLatestProjectStatuses } from "../api";
+import { Link, useSearchParams } from "react-router-dom";
 import MapView from "../components/MapView";
 
 const Home = () => {
@@ -8,6 +8,7 @@ const Home = () => {
   const [metrics, setMetrics] = useState([]);
   const [meta, setMeta] = useState(null);
   const [focusSiteId, setFocusSiteId] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
   const [order, setOrder] = useState('desc');
@@ -16,6 +17,21 @@ const Home = () => {
   const [searchInput, setSearchInput] = useState('');
   const [loadingMetrics, setLoadingMetrics] = useState(false);
   const [errorMetrics, setErrorMetrics] = useState(null);
+  const [allowAdd, setAllowAdd] = useState(false); // controls map click-to-add
+  const [projects, setProjects] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [latestStatuses, setLatestStatuses] = useState([]);
+  const [loadingLatest, setLoadingLatest] = useState(false);
+  const [markerColorMode, setMarkerColorMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = window.localStorage.getItem('markerColorMode');
+      if (saved === 'capacity' || saved === 'status') return saved;
+    }
+    return 'capacity';
+  }); // 'capacity' | 'status'
+  useEffect(() => {
+    try { window.localStorage.setItem('markerColorMode', markerColorMode); } catch(e) { /* ignore */ }
+  }, [markerColorMode]);
 
   // Reset focused site whenever page or search changes
   useEffect(() => {
@@ -26,7 +42,28 @@ const Home = () => {
     getSites()
       .then((res) => setSites(res.data))
       .catch((err) => console.error("Error fetching sites:", err));
+    getProjects()
+      .then((res) => setProjects(res.data))
+      .catch((err) => console.error("Error fetching projects:", err));
   }, []);
+
+  // Initialize focus from query param ?focus=<id>
+  useEffect(() => {
+    const f = searchParams.get('focus');
+    if (f) {
+      const num = parseInt(f, 10);
+      if (!Number.isNaN(num)) setFocusSiteId(num);
+    }
+  }, [searchParams]);
+
+  const clearFocus = () => {
+    if (focusSiteId != null) setFocusSiteId(null);
+    if (searchParams.get('focus')) {
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.delete('focus');
+      setSearchParams(sp);
+    }
+  };
 
   useEffect(() => {
     setLoadingMetrics(true);
@@ -42,6 +79,27 @@ const Home = () => {
       })
       .finally(() => setLoadingMetrics(false));
   }, [page, perPage, order, sort, search]);
+
+  // Load latest statuses when a project is selected
+  useEffect(() => {
+    (async () => {
+      if (!selectedProjectId) { setLatestStatuses([]); return; }
+      setLoadingLatest(true);
+      try {
+        const { data } = await getLatestProjectStatuses(selectedProjectId);
+        setLatestStatuses(data);
+      } finally {
+        setLoadingLatest(false);
+      }
+    })();
+  }, [selectedProjectId]);
+
+  // If project is cleared while in status color mode, revert to capacity
+  useEffect(() => {
+    if (!selectedProjectId && markerColorMode === 'status') {
+      setMarkerColorMode('capacity');
+    }
+  }, [selectedProjectId, markerColorMode]);
 
   const nextPage = () => {
     if (meta && page >= Math.ceil(meta.total / perPage)) return;
@@ -113,7 +171,41 @@ const Home = () => {
     <div className="container">
       <h1 className="page-header">EV Infrastructure Sites</h1>
       <div className="card">
-        <MapView sites={sitesWithMetrics} focusSiteId={focusSiteId} />
+        <div className="flex-row gap-sm" style={{ marginBottom:'6px' }}>
+          <label style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'0.9em' }}>
+            <input
+              type="checkbox"
+              checked={allowAdd}
+              onChange={(e) => setAllowAdd(e.target.checked)}
+              style={{ transform:'scale(1.1)' }}
+            />
+            Enable map click to add site
+          </label>
+          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'6px' }}>
+            <label style={{ fontSize:'0.9em' }}>Project:</label>
+            <select className="input" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+              <option value="">(none)</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {selectedProjectId && (loadingLatest ? <span style={{ fontSize:'0.85em', color:'var(--muted)' }}>Loading status…</span> : <span style={{ fontSize:'0.85em', color:'var(--muted)' }}>Status ready</span>)}
+            <label style={{ fontSize:'0.9em', marginLeft:'12px' }}>Marker Color:</label>
+            <select className="input" value={markerColorMode} onChange={(e) => setMarkerColorMode(e.target.value)}>
+              <option value="capacity">Capacity</option>
+              {selectedProjectId && <option value="status">Status</option>}
+            </select>
+          </div>
+        </div>
+        <MarkerLegend mode={markerColorMode} hasProject={!!selectedProjectId} />
+        <MapView
+          sites={sitesWithMetrics}
+          focusSiteId={focusSiteId}
+          onClearFocus={clearFocus}
+          enableAddSites={allowAdd}
+          selectedProjectId={selectedProjectId}
+          latestStatuses={latestStatuses}
+          project={projects.find(p => String(p.id) === String(selectedProjectId)) || null}
+          colorMode={markerColorMode}
+        />
       </div>
 
       <div className="card">
@@ -170,6 +262,7 @@ const Home = () => {
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('last_year_peak_kw')}>Peak kW (Last Yr) {sort==='last_year_peak_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('theoretical_capacity_kw')}>Capacity kW {sort==='theoretical_capacity_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th style={{textAlign:'center'}}>Info</th>
+                <th>Status</th>
                 <th>Map</th>
               </tr>
             </thead>
@@ -189,6 +282,30 @@ const Home = () => {
                   <td style={{textAlign:'right'}}>{row.theoretical_capacity_kw ?? '—'}</td>
                   <td style={{textAlign:'center'}}>
                     {missingFieldsForRow(row).length ? <span className="missing-icon" aria-label="Missing info" role="img">⚠</span> : <span className="ok-icon" aria-label="Complete" role="img">✔</span>}
+                  </td>
+                  <td>
+                    {selectedProjectId ? (() => {
+                      const status = latestStatuses.find(ls => String(ls.site_id) === String(row.site_id));
+                      const project = projects.find(p => String(p.id) === String(selectedProjectId));
+                      const stepsCount = project && typeof project.steps_count === 'number' ? project.steps_count : undefined;
+                      const complete = project && stepsCount !== undefined && status && status.current_step !== null && status.current_step >= stepsCount;
+                      const inProgress = project && stepsCount !== undefined && status && status.current_step !== null && status.current_step < stepsCount;
+                      const badgeStyle = {
+                        display:'inline-block',
+                        padding:'2px 6px',
+                        borderRadius:999,
+                        fontSize:'0.75rem',
+                        background: complete ? '#d1fae5' : inProgress ? '#fff7ed' : '#f1f5f9',
+                        border: '1px solid ' + (complete ? '#10b981' : inProgress ? '#fb923c' : '#cbd5e1'),
+                        color: '#0f172a'
+                      };
+                      const badgeText = complete ? 'Complete' : inProgress ? `Step ${status.current_step}` : 'No Status';
+                      return (
+                        <Link to={`/projects/${selectedProjectId}/status/${row.site_id}`} style={{ textDecoration:'none' }}>
+                          <span style={badgeStyle} title={status && status.status_date ? `As of ${new Date(status.status_date).toLocaleDateString()}` : ''}>{badgeText}</span>
+                        </Link>
+                      );
+                    })() : <span style={{ color:'var(--muted)' }}>Select a project</span>}
                   </td>
                   <td>
                     <button
@@ -216,3 +333,33 @@ const Home = () => {
 };
 
 export default Home;
+
+function MarkerLegend({ mode, hasProject }) {
+  const wrapStyle = { display:'flex', gap:'10px', flexWrap:'wrap', margin:'6px 0 10px', fontSize:'0.75rem' };
+  const pill = (bg, border, text) => (
+    <span style={{ background:bg, border:`1px solid ${border}`, padding:'2px 6px', borderRadius:999 }}>{text}</span>
+  );
+  if (mode === 'capacity') {
+    return (
+      <div style={wrapStyle}>
+        {pill('#dc2626','#dc2626','Low Cap (<200 kW)')}
+        {pill('#ca8a04','#ca8a04','Mid Cap (200-799 kW)')}
+        {pill('#16a34a','#16a34a','High Cap (≥800 kW)')}
+        {pill('#64748b','#64748b','Unknown')}
+      </div>
+    );
+  }
+  // status mode
+  return (
+    <div style={wrapStyle}>
+      {!hasProject && <span style={{ color:'var(--muted)' }}>Select a project for status colors.</span>}
+      {hasProject && (
+        <>
+          {pill('#16a34a','#16a34a','Complete')}
+          {pill('#fb923c','#fb923c','In Progress')}
+          {pill('#94a3b8','#94a3b8','No Status')}
+        </>
+      )}
+    </div>
+  );
+}

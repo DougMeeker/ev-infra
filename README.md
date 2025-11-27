@@ -28,6 +28,76 @@ flask run
 or flask --app run.py run
 
 ## Utility Bills Feature
+## Projects, Steps, and Status
+
+Projects manage many Sites. Each project can define ordered steps; sites report per-site status against those steps.
+
+- Tables:
+  - `projects`: name, description, timestamps
+  - `project_steps`: `project_id`, `step_order` (unique per project), `title`, `description`, timestamps
+  - `project_status`: per-site updates with `project_id`, `site_id`, `status_date`, `status_message`, `current_step`, optional `estimated_cost` and `actual_cost`
+  - Association `project_sites`: many-to-many link between projects and sites
+
+- Derived step count: `projects` does not store `total_steps`; clients use `steps_count` from project JSON.
+
+### API Endpoints
+
+- Projects:
+  - `GET /api/projects` — list projects
+  - `POST /api/projects` — create project `{ name, description }`
+  - `GET /api/projects/:id` — get project (includes `site_ids` and `steps_count`)
+  - `PUT /api/projects/:id` — update `{ name?, description? }`
+  - `DELETE /api/projects/:id`
+
+- Project sites (with pagination and search):
+  - `GET /api/projects/:id/sites?q=&page=1&page_size=25`
+    - Returns `{ items: [Site], page, page_size, total }`
+  - `POST /api/projects/:id/sites` — add site `{ site_id }`
+  - `DELETE /api/projects/:id/sites/:site_id`
+
+- Project steps:
+  - `GET /api/projects/:id/steps` — list ordered steps
+  - `POST /api/projects/:id/steps` — create step `{ title, description?, step_order? }`
+    - `step_order` default = next integer after current max
+  - `PUT /api/projects/:id/steps/:step_id` — update fields
+  - `DELETE /api/projects/:id/steps/:step_id`
+  - Note: `due_date` is not part of `project_steps`; due dates vary per site and should be captured in status updates.
+
+- Project status:
+  - `GET /api/projects/:id/sites/:site_id/status` — list per-site status entries (newest first)
+  - `POST /api/projects/:id/sites/:site_id/status` — create status `{ current_step, status_message?, status_date?, estimated_cost?, actual_cost? }`
+  - `GET /api/projects/:id/status/latest` — latest status per site in project (including sites without status)
+
+### Frontend
+
+- Projects Manager (`/projects`):
+  - Create projects (name + optional description)
+  - Assign sites with search and pagination
+  - Steps editor: inline edit, optimistic add/update/delete, and simple up/down reordering that swaps `step_order` values
+  - Badges indicate per-site status: Complete / In Progress / No Status, computed against steps count
+
+- Home page:
+  - Project selector applies latest statuses to table and map
+  - Marker color mode: Capacity or Status; Status requires a selected project
+
+### Migrations
+
+Run migrations after pulling:
+```powershell
+cd backend
+alembic upgrade head
+```
+
+Recent migrations include:
+- Add `project_steps` table
+- Drop `projects.total_steps` (derived from steps)
+- Drop `project_steps.due_date` (use per-site status dates instead)
+
+### Notes
+
+- Step completion logic compares `current_step` to the project’s steps count.
+- Reordering steps updates `step_order`; ensure uniqueness per project is maintained.
+- SQLite compatibility is handled via Alembic batch operations in migrations.
 
 New model `UtilityBill` added with fields:
 - site_id (FK to Site)
@@ -299,3 +369,33 @@ curl -X PUT http://localhost:5000/api/catalog/00490 -H "Content-Type: applicatio
 - CSV expected headers: `MC,Equipment Description,Status,Revised`.
 - Invalid or empty MC rows are skipped silently.
 - Delete endpoint: `DELETE /api/catalog/<mc_code>` returns error if equipment exists for MC.
+
+## Site Importer (GeoJSON)
+
+A new page at `/sites/import` lets you upload a GeoJSON exported from QGIS (or similar). The importer:
+
+- Expects a `FeatureCollection` of `Point` features.
+- Reads longitude/latitude from `geometry.coordinates`.
+- Attempts to map common properties to Site fields: `name`, `address`, `city`, `utility`, `meter`, `contact`, `phone`.
+- Upserts by exact site `name` when present; otherwise inserts as a new site.
+
+### API
+`POST /api/sites/upload-geojson` (multipart/form-data, field name: `file`)
+Response:
+```
+{ "message": "GeoJSON processed", "added": <int>, "updated": <int>, "skipped": <int>, "errors": [ ... ] }
+```
+
+PowerShell example:
+```powershell
+curl -F file=@"PGE EV Fleet Program.geojson" http://localhost:5000/api/sites/upload-geojson
+```
+
+### Frontend
+- Navigate to `Sites Import` in the header, choose your `.geojson` file, and upload.
+- After success, click "View on Map" to return to Home and see new markers.
+
+### Notes
+- Only Point features are imported; non-Point features are skipped.
+- If a feature lacks a `name` property, it is imported with a generated name like "Imported Site 3".
+- Property key matching is case-insensitive and best-effort.

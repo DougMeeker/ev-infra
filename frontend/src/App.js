@@ -3,6 +3,9 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
 import SiteDetails from "./pages/SiteDetails";
 import CatalogManager from "./pages/CatalogManager";
+import SiteImporter from "./pages/SiteImporter";
+import ProjectsManager from "./pages/ProjectsManager";
+import ProjectStatusForm from "./pages/ProjectStatusForm";
 import Header from "./components/Header";
 
 function App() {
@@ -13,6 +16,10 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/site/:id" element={<SiteDetails />} />
         <Route path="/catalog" element={<CatalogManager />} />
+        <Route path="/sites/import" element={<SiteImporter />} />
+        <Route path="/projects" element={<ProjectsManager />} />
+        <Route path="/projects/:projectId/status/:siteId" element={<ProjectStatusForm />} />
+        <Route path="/projects/status" element={<ProjectStatusForm />} />
       </Routes>
     </Router>
   );

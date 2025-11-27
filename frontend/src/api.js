@@ -77,3 +77,36 @@ export const uploadCatalogFile = (file) => {
 	return axios.post(`${API_BASE_URL}/catalog/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 };
 export const deleteCatalogEntry = (mcCode) => axios.delete(`${API_BASE_URL}/catalog/${mcCode}`);
+
+// GeoJSON site import
+export const uploadSitesGeoJSON = (file) => {
+	const formData = new FormData();
+	formData.append('file', file);
+	return axios.post(`${API_BASE_URL}/sites/upload-geojson`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+};
+
+// Project endpoints
+export const getProjects = () => axios.get(`${API_BASE_URL}/projects`);
+export const createProject = ({ name, total_steps, description }) => axios.post(`${API_BASE_URL}/projects`, { name, total_steps, description });
+export const updateProject = (projectId, payload) => axios.put(`${API_BASE_URL}/projects/${projectId}`, payload);
+export const deleteProject = (projectId) => axios.delete(`${API_BASE_URL}/projects/${projectId}`);
+export const getProjectSites = (projectId, { q = '', page = 1, page_size = 25 } = {}) => {
+	const params = new URLSearchParams();
+	if (q) params.append('q', q);
+	params.append('page', String(page));
+	params.append('page_size', String(page_size));
+	return axios.get(`${API_BASE_URL}/projects/${projectId}/sites?${params.toString()}`);
+};
+export const addSiteToProject = (projectId, siteId) => axios.post(`${API_BASE_URL}/projects/${projectId}/sites`, { site_id: siteId });
+export const removeSiteFromProject = (projectId, siteId) => axios.delete(`${API_BASE_URL}/projects/${projectId}/sites/${siteId}`);
+
+// Project status endpoints
+export const getProjectSiteStatuses = (projectId, siteId) => axios.get(`${API_BASE_URL}/projects/${projectId}/sites/${siteId}/status`);
+export const createProjectSiteStatus = (projectId, siteId, payload) => axios.post(`${API_BASE_URL}/projects/${projectId}/sites/${siteId}/status`, payload);
+export const getLatestProjectStatuses = (projectId) => axios.get(`${API_BASE_URL}/projects/${projectId}/status/latest`);
+
+// Project steps endpoints
+export const getProjectSteps = (projectId) => axios.get(`${API_BASE_URL}/projects/${projectId}/steps`);
+export const createProjectStep = (projectId, payload) => axios.post(`${API_BASE_URL}/projects/${projectId}/steps`, payload);
+export const updateProjectStep = (projectId, stepId, payload) => axios.put(`${API_BASE_URL}/projects/${projectId}/steps/${stepId}`, payload);
+export const deleteProjectStep = (projectId, stepId) => axios.delete(`${API_BASE_URL}/projects/${projectId}/steps/${stepId}`);

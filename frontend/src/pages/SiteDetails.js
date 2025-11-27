@@ -103,6 +103,10 @@ const SiteDetails = () => {
     return (
         <div className="container">
             <h2 className="page-header">Site Details</h2>
+            <div className="flex-row gap-sm" style={{ marginBottom:'12px' }}>
+                <button className="btn btn-secondary" onClick={() => navigate(`/?focus=${id}`)}>View on Map</button>
+                <button className="btn btn-secondary" onClick={() => navigate('/')}>Home</button>
+            </div>
             {editing ? (
                 <div className="card">
                     <div className="form-sections">

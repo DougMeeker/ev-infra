@@ -16,6 +16,15 @@ const Header = () => {
           <NavLink to="/catalog" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Catalog
           </NavLink>
+          <NavLink to="/sites/import" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
+            Sites Import
+          </NavLink>
+          <NavLink to="/projects" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
+            Projects
+          </NavLink>
+          <NavLink to="/projects/status" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
+            Status
+          </NavLink>
         </nav>
       </div>
     </header>

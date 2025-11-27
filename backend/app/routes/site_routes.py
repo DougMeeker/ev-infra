@@ -3,6 +3,8 @@ from ..models import Site, UtilityBill, Equipment, EquipmentUsage, EquipmentCata
 from ..extensions import db
 from datetime import datetime, timedelta
 import math
+import json
+import os
 
 site_bp = Blueprint("sites", __name__)
 
@@ -536,3 +538,251 @@ def delete_bill(bill_id):
     bill.is_deleted = True
     db.session.commit()
     return {"message": f"Bill {bill_id} deleted."}, 200
+
+
+# ---------------------- GeoJSON Import ----------------------
+@site_bp.route("/upload-geojson", methods=["POST"])
+def upload_geojson_sites():
+    """Upload a GeoJSON file and upsert Site records.
+    - Expects multipart/form-data with field 'file'.
+    - Accepts FeatureCollection of Point features.
+    - Upserts by exact name match (case-sensitive) when provided; otherwise inserts.
+    - Maps common property keys to Site fields (best-effort).
+    Returns counts and simple diagnostics.
+    """
+    if 'file' not in request.files:
+        return {"error": "No file part"}, 400
+    file = request.files['file']
+    if not file.filename:
+        return {"error": "Empty filename"}, 400
+    try:
+        raw = file.stream.read().decode('utf-8', errors='ignore')
+        data = json.loads(raw)
+    except Exception as e:
+        return {"error": f"Failed to read/parse GeoJSON: {e}"}, 400
+
+    if not isinstance(data, dict) or data.get('type') != 'FeatureCollection':
+        return {"error": "GeoJSON must be a FeatureCollection"}, 400
+    features = data.get('features') or []
+    if not isinstance(features, list) or not features:
+        return {"error": "No features found in GeoJSON"}, 400
+
+    def first_prop(props, keys):
+        if not isinstance(props, dict):
+            return None
+        for k in keys:
+            for candidate in (k, k.lower(), k.upper()):
+                if candidate in props and props.get(candidate) not in (None, ''):
+                    return props.get(candidate)
+        # Case-insensitive search
+        lower = {str(k).lower(): v for k, v in props.items()}
+        for k in keys:
+            v = lower.get(str(k).lower())
+            if v not in (None, ''):
+                return v
+        return None
+
+    added = 0
+    updated = 0
+    skipped = 0
+    errors = []
+
+    # Cache existing sites by name for quick lookup
+    existing_by_name = {s.name: s for s in Site.query.filter_by(is_deleted=False).all() if s.name}
+
+    for idx, feat in enumerate(features):
+        try:
+            geom = feat.get('geometry') if isinstance(feat, dict) else None
+            if not geom or geom.get('type') != 'Point':
+                skipped += 1
+                continue
+            coords = geom.get('coordinates')
+            if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+                skipped += 1
+                continue
+            lon, lat = coords[0], coords[1]
+            try:
+                lon = float(lon); lat = float(lat)
+            except (TypeError, ValueError):
+                skipped += 1
+                continue
+            props = feat.get('properties') or {}
+
+            name = first_prop(props, ['name', 'site', 'site_name', 'Site Name', 'LOCATION'])
+            address = first_prop(props, ['address', 'street', 'address1'])
+            city = first_prop(props, ['city', 'municipality', 'town'])
+            utility = first_prop(props, ['utility', 'utility_name', 'Utility'])
+            meter_number = first_prop(props, ['meter', 'meter_number', 'MeterNumber'])
+            contact_name = first_prop(props, ['contact', 'contact_name'])
+            contact_phone = first_prop(props, ['phone', 'contact_phone'])
+
+            if name and name in existing_by_name:
+                site = existing_by_name[name]
+                site.latitude = lat
+                site.longitude = lon
+                if address is not None:
+                    site.address = address
+                if city is not None:
+                    site.city = city
+                if utility is not None:
+                    site.utility = utility
+                if meter_number is not None:
+                    site.meter_number = meter_number
+                if contact_name is not None:
+                    site.contact_name = contact_name
+                if contact_phone is not None:
+                    site.contact_phone = contact_phone
+                updated += 1
+            else:
+                site = Site(
+                    name=name or f"Imported Site {idx+1}",
+                    latitude=lat,
+                    longitude=lon,
+                    address=address,
+                    city=city,
+                    utility=utility,
+                    meter_number=meter_number,
+                    contact_name=contact_name,
+                    contact_phone=contact_phone
+                )
+                db.session.add(site)
+                added += 1
+                if name:
+                    existing_by_name[name] = site
+        except Exception as e:
+            errors.append({"feature_index": idx, "error": str(e)})
+            skipped += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to save sites: {e}"}, 500
+
+    return {
+        "message": "GeoJSON processed",
+        "added": added,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors[:10]  # cap error list
+    }, 200
+
+
+@site_bp.route("/refresh-geojson", methods=["POST"])
+def refresh_geojson_sites():
+    """Refresh sites from a server-side GeoJSON file in the workspace.
+    Reads `PGE EV Fleet Program.geojson` from the project root.
+    Mirrors the logic of the upload endpoint.
+    """
+    geojson_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "PGE EV Fleet Program.geojson"))
+    if not os.path.exists(geojson_path):
+        return {"error": f"GeoJSON not found at {geojson_path}"}, 404
+    try:
+        with open(geojson_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        return {"error": f"Failed to read GeoJSON: {e}"}, 400
+
+    if not isinstance(data, dict) or data.get('type') != 'FeatureCollection':
+        return {"error": "GeoJSON must be a FeatureCollection"}, 400
+    features = data.get('features') or []
+    if not isinstance(features, list) or not features:
+        return {"error": "No features found in GeoJSON"}, 400
+
+    def first_prop(props, keys):
+        if not isinstance(props, dict):
+            return None
+        for k in keys:
+            for candidate in (k, k.lower(), k.upper()):
+                if candidate in props and props.get(candidate) not in (None, ''):
+                    return props.get(candidate)
+        lower = {str(k).lower(): v for k, v in props.items()}
+        for k in keys:
+            v = lower.get(str(k).lower())
+            if v not in (None, ''):
+                return v
+        return None
+
+    added = 0
+    updated = 0
+    skipped = 0
+    errors = []
+
+    existing_by_name = {s.name: s for s in Site.query.filter_by(is_deleted=False).all() if s.name}
+
+    for idx, feat in enumerate(features):
+        try:
+            geom = feat.get('geometry') if isinstance(feat, dict) else None
+            if not geom or geom.get('type') != 'Point':
+                skipped += 1
+                continue
+            coords = geom.get('coordinates')
+            if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+                skipped += 1
+                continue
+            lon, lat = coords[0], coords[1]
+            try:
+                lon = float(lon); lat = float(lat)
+            except (TypeError, ValueError):
+                skipped += 1
+                continue
+            props = feat.get('properties') or {}
+
+            name = first_prop(props, ['name', 'site', 'site_name', 'Site Name', 'LOCATION'])
+            address = first_prop(props, ['address', 'street', 'address1'])
+            city = first_prop(props, ['city', 'municipality', 'town'])
+            utility = first_prop(props, ['utility', 'utility_name', 'Utility'])
+            meter_number = first_prop(props, ['meter', 'meter_number', 'MeterNumber'])
+            contact_name = first_prop(props, ['contact', 'contact_name'])
+            contact_phone = first_prop(props, ['phone', 'contact_phone'])
+
+            if name and name in existing_by_name:
+                site = existing_by_name[name]
+                site.latitude = lat
+                site.longitude = lon
+                if address is not None:
+                    site.address = address
+                if city is not None:
+                    site.city = city
+                if utility is not None:
+                    site.utility = utility
+                if meter_number is not None:
+                    site.meter_number = meter_number
+                if contact_name is not None:
+                    site.contact_name = contact_name
+                if contact_phone is not None:
+                    site.contact_phone = contact_phone
+                updated += 1
+            else:
+                site = Site(
+                    name=name or f"Imported Site {idx+1}",
+                    latitude=lat,
+                    longitude=lon,
+                    address=address,
+                    city=city,
+                    utility=utility,
+                    meter_number=meter_number,
+                    contact_name=contact_name,
+                    contact_phone=contact_phone
+                )
+                db.session.add(site)
+                added += 1
+                if name:
+                    existing_by_name[name] = site
+        except Exception as e:
+            errors.append({"feature_index": idx, "error": str(e)})
+            skipped += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to save sites: {e}"}, 500
+
+    return {
+        "message": "GeoJSON refreshed",
+        "added": added,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors[:10]
+    }, 200
