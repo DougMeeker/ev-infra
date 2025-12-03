@@ -3,6 +3,8 @@ import React, { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
 import { createSite } from "../api";
+import { ratioFrom, getStatusShade } from "../utils/statusShading";
+import StatusLegend from "./StatusLegend";
 
 // Fix Leaflet icon issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -84,11 +86,9 @@ const MapView = ({ sites, focusSiteId, onClearFocus, enableAddSites, selectedPro
       } else if (colorMode === 'status') {
         const status = (latestStatuses || []).find(ls => String(ls.site_id) === String(site.id));
         const stepsCount = project && typeof project.steps_count === 'number' ? project.steps_count : undefined;
-        const complete = project && stepsCount !== undefined && status && status.current_step !== null && status.current_step >= stepsCount;
-        const inProgress = project && stepsCount !== undefined && status && status.current_step !== null && status.current_step < stepsCount;
-        if (complete) { bg = '#16a34a'; cls = 'status-complete'; }
-        else if (inProgress) { bg = '#fb923c'; cls = 'status-progress'; }
-        else { bg = '#94a3b8'; cls = 'status-none'; }
+        const ratio = ratioFrom(status?.current_step, stepsCount);
+        if (ratio === null) { bg = '#94a3b8'; cls = 'status-none'; }
+        else { bg = getStatusShade(ratio).bg; cls = 'status-shade'; }
       }
       return L.divIcon({
         className: `leaflet-div-icon marker-mode-${colorMode} ${cls}`,
@@ -125,25 +125,25 @@ const MapView = ({ sites, focusSiteId, onClearFocus, enableAddSites, selectedPro
           : 'cap-unknown';
         const status = (latestStatuses || []).find(ls => String(ls.site_id) === String(site.id));
         const stepsCount = project && typeof project.steps_count === 'number' ? project.steps_count : undefined;
-        const complete = project && stepsCount !== undefined && status && status.current_step !== null && status.current_step >= stepsCount;
-        const inProgress = project && stepsCount !== undefined && status && status.current_step !== null && status.current_step < stepsCount;
+        const ratio = ratioFrom(status?.current_step, stepsCount);
+        const col = getStatusShade(ratio);
         const badgeStyle = {
           display:'inline-block',
           padding:'2px 6px',
           borderRadius:999,
           fontSize:'0.75rem',
-          background: complete ? '#d1fae5' : inProgress ? '#fff7ed' : '#f1f5f9',
-          border: '1px solid ' + (complete ? '#10b981' : inProgress ? '#fb923c' : '#cbd5e1'),
+          background: col.bg,
+          border: '1px solid ' + col.border,
           color: '#0f172a'
         };
-        const badgeText = complete ? 'Complete' : inProgress ? `Step ${status?.current_step}` : 'No Status';
+        const badgeText = ratio === null ? 'No Status' : `Step ${status?.current_step}`;
         return (
           <Marker
             key={site.id}
             position={[site.latitude, site.longitude]}
             icon={buildIconForSite(site)}
           >
-            <Popup className={colorMode === 'capacity' ? capClass : (complete ? 'status-complete' : inProgress ? 'status-progress' : 'status-none')}>
+            <Popup className={colorMode === 'capacity' ? capClass : 'status-shade'}>
               <div className="popup-site">
                 <div className="popup-header">
                   <strong>{site.name}</strong>
@@ -163,6 +163,11 @@ const MapView = ({ sites, focusSiteId, onClearFocus, enableAddSites, selectedPro
                       </a>
                     </div>
                   )}
+                  <div style={{ marginTop:6 }}>
+                    <a href={`#/site/${site.id}`} style={{ textDecoration:'none' }}>
+                      View Site Details
+                    </a>
+                  </div>
                 </div>
               </div>
             </Popup>

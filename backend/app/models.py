@@ -202,3 +202,35 @@ class ProjectStep(db.Model):
 
     def to_dict(self):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+class Charger(db.Model):
+    __tablename__ = 'chargers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    site_id = db.Column(db.Integer, db.ForeignKey('sites.id', ondelete='CASCADE'), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='SET NULL'), nullable=True, index=True)
+
+    kw = db.Column(db.Float)  # charger rated power in kW
+    breaker_size = db.Column(db.Integer)  # breaker rating in amps
+    input_voltage = db.Column(db.Integer)  # e.g., 240, 480
+    output_voltage = db.Column(db.Integer)  # DC output voltage, if applicable
+    port_count = db.Column(db.Integer)  # number of connectors/ports
+    handle_type = db.Column(db.String(32))  # J1772 | NACS | Both
+    manufacturer = db.Column(db.String(128))
+    model_number = db.Column(db.String(128))
+    serial_number = db.Column(db.String(128))
+    date_installed = db.Column(db.Date)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    site = relationship('Site')
+    project = relationship('Project')
+
+    __table_args__ = (
+        db.Index('ix_chargers_site_project', 'site_id', 'project_id'),
+    )
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}

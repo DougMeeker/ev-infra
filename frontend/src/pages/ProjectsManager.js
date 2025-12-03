@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { ratioFrom, getStatusShade } from '../utils/statusShading';
+import StatusLegend from '../components/StatusLegend';
 import { Link } from 'react-router-dom';
 import {
   getProjects,
@@ -60,9 +62,12 @@ export default function ProjectsManager() {
     if (!projectId) return;
     setLoadingProjectSites(true);
     try {
-      const { data } = await getProjectSites(projectId, { q: debouncedSearch, page: sitesPage, page_size: sitesPageSize });
-      setProjectSites(data.items || []);
-      setSitesTotal(data.total || 0);
+      const effectivePageSize = sortMode === 'status' ? 500 : sitesPageSize;
+      const effectivePage = sortMode === 'status' ? 1 : sitesPage;
+      const { data } = await getProjectSites(projectId, { q: debouncedSearch, page: effectivePage, page_size: effectivePageSize });
+      const items = data.items || [];
+      setProjectSites(items);
+      setSitesTotal(data.total || items.length || 0);
       // Fetch latest statuses for badges
       const { data: latest } = await getLatestProjectStatuses(projectId);
       setLatestStatuses(latest);
@@ -71,7 +76,7 @@ export default function ProjectsManager() {
     } finally {
       setLoadingProjectSites(false);
     }
-  }, [debouncedSearch, sitesPage, sitesPageSize]);
+  }, [debouncedSearch, sitesPage, sitesPageSize, sortMode]);
   // Derived sorted list for Sites in Project section
   const sortedProjectSites = useMemo(() => {
     const arr = [...projectSites];
@@ -81,16 +86,24 @@ export default function ProjectsManager() {
     }
     // status mode: order complete -> in progress -> no status, each group by name
     const project = projects.find(p => String(p.id) === String(selectedProjectId));
-    const stepsCount = steps.length;
-    const getBucket = (siteId) => {
+    const stepsCount = (project && typeof project.steps_count === 'number') ? project.steps_count : steps.length;
+    const getRatio = (siteId) => {
       const status = latestStatuses.find(ls => String(ls.site_id) === String(siteId));
-      if (!project || !status || status.current_step === null) return 2; // no status
-      return status.current_step >= stepsCount ? 0 : 1; // 0 complete, 1 in progress
+      if (!project || !status || status.current_step == null || !stepsCount) return null;
+      return ratioFrom(status.current_step, stepsCount);
+    };
+    const getBucket = (r) => {
+      if (r === null) return 2; // no status
+      return r >= 1 ? 0 : 1;    // 0 complete, 1 in progress
     };
     arr.sort((a, b) => {
-      const ba = getBucket(a.id);
-      const bb = getBucket(b.id);
+      const ra = getRatio(a.id);
+      const rb = getRatio(b.id);
+      const ba = getBucket(ra);
+      const bb = getBucket(rb);
       if (ba !== bb) return ba - bb;
+      // Within same bucket, sort by ratio desc (further along first), then by name
+      if (ra !== null && rb !== null && ra !== rb) return rb - ra;
       return (a.name || '').localeCompare(b.name || '');
     });
     return arr;
@@ -111,6 +124,11 @@ export default function ProjectsManager() {
   useEffect(() => {
     loadProjectSites(selectedProjectId);
   }, [selectedProjectId, loadProjectSites]);
+
+  // When switching to status sort, reset to page 1 because we fetch all items
+  useEffect(() => {
+    if (sortMode === 'status') setSitesPage(1);
+  }, [sortMode]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -243,7 +261,6 @@ export default function ProjectsManager() {
               <ul style={{ listStyle:'none', padding:0 }}>
                 {steps.map((st, idx) => (
                   <li key={st.id} style={{ padding:'6px 8px', borderBottom:'1px solid var(--card-border)', display:'flex', alignItems:'center', gap:8 }}>
-                    <span title="Drag" style={{ cursor:'grab' }} onMouseDown={(e)=>e.preventDefault()}>☰</span>
                     <strong>#{st.step_order}</strong> {st.title}
                     {st.due_date && <span style={{ marginLeft:8, color:'var(--muted)' }}>Due: {st.due_date}</span>}
                     <div style={{ marginTop:6 }}>
@@ -253,37 +270,6 @@ export default function ProjectsManager() {
                       <button className="btn-danger" onClick={()=>handleDeleteStep(st.id)}>Delete</button>
                     </div>
                     {st.description && <div style={{ marginTop:4, fontSize:'0.85rem', color:'var(--muted)' }}>{st.description}</div>}
-                    <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
-                      {idx > 0 && <button className="btn btn-secondary" onClick={()=>{
-                        const prev = steps[idx-1];
-                        // optimistic reorder: swap orders locally
-                        const newSteps = [...steps];
-                        newSteps[idx] = { ...st, step_order: prev.step_order };
-                        newSteps[idx-1] = { ...prev, step_order: st.step_order };
-                        setSteps(newSteps);
-                        // persist both
-                        Promise.all([
-                          updateProjectStep(selectedProjectId, st.id, { step_order: prev.step_order }),
-                          updateProjectStep(selectedProjectId, prev.id, { step_order: st.step_order }),
-                        ]).catch(()=>{
-                          // rollback by reloading
-                          getProjectSteps(selectedProjectId).then(r=>setSteps(r.data));
-                        });
-                      }}>↑</button>}
-                      {idx < steps.length-1 && <button className="btn btn-secondary" onClick={()=>{
-                        const next = steps[idx+1];
-                        const newSteps = [...steps];
-                        newSteps[idx] = { ...st, step_order: next.step_order };
-                        newSteps[idx+1] = { ...next, step_order: st.step_order };
-                        setSteps(newSteps);
-                        Promise.all([
-                          updateProjectStep(selectedProjectId, st.id, { step_order: next.step_order }),
-                          updateProjectStep(selectedProjectId, next.id, { step_order: st.step_order }),
-                        ]).catch(()=>{
-                          getProjectSteps(selectedProjectId).then(r=>setSteps(r.data));
-                        });
-                      }}>↓</button>}
-                    </div>
                   </li>
                 ))}
               </ul>
@@ -334,24 +320,25 @@ export default function ProjectsManager() {
                   </label>
                 </span>
               </h4>
+              <StatusLegend />
               <ul style={{ listStyle:'none', padding:0 }}>
-                {sortedProjectSites.map((s) => {
+                {(sortMode === 'status' ? sortedProjectSites.slice((sitesPage-1)*sitesPageSize, (sitesPage-1)*sitesPageSize + sitesPageSize) : sortedProjectSites).map((s) => {
                   const status = latestStatuses.find(ls => String(ls.site_id) === String(s.id));
                   const project = projects.find(p => String(p.id) === String(selectedProjectId));
                   const stepsCount = steps.length;
-                  const complete = project && status && status.current_step !== null && status.current_step >= stepsCount;
-                  const inProgress = project && status && status.current_step !== null && status.current_step < stepsCount;
+                  const ratio = ratioFrom(status?.current_step, stepsCount);
+                  const col = getStatusShade(ratio);
                   const badgeStyle = {
                     display:'inline-block',
                     marginLeft:8,
                     padding:'2px 6px',
                     borderRadius:999,
                     fontSize:'0.75rem',
-                    background: complete ? '#d1fae5' : inProgress ? '#fff7ed' : '#f1f5f9',
-                    border: '1px solid ' + (complete ? '#10b981' : inProgress ? '#fb923c' : '#cbd5e1'),
+                    background: col.bg,
+                    border: '1px solid ' + col.border,
                     color: '#0f172a'
                   };
-                  const badgeText = complete ? 'Complete' : inProgress ? `Step ${status.current_step}` : 'No Status';
+                  const badgeText = ratio === null ? 'No Status' : `Step ${status.current_step}`;
                   return (
                     <li key={s.id} style={{ padding:'6px 8px', borderBottom:'1px solid #eee' }}>
                       {s.name || `Site ${s.id}`}
@@ -366,8 +353,8 @@ export default function ProjectsManager() {
               <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8 }}>
                 <span>Page:</span>
                 <button className="btn" disabled={sitesPage<=1} onClick={()=>setSitesPage(p=>Math.max(1,p-1))}>Prev</button>
-                <span>{sitesPage} / {totalPages}</span>
-                <button className="btn" disabled={sitesPage>=totalPages} onClick={()=>setSitesPage(p=>Math.min(totalPages,p+1))}>Next</button>
+                <span>{sitesPage} / {sortMode==='status' ? Math.max(1, Math.ceil(sortedProjectSites.length / sitesPageSize)) : totalPages}</span>
+                <button className="btn" disabled={sitesPage>=(sortMode==='status' ? Math.max(1, Math.ceil(sortedProjectSites.length / sitesPageSize)) : totalPages)} onClick={()=>setSitesPage(p=>p+1)}>Next</button>
                 <span style={{ marginLeft:12 }}>Per page:</span>
                 <select className="input" value={sitesPageSize} onChange={(e)=>{ setSitesPageSize(Number(e.target.value)); setSitesPage(1); }}>
                   <option value={10}>10</option>

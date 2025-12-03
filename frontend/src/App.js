@@ -7,6 +7,7 @@ import SiteImporter from "./pages/SiteImporter";
 import ProjectsManager from "./pages/ProjectsManager";
 import ProjectStatusForm from "./pages/ProjectStatusForm";
 import Header from "./components/Header";
+import ChargersManager from "./pages/ChargersManager";
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="/projects" element={<ProjectsManager />} />
         <Route path="/projects/:projectId/status/:siteId" element={<ProjectStatusForm />} />
         <Route path="/projects/status" element={<ProjectStatusForm />} />
+        <Route path="/chargers" element={<ChargersManager />} />
       </Routes>
     </Router>
   );

@@ -67,6 +67,13 @@ export const deleteEquipmentItem = (equipmentId) => axios.delete(`${API_BASE_URL
 export const getEquipmentUsage = (equipmentId) => axios.get(`${API_BASE_URL}/sites/equipment/${equipmentId}/usage`);
 export const upsertEquipmentUsage = (equipmentId, { year, miles }) => axios.post(`${API_BASE_URL}/sites/equipment/${equipmentId}/usage`, { year, miles });
 
+// Charger endpoints
+export const getChargers = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}/chargers`);
+export const createCharger = (siteId, payload) => axios.post(`${API_BASE_URL}/sites/${siteId}/chargers`, payload);
+export const getCharger = (chargerId) => axios.get(`${API_BASE_URL}/sites/chargers/${chargerId}`);
+export const updateCharger = (chargerId, payload) => axios.put(`${API_BASE_URL}/sites/chargers/${chargerId}`, payload);
+export const deleteCharger = (chargerId) => axios.delete(`${API_BASE_URL}/sites/chargers/${chargerId}`);
+
 // Catalog endpoints
 export const getCatalog = () => axios.get(`${API_BASE_URL}/catalog/`);
 export const refreshCatalog = () => axios.post(`${API_BASE_URL}/catalog/refresh`);

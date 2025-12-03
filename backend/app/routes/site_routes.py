@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from ..models import Site, UtilityBill, Equipment, EquipmentUsage, EquipmentCatalog
+from ..models import Site, UtilityBill, Equipment, EquipmentUsage, EquipmentCatalog, Charger
 from ..extensions import db
 from datetime import datetime, timedelta
 import math
@@ -11,7 +11,20 @@ site_bp = Blueprint("sites", __name__)
 @site_bp.route("/", methods=["GET"])
 def get_sites():
     sites = Site.query.filter_by(is_deleted=False).all()
-    return jsonify([site.to_dict() for site in sites])
+    site_ids = [s.id for s in sites]
+    # Preload chargers and sum kW per site
+    chargers = Charger.query.filter(Charger.site_id.in_(site_ids)).all()
+    totals = {}
+    for c in chargers:
+        kw = c.kw if c.kw is not None else 0.0
+        totals[c.site_id] = (totals.get(c.site_id, 0.0) + (kw or 0.0))
+    rows = []
+    for s in sites:
+        d = s.to_dict()
+        total_kw = totals.get(s.id)
+        d['total_charger_kw'] = round(total_kw, 3) if total_kw is not None else 0.0
+        rows.append(d)
+    return jsonify(rows)
 
 @site_bp.route("/<int:site_id>", methods=["GET"])
 def get_site(site_id):
@@ -189,6 +202,16 @@ def aggregate_site_metrics():
     sites = site_query.all()
     site_ids = [s.id for s in sites]
     bills = UtilityBill.query.filter(UtilityBill.site_id.in_(site_ids), UtilityBill.is_deleted.is_(False)).all()
+    # Preload chargers for totals
+    chargers = Charger.query.filter(Charger.site_id.in_(site_ids)).all()
+    charger_totals = {}
+    charger_installed_totals = {}
+    for c in chargers:
+        kw = c.kw if c.kw is not None else 0.0
+        sid = c.site_id
+        charger_totals[sid] = charger_totals.get(sid, 0.0) + (kw or 0.0)
+        if c.date_installed is not None:
+            charger_installed_totals[sid] = charger_installed_totals.get(sid, 0.0) + (kw or 0.0)
 
     # Organize bills by site
     bills_by_site = {}
@@ -224,7 +247,9 @@ def aggregate_site_metrics():
             "voltage": s.voltage,
             "phase_count": s.phase_count,
             "main_breaker_amps": s.main_breaker_amps,
-            "power_factor": pf
+            "power_factor": pf,
+            "total_charger_kw": round(charger_totals.get(s.id, 0.0), 3),
+            "installed_charger_kw": round(charger_installed_totals.get(s.id, 0.0), 3)
         })
 
     # Sorting
@@ -238,6 +263,10 @@ def aggregate_site_metrics():
             val = row.get('theoretical_capacity_kw')
         elif sort_field == 'power_factor':
             val = row.get('power_factor')
+        elif sort_field == 'total_charger_kw':
+            val = row.get('total_charger_kw')
+        elif sort_field == 'installed_charger_kw':
+            val = row.get('installed_charger_kw')
         elif sort_field == 'name':
             val = row.get('name') or ''
             return val.lower()
@@ -464,6 +493,112 @@ def site_equipment_energy(site_id):
     }, 200
 
 
+# ---------------------- Charger Endpoints ----------------------
+@site_bp.route("/<int:site_id>/chargers", methods=["GET"])
+def list_chargers(site_id):
+    site = Site.query.get(site_id)
+    if not site or site.is_deleted:
+        return {"error": "Site not found"}, 404
+    chargers = Charger.query.filter_by(site_id=site_id).order_by(Charger.id.desc()).all()
+    rows = []
+    for c in chargers:
+        data = c.to_dict()
+        try:
+            data['project_name'] = c.project.name if getattr(c, 'project', None) else None
+        except Exception:
+            data['project_name'] = None
+        rows.append(data)
+    return jsonify(rows), 200
+
+
+@site_bp.route("/<int:site_id>/chargers", methods=["POST"])
+def create_charger(site_id):
+    site = Site.query.get(site_id)
+    if not site or site.is_deleted:
+        return {"error": "Site not found"}, 404
+    data = request.get_json() or {}
+    charger = Charger(
+        site_id=site_id,
+        project_id=data.get('project_id'),
+        kw=data.get('kw'),
+        breaker_size=data.get('breaker_size'),
+        input_voltage=data.get('input_voltage'),
+        output_voltage=data.get('output_voltage'),
+        port_count=data.get('port_count'),
+        handle_type=data.get('handle_type'),
+        manufacturer=data.get('manufacturer'),
+        model_number=data.get('model_number'),
+        serial_number=data.get('serial_number'),
+        date_installed=data.get('date_installed')
+    )
+    # Normalize project_id empty string to None
+    if isinstance(charger.project_id, str) and charger.project_id.strip() == "":
+        charger.project_id = None
+    # Cast date_installed if provided as ISO string; treat empty string as None
+    if isinstance(charger.date_installed, str):
+        if charger.date_installed.strip() == "":
+            charger.date_installed = None
+        else:
+            try:
+                charger.date_installed = datetime.fromisoformat(charger.date_installed).date()
+            except Exception:
+                charger.date_installed = None
+    db.session.add(charger)
+    db.session.commit()
+    return charger.to_dict(), 201
+
+
+@site_bp.route("/chargers/<int:charger_id>", methods=["GET"])
+def get_charger(charger_id):
+    c = Charger.query.get(charger_id)
+    if not c:
+        return {"error": "Charger not found"}, 404
+    data = c.to_dict()
+    try:
+        data['project_name'] = c.project.name if getattr(c, 'project', None) else None
+    except Exception:
+        data['project_name'] = None
+    return data, 200
+
+
+@site_bp.route("/chargers/<int:charger_id>", methods=["PUT"])
+def update_charger(charger_id):
+    c = Charger.query.get(charger_id)
+    if not c:
+        return {"error": "Charger not found"}, 404
+    data = request.get_json() or {}
+    scalar_fields = [
+        'project_id','kw','breaker_size','input_voltage','output_voltage',
+        'port_count','handle_type','manufacturer','model_number','serial_number','date_installed'
+    ]
+    for f in scalar_fields:
+        if f in data:
+            val = data[f]
+            if f == 'project_id' and isinstance(val, str) and val.strip() == "":
+                val = None
+            if f == 'date_installed' and isinstance(val, str):
+                if val.strip() == "":
+                    val = None
+                else:
+                    try:
+                        val = datetime.fromisoformat(val).date()
+                    except Exception:
+                        val = None
+            setattr(c, f, val)
+    db.session.commit()
+    return c.to_dict(), 200
+
+
+@site_bp.route("/chargers/<int:charger_id>", methods=["DELETE"])
+def delete_charger(charger_id):
+    c = Charger.query.get(charger_id)
+    if not c:
+        return {"error": "Charger not found"}, 404
+    db.session.delete(c)
+    db.session.commit()
+    return {"message": f"Charger {charger_id} deleted"}, 200
+
+
 # ---------------------- Utility Bill Endpoints ----------------------
 @site_bp.route("/<int:site_id>/bills", methods=["GET"])
 def list_bills(site_id):
@@ -486,22 +621,32 @@ def create_bill(site_id):
     if not isinstance(year, int) or not isinstance(month, int) or month < 1 or month > 12:
         return {"error": "Invalid year/month"}, 400
 
-    bill = UtilityBill(
-        site_id=site_id,
-        year=year,
-        month=month,
-        energy_usage=data.get("energy_usage"),
-        max_power=data.get("max_power"),
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
-    )
-    db.session.add(bill)
+    # Upsert by (site_id, year, month). If a deleted bill exists, restore it.
+    existing = UtilityBill.query.filter_by(site_id=site_id, year=year, month=month).first()
     try:
-        db.session.commit()
+        if existing:
+            existing.energy_usage = data.get("energy_usage")
+            existing.max_power = data.get("max_power")
+            existing.is_deleted = False
+            existing.updated_at = datetime.utcnow()
+            db.session.commit()
+            return existing.to_dict(), 200
+        else:
+            bill = UtilityBill(
+                site_id=site_id,
+                year=year,
+                month=month,
+                energy_usage=data.get("energy_usage"),
+                max_power=data.get("max_power"),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.session.add(bill)
+            db.session.commit()
+            return bill.to_dict(), 201
     except Exception as e:
         db.session.rollback()
-        return {"error": f"Failed to create bill: {e}"}, 400
-    return bill.to_dict(), 201
+        return {"error": f"Failed to save bill: {e}"}, 400
 
 
 @site_bp.route("/bills/<int:bill_id>", methods=["GET"])

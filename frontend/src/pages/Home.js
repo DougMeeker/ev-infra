@@ -2,6 +2,8 @@ import React, { useEffect, useState, useMemo } from "react";
 import { getSites, getAggregateMetrics, getProjects, getLatestProjectStatuses } from "../api";
 import { Link, useSearchParams } from "react-router-dom";
 import MapView from "../components/MapView";
+import StatusLegend from "../components/StatusLegend";
+import { ratioFrom, getStatusShade } from "../utils/statusShading";
 
 const Home = () => {
   const [sites, setSites] = useState([]);
@@ -210,7 +212,7 @@ const Home = () => {
 
       <div className="card">
         <div className="flex-row gap-md align-center justify-between" style={{marginBottom:'10px'}}>
-          <h2 style={{margin:0}}>Sites (Capacity & Demand)</h2>
+          <h2 style={{margin:0}}>Sites (Capacity, Demand & Chargers)</h2>
           <div className="flex-row gap-sm align-center">
             <button className="btn" onClick={prevPage} disabled={page === 1}>Prev</button>
             <span>Page {page}</span>
@@ -261,6 +263,8 @@ const Home = () => {
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('available_capacity_kw')}>Available kW {sort==='available_capacity_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('last_year_peak_kw')}>Peak kW (Last Yr) {sort==='last_year_peak_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('theoretical_capacity_kw')}>Capacity kW {sort==='theoretical_capacity_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
+                <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('total_charger_kw')}>Total Charger kW {sort==='total_charger_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
+                <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('installed_charger_kw')}>Installed Charger kW {sort==='installed_charger_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th style={{textAlign:'center'}}>Info</th>
                 <th>Status</th>
                 <th>Map</th>
@@ -280,6 +284,8 @@ const Home = () => {
                   <td style={{textAlign:'right'}}>{row.available_capacity_kw ?? '—'}</td>
                   <td style={{textAlign:'right'}}>{row.last_year_peak_kw}</td>
                   <td style={{textAlign:'right'}}>{row.theoretical_capacity_kw ?? '—'}</td>
+                  <td style={{textAlign:'right'}}>{row.total_charger_kw ?? 0}</td>
+                  <td style={{textAlign:'right'}}>{row.installed_charger_kw ?? 0}</td>
                   <td style={{textAlign:'center'}}>
                     {missingFieldsForRow(row).length ? <span className="missing-icon" aria-label="Missing info" role="img">⚠</span> : <span className="ok-icon" aria-label="Complete" role="img">✔</span>}
                   </td>
@@ -288,18 +294,18 @@ const Home = () => {
                       const status = latestStatuses.find(ls => String(ls.site_id) === String(row.site_id));
                       const project = projects.find(p => String(p.id) === String(selectedProjectId));
                       const stepsCount = project && typeof project.steps_count === 'number' ? project.steps_count : undefined;
-                      const complete = project && stepsCount !== undefined && status && status.current_step !== null && status.current_step >= stepsCount;
-                      const inProgress = project && stepsCount !== undefined && status && status.current_step !== null && status.current_step < stepsCount;
+                      const ratio = ratioFrom(status?.current_step, stepsCount);
+                      const col = getStatusShade(ratio);
                       const badgeStyle = {
                         display:'inline-block',
                         padding:'2px 6px',
                         borderRadius:999,
                         fontSize:'0.75rem',
-                        background: complete ? '#d1fae5' : inProgress ? '#fff7ed' : '#f1f5f9',
-                        border: '1px solid ' + (complete ? '#10b981' : inProgress ? '#fb923c' : '#cbd5e1'),
+                        background: col.bg,
+                        border: '1px solid ' + col.border,
                         color: '#0f172a'
                       };
-                      const badgeText = complete ? 'Complete' : inProgress ? `Step ${status.current_step}` : 'No Status';
+                      const badgeText = ratio === null ? 'No Status' : `Step ${status.current_step}`;
                       return (
                         <Link to={`/projects/${selectedProjectId}/status/${row.site_id}`} style={{ textDecoration:'none' }}>
                           <span style={badgeStyle} title={status && status.status_date ? `As of ${new Date(status.status_date).toLocaleDateString()}` : ''}>{badgeText}</span>
@@ -354,11 +360,7 @@ function MarkerLegend({ mode, hasProject }) {
     <div style={wrapStyle}>
       {!hasProject && <span style={{ color:'var(--muted)' }}>Select a project for status colors.</span>}
       {hasProject && (
-        <>
-          {pill('#16a34a','#16a34a','Complete')}
-          {pill('#fb923c','#fb923c','In Progress')}
-          {pill('#94a3b8','#94a3b8','No Status')}
-        </>
+        <StatusLegend />
       )}
     </div>
   );

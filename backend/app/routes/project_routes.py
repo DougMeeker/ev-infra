@@ -46,27 +46,6 @@ def delete_project(project_id):
     db.session.commit()
     return jsonify({'status': 'deleted'})
 
-# Association management
-@project_bp.route('/<int:project_id>/sites', methods=['GET'])
-def list_project_sites(project_id):
-    Project.query.get_or_404(project_id)
-    # Optional search and pagination
-    q = request.args.get('q', '').strip().lower()
-    page = int(request.args.get('page', 1))
-    page_size = int(request.args.get('page_size', 25))
-    # Query sites joined via association
-    query = Site.query.join(Project.sites).filter(Project.id == project_id)
-    if q:
-        query = query.filter(Site.name.ilike(f"%{q}%"))
-    total = query.count()
-    items = query.order_by(Site.name).offset((page-1)*page_size).limit(page_size).all()
-    return jsonify({
-        'items': [s.to_dict() for s in items],
-        'page': page,
-        'page_size': page_size,
-        'total': total
-    })
-
 @project_bp.route('/<int:project_id>/sites', methods=['POST'])
 def add_site_to_project(project_id):
     project = Project.query.get_or_404(project_id)
@@ -107,7 +86,7 @@ def create_status(project_id, site_id):
     data = request.get_json() or {}
     current_step = data.get('current_step')
     status_message = data.get('status_message')
-    status_date = data.get('status_date')  # optional ISO string
+    status_date = data.get('status_date')  # optional ISO string (YYYY-MM-DD or full ISO)
     estimated_cost = data.get('estimated_cost')
     actual_cost = data.get('actual_cost')
     if current_step is None:
@@ -118,12 +97,20 @@ def create_status(project_id, site_id):
         current_step=int(current_step),
         status_message=status_message,
     )
+    from datetime import datetime, date
     if status_date:
+        # Accept YYYY-MM-DD or full ISO timestamp
         try:
-            from datetime import datetime
-            status.status_date = datetime.fromisoformat(status_date)
+            if len(status_date) == 10:
+                # Strict YYYY-MM-DD
+                status.status_date = datetime.strptime(status_date, "%Y-%m-%d")
+            else:
+                status.status_date = datetime.fromisoformat(status_date)
         except Exception:
-            return jsonify({'error': 'invalid status_date format'}), 400
+            return jsonify({'error': 'invalid status_date format; expected YYYY-MM-DD or ISO timestamp'}), 400
+    else:
+        # Default to today's date
+        status.status_date = datetime.combine(date.today(), datetime.min.time())
     if estimated_cost is not None:
         status.estimated_cost = float(estimated_cost)
     if actual_cost is not None:

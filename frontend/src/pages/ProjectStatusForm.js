@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import StatusLegend from '../components/StatusLegend';
+import { ratioFrom, getStatusShade } from '../utils/statusShading';
 import { useParams } from 'react-router-dom';
-import { getProjects, getProjectSites, getProjectSiteStatuses, createProjectSiteStatus, getLatestProjectStatuses } from '../api';
+import { getProjects, getProjectSites, getProjectSiteStatuses, createProjectSiteStatus, getLatestProjectStatuses, getProjectSteps } from '../api';
 
 export default function ProjectStatusForm() {
   const params = useParams();
@@ -8,8 +10,9 @@ export default function ProjectStatusForm() {
   const [projectSites, setProjectSites] = useState([]);
   const [selected, setSelected] = useState({ projectId: params.projectId || '', siteId: params.siteId || '' });
   const [statuses, setStatuses] = useState([]);
-  const [form, setForm] = useState({ current_step: '', status_message: '', status_date: '', estimated_cost: '', actual_cost: '' });
+  const [form, setForm] = useState({ current_step: '', status_message: '', status_date: new Date().toISOString().slice(0,10), estimated_cost: '', actual_cost: '' });
   const [latestStatuses, setLatestStatuses] = useState([]);
+  const [steps, setSteps] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingSites, setLoadingSites] = useState(false);
   const [loadingStatuses, setLoadingStatuses] = useState(false);
@@ -33,9 +36,13 @@ export default function ProjectStatusForm() {
       if (!selected.projectId) { setProjectSites([]); return; }
       setLoadingSites(true);
       try {
-        const { data: ps } = await getProjectSites(selected.projectId);
-        ps.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        setProjectSites(ps);
+        // Request a larger page size so the dropdown includes all sites in large projects
+        const { data: ps } = await getProjectSites(selected.projectId, { page: 1, page_size: 500 });
+        const items = Array.isArray(ps) ? ps : (ps.items || []);
+        items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        setProjectSites(items);
+        const { data: stepData } = await getProjectSteps(selected.projectId);
+        setSteps(stepData || []);
       } finally {
         setLoadingSites(false);
       }
@@ -119,13 +126,17 @@ export default function ProjectStatusForm() {
           <option value="">Select Site</option>
           {projectSites.map(s => <option key={s.id} value={s.id}>{s.name || `Site ${s.id}`}</option>)}
         </select>
-        <input
-          placeholder="Current Step"
-          type="number"
+        <select
           value={form.current_step}
           onChange={(e) => setForm({ ...form, current_step: e.target.value })}
           style={{ marginRight: 8 }}
-        />
+          disabled={!selected.projectId}
+        >
+          <option value="">Select Step</option>
+          {steps.map(st => (
+            <option key={st.id} value={st.step_order}>{`${st.step_order} - ${st.title}`}</option>
+          ))}
+        </select>
         <input
           placeholder="Status Message"
           value={form.status_message}
@@ -133,7 +144,7 @@ export default function ProjectStatusForm() {
           style={{ marginRight: 8, width: 300 }}
         />
         <input
-          placeholder="Status Date (YYYY-MM-DD)"
+          type="date"
           value={form.status_date}
           onChange={(e) => setForm({ ...form, status_date: e.target.value })}
           style={{ marginRight: 8 }}
@@ -160,14 +171,15 @@ export default function ProjectStatusForm() {
       <ul style={{ listStyle:'none', padding:0 }}>
         {latestStatuses.map(ls => {
           const project = projects.find(p => String(p.id) === String(selected.projectId));
-          const complete = project && ls.current_step !== null && ls.current_step >= project.total_steps;
-          const inProgress = project && ls.current_step !== null && ls.current_step < project.total_steps;
+          const stepsCount = project && typeof project.steps_count === 'number' ? project.steps_count : undefined;
+          const ratio = ratioFrom(ls.current_step, stepsCount);
+          const col = getStatusShade(ratio);
           const baseStyle = {
             padding:'6px 8px',
             marginBottom:4,
             borderRadius:4,
-            background: complete ? '#d1fae5' : inProgress ? '#fff7ed' : '#f1f5f9',
-            border: '1px solid ' + (complete ? '#10b981' : inProgress ? '#fb923c' : '#cbd5e1'),
+            background: col.bg,
+            border: '1px solid ' + col.border,
             color: '#0f172a'
           };
           return (
@@ -185,12 +197,4 @@ export default function ProjectStatusForm() {
   );
 }
 
-function StatusLegend() {
-  return (
-    <div style={{ display:'flex', gap:12, marginBottom:8, fontSize:'0.85rem' }}>
-      <span style={{ background:'#d1fae5', border:'1px solid #10b981', padding:'2px 6px', borderRadius:4 }}>Complete</span>
-      <span style={{ background:'#fff7ed', border:'1px solid #fb923c', padding:'2px 6px', borderRadius:4 }}>In Progress</span>
-      <span style={{ background:'#f1f5f9', border:'1px solid #cbd5e1', padding:'2px 6px', borderRadius:4 }}>No Status</span>
-    </div>
-  );
-}
+// Using shared StatusLegend component

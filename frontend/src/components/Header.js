@@ -25,6 +25,9 @@ const Header = () => {
           <NavLink to="/projects/status" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Status
           </NavLink>
+          <NavLink to="/chargers" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
+            Chargers
+          </NavLink>
         </nav>
       </div>
     </header>
