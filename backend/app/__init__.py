@@ -3,6 +3,7 @@ from flask_cors import CORS
 from .config import get_config
 from .extensions import db, cors
 from .routes import register_routes
+from .routes.vehicles_routes import vehicles_bp
 
 def create_app(config_name="default"):
     app = Flask(__name__)
@@ -16,5 +17,6 @@ def create_app(config_name="default"):
 
     # Register blueprints
     register_routes(app)
+    app.register_blueprint(vehicles_bp, url_prefix='/api/vehicles')
 
     return app

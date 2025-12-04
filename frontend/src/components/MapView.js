@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from "react-leaflet";
+import { useNavigate } from "react-router-dom";
 import L from "leaflet";
 import { createSite } from "../api";
 import { ratioFrom, getStatusShade } from "../utils/statusShading";
@@ -44,6 +45,7 @@ const MapView = ({ sites, focusSiteId, onClearFocus, enableAddSites, selectedPro
   const center = [37.5, -120];
   const [newMarker, setNewMarker] = useState(null);
   const focusSite = focusSiteId ? sites.find(s => s.id === focusSiteId) : null;
+  const navigate = useNavigate();
 
   const handleMapClick = async (latlng) => {
     const name = prompt("Enter site name:");
@@ -158,15 +160,15 @@ const MapView = ({ sites, focusSiteId, onClearFocus, enableAddSites, selectedPro
                   <div><span className="popup-label">Location:</span> {site.address ? `${site.address}${site.city ? ', '+site.city : ''}` : (site.city || '—')}</div>
                   {selectedProjectId && (
                     <div style={{ marginTop:6 }}>
-                      <a href={`#/projects/${selectedProjectId}/status/${site.id}`} style={{ textDecoration:'none' }}>
+                      <button className="btn btn-link" style={{ padding:0 }} onClick={() => navigate(`/projects/${selectedProjectId}/status/${site.id}`)}>
                         <span style={badgeStyle} title={status && status.status_date ? `As of ${new Date(status.status_date).toLocaleDateString()}` : ''}>{badgeText}</span>
-                      </a>
+                      </button>
                     </div>
                   )}
                   <div style={{ marginTop:6 }}>
-                    <a href={`#/site/${site.id}`} style={{ textDecoration:'none' }}>
+                    <button className="btn btn-link" style={{ padding:0 }} onClick={() => navigate(`/site/${site.id}`)}>
                       View Site Details
-                    </a>
+                    </button>
                   </div>
                 </div>
               </div>

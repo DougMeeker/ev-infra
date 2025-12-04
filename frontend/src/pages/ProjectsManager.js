@@ -65,9 +65,10 @@ export default function ProjectsManager() {
       const effectivePageSize = sortMode === 'status' ? 500 : sitesPageSize;
       const effectivePage = sortMode === 'status' ? 1 : sitesPage;
       const { data } = await getProjectSites(projectId, { q: debouncedSearch, page: effectivePage, page_size: effectivePageSize });
-      const items = data.items || [];
+      const items = Array.isArray(data) ? data : (data.items || []);
       setProjectSites(items);
-      setSitesTotal(data.total || items.length || 0);
+      const total = Array.isArray(data) ? items.length : ((data.meta && typeof data.meta.total === 'number') ? data.meta.total : (data.total || items.length || 0));
+      setSitesTotal(total);
       // Fetch latest statuses for badges
       const { data: latest } = await getLatestProjectStatuses(projectId);
       setLatestStatuses(latest);
@@ -320,7 +321,26 @@ export default function ProjectsManager() {
                   </label>
                 </span>
               </h4>
-              <StatusLegend />
+              {/* Top pagination controls placed near sort options */}
+              {(() => {
+                const effectiveTotalPages = sortMode==='status' ? Math.max(1, Math.ceil(sortedProjectSites.length / sitesPageSize)) : totalPages;
+                return (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                    <span>Page:</span>
+                    <button className="btn" disabled={sitesPage<=1} onClick={()=>setSitesPage(1)}>First</button>
+                    <button className="btn" disabled={sitesPage<=1} onClick={()=>setSitesPage(p=>Math.max(1,p-1))}>Prev</button>
+                    <span>{sitesPage} / {effectiveTotalPages}</span>
+                    <button className="btn" disabled={sitesPage>=effectiveTotalPages} onClick={()=>setSitesPage(p=>p+1)}>Next</button>
+                    <button className="btn" disabled={sitesPage>=effectiveTotalPages} onClick={()=>setSitesPage(effectiveTotalPages)}>Last</button>
+                    <span style={{ marginLeft:12 }}>Per page:</span>
+                    <select className="input" value={sitesPageSize} onChange={(e)=>{ setSitesPageSize(Number(e.target.value)); setSitesPage(1); }}>
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </div>
+                );
+              })()}
               <ul style={{ listStyle:'none', padding:0 }}>
                 {(sortMode === 'status' ? sortedProjectSites.slice((sitesPage-1)*sitesPageSize, (sitesPage-1)*sitesPageSize + sitesPageSize) : sortedProjectSites).map((s) => {
                   const status = latestStatuses.find(ls => String(ls.site_id) === String(s.id));
@@ -350,18 +370,7 @@ export default function ProjectsManager() {
                   );
                 })}
               </ul>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8 }}>
-                <span>Page:</span>
-                <button className="btn" disabled={sitesPage<=1} onClick={()=>setSitesPage(p=>Math.max(1,p-1))}>Prev</button>
-                <span>{sitesPage} / {sortMode==='status' ? Math.max(1, Math.ceil(sortedProjectSites.length / sitesPageSize)) : totalPages}</span>
-                <button className="btn" disabled={sitesPage>=(sortMode==='status' ? Math.max(1, Math.ceil(sortedProjectSites.length / sitesPageSize)) : totalPages)} onClick={()=>setSitesPage(p=>p+1)}>Next</button>
-                <span style={{ marginLeft:12 }}>Per page:</span>
-                <select className="input" value={sitesPageSize} onChange={(e)=>{ setSitesPageSize(Number(e.target.value)); setSitesPage(1); }}>
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
-              </div>
+              {/* Bottom controls removed; controls are now at the top */}
             </>
           ) : (
             <p>Select a project to manage site assignments.</p>

@@ -931,3 +931,156 @@ def refresh_geojson_sites():
         "skipped": skipped,
         "errors": errors[:10]
     }, 200
+
+
+# ---------------------- DGS Properties Import (Add-Only) ----------------------
+@site_bp.route("/import-dgs-properties", methods=["POST"])
+def import_dgs_properties():
+    """Import DGS property GeoJSON from the workspace and add only new Sites.
+    Attempts to match incoming features to existing sites by:
+      1) exact name match (case-insensitive)
+      2) proximity within 0.25 km (~250 m)
+    If a match is found, the feature is skipped. Otherwise, a new Site is created.
+
+    Reads `DGS_DOT_Property.geojson` from the project root. If not found, tries `DGS_TOT_Property.gojson`.
+    """
+    # Prefer the filename present in the repo; support alternate name if needed
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    candidates = [
+        os.path.join(base_dir, "DGS_DOT_Property.geojson"),
+        os.path.join(base_dir, "DGS_TOT_Property.gojson"),
+    ]
+    geojson_path = next((p for p in candidates if os.path.exists(p)), None)
+    if not geojson_path:
+        return {"error": f"GeoJSON file not found. Looked for: {', '.join(candidates)}"}, 404
+
+    try:
+        with open(geojson_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        return {"error": f"Failed to read GeoJSON: {e}"}, 400
+
+    if not isinstance(data, dict) or data.get('type') != 'FeatureCollection':
+        return {"error": "GeoJSON must be a FeatureCollection"}, 400
+    features = data.get('features') or []
+    if not isinstance(features, list) or not features:
+        return {"error": "No features found in GeoJSON"}, 400
+
+    def first_prop(props, keys):
+        if not isinstance(props, dict):
+            return None
+        for k in keys:
+            for candidate in (k, k.lower(), k.upper()):
+                if candidate in props and props.get(candidate) not in (None, ''):
+                    return props.get(candidate)
+        lower = {str(k).lower(): v for k, v in props.items()}
+        for k in keys:
+            v = lower.get(str(k).lower())
+            if v not in (None, ''):
+                return v
+        return None
+
+    def haversine(lat1, lon1, lat2, lon2):
+        R = 6371.0  # km
+        try:
+            dlat = math.radians((lat2 or 0) - (lat1 or 0))
+            dlon = math.radians((lon2 or 0) - (lon1 or 0))
+            a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1 or 0)) * math.cos(math.radians(lat2 or 0)) * math.sin(dlon/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            return R * c
+        except Exception:
+            return float("inf")
+
+    def norm(s):
+        return (s or "").strip().lower()
+
+    # Cache existing sites with name and coordinates for quick matching
+    existing_sites = Site.query.filter_by(is_deleted=False).all()
+    existing_by_name = {norm(s.name): s for s in existing_sites if s.name}
+
+    added = 0
+    skipped = 0
+    errors = []
+    new_sites = []
+
+    proximity_km = 0.25  # ~250 meters
+
+    for idx, feat in enumerate(features):
+        try:
+            geom = feat.get('geometry') if isinstance(feat, dict) else None
+            if not geom or geom.get('type') != 'Point':
+                skipped += 1
+                continue
+            coords = geom.get('coordinates')
+            if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+                skipped += 1
+                continue
+            lon, lat = coords[0], coords[1]
+            try:
+                lon = float(lon); lat = float(lat)
+            except (TypeError, ValueError):
+                skipped += 1
+                continue
+
+            props = feat.get('properties') or {}
+            name = first_prop(props, ['name', 'site', 'site_name', 'Site Name', 'LOCATION'])
+            address = first_prop(props, ['address', 'street', 'address1'])
+            city = first_prop(props, ['city', 'municipality', 'town'])
+            utility = first_prop(props, ['utility', 'utility_name', 'Utility'])
+            meter_number = first_prop(props, ['meter', 'meter_number', 'MeterNumber'])
+            contact_name = first_prop(props, ['contact', 'contact_name'])
+            contact_phone = first_prop(props, ['phone', 'contact_phone'])
+
+            # Match 1: exact name (case-insensitive)
+            if name and norm(name) in existing_by_name:
+                skipped += 1
+                continue
+
+            # Match 2: proximity within threshold
+            matched = False
+            for s in existing_sites:
+                if s.latitude is None or s.longitude is None:
+                    continue
+                if haversine(lat, lon, s.latitude, s.longitude) <= proximity_km:
+                    matched = True
+                    break
+            if matched:
+                skipped += 1
+                continue
+
+            # Create new site
+            site = Site(
+                name=name or f"DGS Property {idx+1}",
+                latitude=lat,
+                longitude=lon,
+                address=address,
+                city=city,
+                utility=utility,
+                meter_number=meter_number,
+                contact_name=contact_name,
+                contact_phone=contact_phone
+            )
+            db.session.add(site)
+            added += 1
+            new_sites.append({"temp_name": site.name, "lat": lat, "lon": lon})
+            # Update caches for subsequent matches in this run
+            existing_sites.append(site)
+            if name:
+                existing_by_name[norm(name)] = site
+        except Exception as e:
+            errors.append({"feature_index": idx, "error": str(e)})
+            skipped += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to save sites: {e}"}, 500
+
+    return {
+        "message": "DGS properties processed (add-only)",
+        "added": added,
+        "skipped": skipped,
+        "new_sites": new_sites[:25],  # sample of created
+        "errors": errors[:10]
+    }, 200

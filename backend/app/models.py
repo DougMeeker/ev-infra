@@ -17,6 +17,7 @@ class Site(db.Model):
     name = db.Column(db.String(128))
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
+    department_id = db.Column(db.String(32))
     utility = db.Column(db.String(64))
     utility_account = db.Column(db.String(64))
     utility_name = db.Column(db.String(64))
@@ -85,6 +86,24 @@ class EquipmentCatalog(db.Model):
     description = db.Column(db.String(256))
     status = db.Column(db.String(64))
     revised_date = db.Column(db.Date)
+    # Link to standardized equipment category (e.g., PV, LDU, etc.)
+    equipment_category_code = db.Column(db.String(8), db.ForeignKey('equipment_categories.code'), index=True)
+    category = relationship('EquipmentCategory')
+
+    def to_dict(self):
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        if self.category:
+            data['category'] = self.category.to_dict()
+        return data
+
+
+class EquipmentCategory(db.Model):
+    __tablename__ = 'equipment_categories'
+
+    # Example codes: PV, LDU, LC, LDT, HD, MD, SN, OT, TR, LM, IN, CO, RM
+    code = db.Column(db.String(8), primary_key=True)
+    description = db.Column(db.String(128), nullable=False)
+    # Moved from EquipmentCatalog: energy factor per category
     energy_per_mile = db.Column(db.Float)  # kWh per mile (nullable until set)
 
     def to_dict(self):

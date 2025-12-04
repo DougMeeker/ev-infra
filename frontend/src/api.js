@@ -84,12 +84,41 @@ export const uploadCatalogFile = (file) => {
 	return axios.post(`${API_BASE_URL}/catalog/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 };
 export const deleteCatalogEntry = (mcCode) => axios.delete(`${API_BASE_URL}/catalog/${mcCode}`);
+export const mapMcCategories = () => axios.post(`${API_BASE_URL}/catalog/map-mc-categories`);
 
 // GeoJSON site import
 export const uploadSitesGeoJSON = (file) => {
 	const formData = new FormData();
 	formData.append('file', file);
 	return axios.post(`${API_BASE_URL}/sites/upload-geojson`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+};
+
+// Server-side DGS properties import (add-only)
+export const importDgsProperties = () => axios.post(`${API_BASE_URL}/sites/import-dgs-properties`);
+
+// Fleet import tools
+export const previewFleetMatches = (minConfidence = 0) => {
+	const params = new URLSearchParams();
+	if (minConfidence != null) params.append('min_confidence', String(minConfidence));
+	return axios.get(`${API_BASE_URL}/fleet/match-preview?${params.toString()}`);
+};
+export const importFleet = (minConfidence = 0) => {
+	const params = new URLSearchParams();
+	if (minConfidence != null) params.append('min_confidence', String(minConfidence));
+	return axios.post(`${API_BASE_URL}/fleet/import?${params.toString()}`);
+};
+
+// Department mapping tools
+export const previewDepartmentMapping = (minConfidence = 0) => {
+	const params = new URLSearchParams();
+	if (minConfidence != null) params.append('min_confidence', String(minConfidence));
+	return axios.get(`${API_BASE_URL}/departments/site-mapping/preview?${params.toString()}`);
+};
+
+export const importDepartmentMapping = (minConfidence = 0) => {
+	const params = new URLSearchParams();
+	if (minConfidence != null) params.append('min_confidence', String(minConfidence));
+	return axios.post(`${API_BASE_URL}/departments/site-mapping/import?${params.toString()}`);
 };
 
 // Project endpoints
@@ -117,3 +146,16 @@ export const getProjectSteps = (projectId) => axios.get(`${API_BASE_URL}/project
 export const createProjectStep = (projectId, payload) => axios.post(`${API_BASE_URL}/projects/${projectId}/steps`, payload);
 export const updateProjectStep = (projectId, stepId, payload) => axios.put(`${API_BASE_URL}/projects/${projectId}/steps/${stepId}`, payload);
 export const deleteProjectStep = (projectId, stepId) => axios.delete(`${API_BASE_URL}/projects/${projectId}/steps/${stepId}`);
+
+// Vehicles endpoints
+export const listVehicles = ({ page = 1, perPage = 25, order = 'asc', sort = 'equipment_identifier', search = '', siteId = '', departmentId = '', mcCode = '' } = {}) => {
+	const params = new URLSearchParams({ page: String(page), per_page: String(perPage), order, sort });
+	if (search) params.append('search', search);
+	if (siteId) params.append('site_id', String(siteId));
+	if (departmentId) params.append('department_id', String(departmentId));
+	if (mcCode) params.append('mc_code', mcCode);
+	return axios.get(`${API_BASE_URL}/vehicles/?${params.toString()}`);
+};
+export const createVehicle = (payload) => axios.post(`${API_BASE_URL}/vehicles/`, payload);
+export const updateVehicle = (vehicleId, payload) => axios.put(`${API_BASE_URL}/vehicles/${vehicleId}`, payload);
+export const deleteVehicle = (vehicleId) => axios.delete(`${API_BASE_URL}/vehicles/${vehicleId}`);

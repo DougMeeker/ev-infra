@@ -5,12 +5,14 @@ const CatalogManager = () => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [savingMC, setSavingMC] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState(null);
   const fileInputRef = useRef(null);
   const [sortField, setSortField] = useState('mc_code');
   const [sortDir, setSortDir] = useState('asc');
+  const [categoryOptions, setCategoryOptions] = useState([]);
 
   const load = () => {
     setLoading(true);
@@ -20,6 +22,21 @@ const CatalogManager = () => {
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    // Build category options from loaded rows (category.code or equipment_category_code)
+    const codes = new Set();
+    rows.forEach(r => {
+      const c1 = (r.category && r.category.code) ? String(r.category.code).trim() : null;
+      const c2 = r.equipment_category_code ? String(r.equipment_category_code).trim() : null;
+      if (c1) codes.add(c1);
+      if (c2) codes.add(c2);
+    });
+    // Provide common defaults if none yet
+    if (codes.size === 0) {
+      ['PV','LC','LDU','LDT','MD','HD','SN','OT','TR','LM','IN','CO','RM'].forEach(c => codes.add(c));
+    }
+    setCategoryOptions(Array.from(codes).sort());
+  }, [rows]);
 
   const handleEnergyChange = (mc, value) => {
     setRows(prev => prev.map(r => r.mc_code === mc ? { ...r, energy_per_mile: value } : r));
@@ -29,6 +46,10 @@ const CatalogManager = () => {
   };
   const handleStatusChange = (mc, value) => {
     setRows(prev => prev.map(r => r.mc_code === mc ? { ...r, status: value } : r));
+  };
+  const handleCategoryChange = (mc, value) => {
+    const v = value === '' ? null : value;
+    setRows(prev => prev.map(r => r.mc_code === mc ? { ...r, equipment_category_code: v } : r));
   };
 
   const saveEntry = (row) => {
@@ -42,6 +63,7 @@ const CatalogManager = () => {
     }
     payload.description = row.description;
     payload.status = row.status;
+    payload.equipment_category_code = row.equipment_category_code ?? null;
     updateCatalogEntry(row.mc_code, payload)
       .then(() => load())
       .catch(err => { console.error('Save failed', err); alert('Save failed'); })
@@ -71,7 +93,12 @@ const CatalogManager = () => {
       .catch(err => { console.error('Refresh failed', err); alert('Refresh failed'); });
   };
 
-  const filtered = rows.filter(r => !filter || r.mc_code.includes(filter) || (r.description || '').toLowerCase().includes(filter.toLowerCase()));
+  const filtered = rows.filter(r => {
+    const textMatch = !filter || r.mc_code.includes(filter) || (r.description || '').toLowerCase().includes(filter.toLowerCase());
+    const catCode = r.equipment_category_code || (r.category && r.category.code) || '';
+    const catMatch = !categoryFilter || String(catCode) === String(categoryFilter);
+    return textMatch && catMatch;
+  });
 
   const sorted = [...filtered].sort((a,b) => {
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -133,6 +160,12 @@ const CatalogManager = () => {
           <button className="btn" disabled={uploading || !file} onClick={upload}>{uploading ? 'Uploading...' : (file ? `Upload ${file.name}` : 'Upload CSV')}</button>
           <button className="btn btn-secondary" onClick={doRefreshFromServerFile}>Refresh From Server File</button>
           <input className="input" style={{ width:'220px' }} placeholder="Filter MC / description" value={filter} onChange={e=>setFilter(e.target.value)} />
+          <select className="input" style={{ width:'180px' }} value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)}>
+            <option value="">Filter by category</option>
+            {categoryOptions.map(code => (
+              <option key={code} value={code}>{code}</option>
+            ))}
+          </select>
         </div>
         <small style={{ display:'block', marginTop:'8px' }}>Upload replaces description/status/revised_date; if CSV includes an Energy Use column, energy_per_mile is updated as well (kWh/mile).</small>
       </div>
@@ -143,7 +176,9 @@ const CatalogManager = () => {
               <th onClick={()=>toggleSort('mc_code')} style={{ cursor:'pointer' }}>MC {sortField==='mc_code' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
               <th onClick={()=>toggleSort('description')} style={{ cursor:'pointer' }}>Description {sortField==='description' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
               <th>Status</th>
+              <th onClick={()=>toggleSort('equipment_category_code')} style={{ cursor:'pointer' }}>Equipment Category {sortField==='equipment_category_code' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
               <th onClick={()=>toggleSort('revised_date')} style={{ cursor:'pointer' }}>Revised {sortField==='revised_date' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
+              <th>Category Description</th>
               <th onClick={()=>toggleSort('energy_per_mile')} style={{ width:'130px', cursor:'pointer' }}>Energy / Mile (kWh) {sortField==='energy_per_mile' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
               <th style={{ width:'110px' }}>Actions</th>
             </tr>
@@ -158,7 +193,16 @@ const CatalogManager = () => {
                 <td>
                   <input className="input" value={r.status || ''} onChange={e=>handleStatusChange(r.mc_code, e.target.value)} />
                 </td>
+                <td>
+                  <select className="input" value={r.equipment_category_code ?? ''} onChange={e=>handleCategoryChange(r.mc_code, e.target.value)}>
+                    <option value="">(none)</option>
+                    {categoryOptions.map(code => (
+                      <option key={code} value={code}>{code}</option>
+                    ))}
+                  </select>
+                </td>
                 <td>{r.revised_date || '—'}</td>
+                <td>{(r.category && r.category.description) || '—'}</td>
                 <td>
                   <input className="input" style={{ width:'120px' }} value={r.energy_per_mile ?? ''} onChange={e=>handleEnergyChange(r.mc_code, e.target.value)} />
                 </td>

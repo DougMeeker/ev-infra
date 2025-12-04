@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from ..extensions import db
-from ..models import EquipmentCatalog
+from ..models import EquipmentCatalog, EquipmentCategory
 from ..models import Equipment
 import csv
 import re
@@ -10,6 +10,41 @@ from datetime import datetime
 catalog_bp = Blueprint("catalog", __name__)
 
 CATALOG_CSV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "ActiveCatalog.csv"))
+MC_CODES_CSV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "MC_Codes.csv"))
+def normalize_mc_code(mc: str):
+    if mc is None:
+        return None
+    mc = str(mc).strip()
+    if mc == "":
+        return None
+    stripped = mc.lstrip('0')
+    return stripped if stripped != "" else "0"
+
+def get_catalog_entry_by_mc(mc: str):
+    if not mc:
+        return None
+    entry = EquipmentCatalog.query.get(mc)
+    if entry:
+        return entry
+    alt = normalize_mc_code(mc)
+    if alt and alt != mc:
+        return EquipmentCatalog.query.get(alt)
+    return None
+
+def norm_header(h):
+    if h is None:
+        return None
+    return str(h).lstrip('\ufeff').strip()
+
+def norm_row_keys(row):
+    return {norm_header(k): v for k, v in row.items()}
+
+def getv(nrow, *keys):
+    for k in keys:
+        v = nrow.get(k)
+        if v not in (None, ''):
+            return v
+    return None
 
 @catalog_bp.route("/", methods=["GET"])
 def list_catalog():
@@ -29,16 +64,18 @@ def update_catalog_entry(mc_code):
     if not entry:
         return {"error": "MC code not found"}, 404
     data = request.get_json() or {}
-    if 'energy_per_mile' in data:
-        val = data.get('energy_per_mile')
-        try:
-            entry.energy_per_mile = float(val) if val is not None else None
-        except (ValueError, TypeError):
-            return {"error": "energy_per_mile must be numeric"}, 400
     if 'description' in data:
         entry.description = data['description']
     if 'status' in data:
         entry.status = data['status']
+    if 'equipment_category_code' in data:
+        code = (data.get('equipment_category_code') or '').strip() or None
+        if code:
+            # Ensure category exists (create stub if missing)
+            cat = EquipmentCategory.query.get(code)
+            if not cat:
+                db.session.add(EquipmentCategory(code=code, description=code))
+        entry.equipment_category_code = code
     db.session.commit()
     return entry.to_dict(), 200
 
@@ -83,15 +120,14 @@ def refresh_catalog():
                         break
                     except ValueError:
                         continue
-            energy_use_raw = (row.get('Energy Use') or '').strip()  
-            existing = EquipmentCatalog.query.get(mc)
+            existing = get_catalog_entry_by_mc(mc)
             if existing:
                 existing.description = desc
                 existing.status = status
                 existing.revised_date = revised_date
                 updated += 1
             else:
-                db.session.add(EquipmentCatalog(mc_code=mc, description=desc, status=status, revised_date=revised_date, energy_per_mile=energy_use_raw if energy_use_raw else None))
+                db.session.add(EquipmentCatalog(mc_code=mc, description=desc, status=status, revised_date=revised_date))
                 added += 1
             processed += 1
     db.session.commit()
@@ -119,35 +155,6 @@ def upload_catalog():
     updated = 0
     processed = 0
 
-    def parse_energy(val):
-        if val is None:
-            return None
-        s = str(val).strip()
-        if not s:
-            return None
-        # extract first float-like number from the string
-        m = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", s)
-        if not m:
-            return None
-        try:
-            return float(m.group(0))
-        except ValueError:
-            return None
-
-    # normalize potential header names for energy per mile
-    def get_energy_from_row(row):
-        keys = [
-            'Energy Use', 'Energy', 'Energy per Mile', 'Energy/Mile',
-            'kWh per Mile', 'kWh/Mile', 'kwh_per_mile', 'energy_per_mile',
-            'Energy_kWh_per_mile', 'Energy_kwh_per_mile'
-        ]
-        for k in row.keys():
-            if k is None:
-                continue
-            kl = k.strip().lower()
-            if kl in [x.lower() for x in keys]:
-                return parse_energy(row.get(k))
-        return None
     for row in reader:
         # Accept several MC header variants
         mc = row.get('MC') or row.get('Mc') or row.get('mc') or row.get('MC Code') or row.get('MC_Code')
@@ -164,17 +171,14 @@ def upload_catalog():
                     break
                 except ValueError:
                     continue
-        energy_val = get_energy_from_row(row)
-        existing = EquipmentCatalog.query.get(mc)
+        existing = get_catalog_entry_by_mc(mc)
         if existing:
             existing.description = desc
             existing.status = status
             existing.revised_date = revised_date
-            if energy_val is not None:
-                existing.energy_per_mile = energy_val
             updated += 1
         else:
-            db.session.add(EquipmentCatalog(mc_code=mc, description=desc, status=status, revised_date=revised_date, energy_per_mile=energy_val))
+            db.session.add(EquipmentCatalog(mc_code=mc, description=desc, status=status, revised_date=revised_date))
             added += 1
         processed += 1
     db.session.commit()
@@ -194,3 +198,46 @@ def delete_catalog_entry(mc_code):
     db.session.delete(entry)
     db.session.commit()
     return {"message": f"MC {mc_code} deleted"}, 200
+
+
+@catalog_bp.route('/map-mc-categories', methods=['POST'])
+def map_mc_categories():
+    """Map MC codes to equipment categories using server-side MC_Codes.csv.
+    Expected headers include at least: MC (or MC Code) and EQ CAT (category code).
+    Creates stub categories if missing and sets EquipmentCatalog.equipment_category_code.
+    """
+    if not os.path.exists(MC_CODES_CSV_PATH):
+        return {"error": f"MC_Codes.csv not found at {MC_CODES_CSV_PATH}"}, 404
+    updated = 0
+    created_categories = 0
+    processed = 0
+    with open(MC_CODES_CSV_PATH, newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        raw_rows = [norm_row_keys(r) for r in reader]
+        for row in raw_rows:
+            processed += 1
+            mc = (getv(row, 'MC', 'MC Code', 'mc') or '').strip()
+            cat_code = (getv(row, 'EQ CAT', 'EQ_CAT', 'Equipment Category') or '').strip()
+            cat_desc = (getv(row, 'EQ_CAT_Description', 'EQ CAT Description', 'Category Description') or '').strip()
+            mc_desc = (getv(row, 'MC Description', 'Equipment Description', 'Description') or '').strip()
+            if not mc or not cat_code:
+                continue
+            entry = get_catalog_entry_by_mc(mc)
+            if not entry:
+                # Create missing catalog entry with minimal info
+                db.session.add(EquipmentCatalog(mc_code=normalize_mc_code(mc), description=(mc_desc or None), status=None, revised_date=None))
+                entry = get_catalog_entry_by_mc(mc)
+            else:
+                # If description is blank and MC Description provided, populate it
+                if (not entry.description) and mc_desc:
+                    entry.description = mc_desc
+            # Ensure category exists
+            cat = EquipmentCategory.query.get(cat_code)
+            if not cat:
+                db.session.add(EquipmentCategory(code=cat_code, description=(cat_desc or cat_code)))
+                created_categories += 1
+            # Assign category code
+            entry.equipment_category_code = cat_code
+            updated += 1
+    db.session.commit()
+    return {"message": "MC to category mapping applied", "updated": updated, "created_categories": created_categories, "processed": processed}, 200

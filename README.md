@@ -392,10 +392,69 @@ curl -F file=@"PGE EV Fleet Program.geojson" http://localhost:5000/api/sites/upl
 ```
 
 ### Frontend
-- Navigate to `Sites Import` in the header, choose your `.geojson` file, and upload.
-- After success, click "View on Map" to return to Home and see new markers.
+- Navigate to `Imports` in the header, choose your `.geojson` file, and upload.
+ - After success, click "View on Map" to return to Home and see new markers.
 
 ### Notes
 - Only Point features are imported; non-Point features are skipped.
 - If a feature lacks a `name` property, it is imported with a generated name like "Imported Site 3".
 - Property key matching is case-insensitive and best-effort.
+
+## DGS Properties Import (Add-Only)
+
+Imports state property locations from a server-side GeoJSON file and only inserts new Sites. Existing sites are detected by exact name (case-insensitive) or proximity within ~250 meters.
+
+### Endpoint
+`POST /api/sites/import-dgs-properties`
+
+Behavior:
+- Reads `DGS_DOT_Property.geojson` from the project root. If not found, falls back to `DGS_TOT_Property.gojson`.
+- Skips features that match an existing site by name or within 0.25 km.
+- Inserts unmatched features as new Sites, mapping common properties when present: `name`, `address`, `city`, `utility`, `meter_number`, `contact_name`, `contact_phone`.
+
+Response example:
+```
+{ "message": "DGS properties processed (add-only)", "added": 12, "skipped": 57, "new_sites": [ {"temp_name":"DGS Property 4","lat":36.77,"lon":-119.82} ] }
+```
+
+PowerShell:
+```powershell
+curl -X POST http://localhost:5000/api/sites/import-dgs-properties
+```
+
+Frontend:
+- Go to `Imports` → click "Import DGS Properties". Shows counts and a small sample of added sites.
+
+## Fleet Vehicles Import & Matching
+
+Imports vehicles from `FleetList.csv` into the `equipment` table, assigning each vehicle to a `Site` via a matcher. A preview endpoint shows the proposed site matches with confidence scores before importing.
+
+### Endpoints
+- Preview matches: `GET /api/fleet/match-preview?min_confidence=0.7`
+- Import fleet: `POST /api/fleet/import?min_confidence=0.7`
+
+Matching rules (in order):
+- Coordinates: nearest site by `CT_DEPT_LATITUDE`/`CT_DEPT_LONGITUDE` with distance-weighted confidence.
+- Department name: case-insensitive substring match of `DEPT ID NAME` against `Site.name`.
+- District: match `District` to `Site.city` or substring of `Site.name`.
+ - Department ID: if `Dept ID` matches a `Site.department_id`, it’s used first with highest confidence.
+
+Confidence filter:
+- Both preview and import accept `min_confidence` (0–1). Rows with a match confidence below the threshold are excluded from preview and skipped during import.
+
+Import behavior:
+- Requires valid `MC` codes present in `equipment_catalog`; rows with unknown MC are skipped and reported.
+- Upsert by `(site_id, equipment_identifier)`; updates `mc_code`/`department_id` for existing records.
+
+CSV columns used (best-effort): `Eq ID`, `MC`, `Dept ID`/`DEPT ID`, `DEPT ID NAME`, `District`, `CT_DEPT_LATITUDE`, `CT_DEPT_LONGITUDE`.
+
+PowerShell examples:
+```powershell
+curl "http://localhost:5000/api/fleet/match-preview?min_confidence=0.7" | more
+curl -X POST "http://localhost:5000/api/fleet/import?min_confidence=0.7"
+```
+
+Frontend:
+- Go to `Imports` → Fleet Vehicles card.
+- Click "Preview Matches" to review the first 25 suggested matches and confidence.
+- Click "Import Fleet" to create/update equipment records.

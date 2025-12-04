@@ -59,6 +59,47 @@ def add_site_to_project(project_id):
         db.session.commit()
     return jsonify({'project_id': project.id, 'site_id': site.id})
 
+@project_bp.route('/<int:project_id>/sites', methods=['GET'])
+def list_project_sites(project_id):
+    """List sites associated with a project with optional search and pagination.
+    Query params: q (search by site name), page (default 1), page_size (default 25)
+    Returns a simple array of site dicts sorted by name.
+    """
+    project = Project.query.get_or_404(project_id)
+    q = (request.args.get('q') or '').strip()
+    try:
+        page = int(request.args.get('page', '1'))
+    except ValueError:
+        page = 1
+    try:
+        page_size = int(request.args.get('page_size', '25'))
+    except ValueError:
+        page_size = 25
+
+    # Base query: join through association table `project_sites`
+    from ..models import project_sites
+    site_query = Site.query.join(project_sites, Site.id == project_sites.c.site_id).filter(project_sites.c.project_id == project_id)
+    if q:
+        like = f"%{q}%"
+        site_query = site_query.filter(Site.name.ilike(like))
+    site_query = site_query.order_by(Site.name)
+
+    if page <= 0:
+        page = 1
+    if page_size <= 0:
+        page_size = 25
+    total = site_query.count()
+    items = site_query.offset((page - 1) * page_size).limit(page_size).all()
+    data = [s.to_dict() for s in items]
+    meta = {
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'returned': len(items),
+        'q': q
+    }
+    return jsonify({'items': data, 'meta': meta})
+
 @project_bp.route('/<int:project_id>/sites/<int:site_id>', methods=['DELETE'])
 def remove_site_from_project(project_id, site_id):
     project = Project.query.get_or_404(project_id)
