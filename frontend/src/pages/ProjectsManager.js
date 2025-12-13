@@ -24,6 +24,7 @@ export default function ProjectsManager() {
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
   const [newProject, setNewProject] = useState({ name: '', description: '' });
+  const [editProject, setEditProject] = useState({ name: '', description: '' });
   const [assignment, setAssignment] = useState({ siteId: '' });
   const [siteSearch, setSiteSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -116,6 +117,16 @@ export default function ProjectsManager() {
     loadSites();
   }, []);
 
+  // Keep edit form in sync with selected project
+  useEffect(() => {
+    const p = projects.find(pr => String(pr.id) === String(selectedProjectId));
+    if (p) {
+      setEditProject({ name: p.name || '', description: p.description || '' });
+    } else {
+      setEditProject({ name: '', description: '' });
+    }
+  }, [selectedProjectId, projects]);
+
   // Debounce search input
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(siteSearch), 250);
@@ -125,6 +136,11 @@ export default function ProjectsManager() {
   useEffect(() => {
     loadProjectSites(selectedProjectId);
   }, [selectedProjectId, loadProjectSites]);
+
+  // Reset pagination when selecting a different project
+  useEffect(() => {
+    setSitesPage(1);
+  }, [selectedProjectId]);
 
   // When switching to status sort, reset to page 1 because we fetch all items
   useEffect(() => {
@@ -258,6 +274,30 @@ export default function ProjectsManager() {
           </ul>
           {selectedProjectId && (
             <div className="card" style={{ marginTop: 12 }}>
+              <h4>Edit Project</h4>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const payload = { name: editProject.name, description: editProject.description || undefined };
+                  await updateProject(selectedProjectId, payload);
+                  await loadProjects();
+                }}
+                style={{ marginBottom: 12 }}
+              >
+                <input
+                  placeholder="Project Name"
+                  value={editProject.name}
+                  onChange={(e) => setEditProject({ ...editProject, name: e.target.value })}
+                  style={{ marginRight: 8 }}
+                />
+                <input
+                  placeholder="Description"
+                  value={editProject.description}
+                  onChange={(e) => setEditProject({ ...editProject, description: e.target.value })}
+                  style={{ marginRight: 8, width: 300 }}
+                />
+                <button type="submit" className="btn">Save Changes</button>
+              </form>
               <h4>Project Steps</h4>
               <ul style={{ listStyle:'none', padding:0 }}>
                 {steps.map((st, idx) => (

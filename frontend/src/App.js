@@ -9,6 +9,8 @@ import ProjectStatusForm from "./pages/ProjectStatusForm";
 import Header from "./components/Header";
 import ChargersManager from "./pages/ChargersManager";
 import VehiclesManager from "./pages/VehiclesManager";
+import VehicleDetails from './pages/VehicleDetails';
+import SitesManager from './pages/SitesManager';
 
 function App() {
   return (
@@ -24,6 +26,8 @@ function App() {
         <Route path="/projects/status" element={<ProjectStatusForm />} />
         <Route path="/chargers" element={<ChargersManager />} />
         <Route path="/vehicles" element={<VehiclesManager />} />
+        <Route path="/vehicle/:id" element={<VehicleDetails />} />
+        <Route path="/sites/manage" element={<SitesManager />} />
       </Routes>
     </Router>
   );

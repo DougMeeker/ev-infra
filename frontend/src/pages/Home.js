@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { getSites, getAggregateMetrics, getProjects, getLatestProjectStatuses } from "../api";
+import { getSites, getAggregateMetrics, getProjects, getLatestProjectStatuses, getVehicleCountsBySite } from "../api";
 import { Link, useSearchParams } from "react-router-dom";
 import MapView from "../components/MapView";
 import StatusLegend from "../components/StatusLegend";
@@ -22,6 +22,7 @@ const Home = () => {
   const [allowAdd, setAllowAdd] = useState(false); // controls map click-to-add
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [initialized, setInitialized] = useState(false);
   const [latestStatuses, setLatestStatuses] = useState([]);
   const [loadingLatest, setLoadingLatest] = useState(false);
   const [markerColorMode, setMarkerColorMode] = useState(() => {
@@ -31,6 +32,7 @@ const Home = () => {
     }
     return 'capacity';
   }); // 'capacity' | 'status'
+  const [vehicleCounts, setVehicleCounts] = useState({});
   useEffect(() => {
     try { window.localStorage.setItem('markerColorMode', markerColorMode); } catch(e) { /* ignore */ }
   }, [markerColorMode]);
@@ -47,6 +49,9 @@ const Home = () => {
     getProjects()
       .then((res) => setProjects(res.data))
       .catch((err) => console.error("Error fetching projects:", err));
+    getVehicleCountsBySite()
+      .then(res => setVehicleCounts(res.data.counts || {}))
+      .catch(err => console.error('Error fetching vehicle counts:', err));
   }, []);
 
   // Initialize focus from query param ?focus=<id>
@@ -56,6 +61,20 @@ const Home = () => {
       const num = parseInt(f, 10);
       if (!Number.isNaN(num)) setFocusSiteId(num);
     }
+    // Initialize controls from URL on first load
+    const p = parseInt(searchParams.get('page') || '1', 10);
+    const pp = parseInt(searchParams.get('perPage') || '25', 10);
+    const ord = searchParams.get('order');
+    const srt = searchParams.get('sort');
+    const sch = searchParams.get('search');
+    const pid = searchParams.get('projectId');
+    if (!Number.isNaN(p) && p > 0) setPage(p);
+    if (!Number.isNaN(pp) && [10,25,50].includes(pp)) setPerPage(pp);
+    if (ord === 'asc' || ord === 'desc') setOrder(ord);
+    if (srt) setSort(srt);
+    if (typeof sch === 'string') { setSearch(sch); setSearchInput(sch); }
+    if (pid) setSelectedProjectId(pid);
+    setInitialized(true);
   }, [searchParams]);
 
   const clearFocus = () => {
@@ -68,9 +87,28 @@ const Home = () => {
   };
 
   useEffect(() => {
+    if (!initialized) return;
+    // Sync controls to URL for deep-linking and consistent back/forward behavior
+    const sp = new URLSearchParams(searchParams.toString());
+    sp.set('page', String(page));
+    sp.set('perPage', String(perPage));
+    sp.set('order', order);
+    sp.set('sort', sort);
+    if (search) {
+      sp.set('search', search);
+    } else {
+      sp.delete('search');
+    }
+    if (selectedProjectId) {
+      sp.set('projectId', String(selectedProjectId));
+    } else {
+      sp.delete('projectId');
+    }
+    setSearchParams(sp, { replace: true });
+
     setLoadingMetrics(true);
     setErrorMetrics(null);
-    getAggregateMetrics({ page, perPage, order, sort, search })
+    getAggregateMetrics({ page, perPage, order, sort, search, projectId: selectedProjectId })
       .then(res => {
         setMetrics(res.data.data);
         setMeta(res.data.meta);
@@ -80,7 +118,7 @@ const Home = () => {
         setErrorMetrics('Failed to load metrics');
       })
       .finally(() => setLoadingMetrics(false));
-  }, [page, perPage, order, sort, search]);
+  }, [page, perPage, order, sort, search, selectedProjectId, initialized, searchParams, setSearchParams]);
 
   // Load latest statuses when a project is selected
   useEffect(() => {
@@ -94,6 +132,11 @@ const Home = () => {
         setLoadingLatest(false);
       }
     })();
+  }, [selectedProjectId]);
+
+  // Reset pagination when project filter changes
+  useEffect(() => {
+    setPage(1);
   }, [selectedProjectId]);
 
   // If project is cleared while in status color mode, revert to capacity
@@ -114,6 +157,7 @@ const Home = () => {
   };
   const toggleOrder = () => setOrder(o => (o === 'desc' ? 'asc' : 'desc'));
   const handleSort = (field) => {
+    // Reset any local sort when switching to backend fields
     if (sort === field) {
       toggleOrder();
     } else {
@@ -148,13 +192,14 @@ const Home = () => {
 
   // Merge base site info with metrics (for map & table so missing detection works)
   const sitesWithMetrics = useMemo(() => {
-    return sites.map(s => ({ ...s, ...metricsMap[s.id] }));
-  }, [sites, metricsMap]);
+    return sites.map(s => ({ ...s, ...metricsMap[s.id], vehicle_count: vehicleCounts[s.id] || 0 }));
+  }, [sites, metricsMap, vehicleCounts]);
 
   // Metrics rows merged with site info (table uses backend ordering but enriched locally)
   const metricsWithSite = useMemo(() => {
-    return metrics.map(row => ({ ...row, ...sitesMap[row.site_id] }));
-  }, [metrics, sitesMap]);
+    // Use server-side ordering; just enrich rows
+    return metrics.map(row => ({ ...row, ...sitesMap[row.site_id], vehicle_count: vehicleCounts[row.site_id] || 0 }));
+  }, [metrics, sitesMap, vehicleCounts]);
 
   // Determine missing info (capacity prerequisites or contact/location fields)
   const missingFieldsForRow = (row) => {
@@ -264,6 +309,7 @@ const Home = () => {
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('last_year_peak_kw')}>Peak kW (Last Yr) {sort==='last_year_peak_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('theoretical_capacity_kw')}>Capacity kW {sort==='theoretical_capacity_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('total_charger_kw')}>Total Charger kW {sort==='total_charger_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
+                <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('vehicle_count')}>Vehicles {sort==='vehicle_count' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('installed_charger_kw')}>Installed Charger kW {sort==='installed_charger_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th style={{textAlign:'center'}}>Info</th>
                 <th>Status</th>
@@ -285,6 +331,7 @@ const Home = () => {
                   <td style={{textAlign:'right'}}>{row.last_year_peak_kw}</td>
                   <td style={{textAlign:'right'}}>{row.theoretical_capacity_kw ?? '—'}</td>
                   <td style={{textAlign:'right'}}>{row.total_charger_kw ?? 0}</td>
+                  <td style={{textAlign:'right'}}>{row.vehicle_count ?? 0}</td>
                   <td style={{textAlign:'right'}}>{row.installed_charger_kw ?? 0}</td>
                   <td style={{textAlign:'center'}}>
                     {missingFieldsForRow(row).length ? <span className="missing-icon" aria-label="Missing info" role="img">⚠</span> : <span className="ok-icon" aria-label="Complete" role="img">✔</span>}

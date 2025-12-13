@@ -73,6 +73,16 @@ def list_vehicles():
     }), 200
 
 
+@vehicles_bp.route('/counts-by-site', methods=['GET'])
+def counts_by_site():
+    """Return vehicle counts grouped by site_id."""
+    # Simple aggregation using SQLAlchemy
+    from sqlalchemy import func
+    rows = db.session.query(Equipment.site_id, func.count(Equipment.id)).group_by(Equipment.site_id).all()
+    data = {int(site_id): int(cnt) for site_id, cnt in rows if site_id is not None}
+    return jsonify({'counts': data, 'total_sites': len(data)}), 200
+
+
 @vehicles_bp.route('/', methods=['POST'])
 def create_vehicle():
     data = request.get_json() or {}

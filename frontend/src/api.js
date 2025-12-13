@@ -8,7 +8,7 @@ export const getSites = () => axios.get(`${API_BASE_URL}/sites`);
 const sanitizeSitePayload = (site) => {
 	if (!site || typeof site !== 'object') return {};
 	const fields = [
-		'name', 'latitude', 'longitude', 'utility', 'utility_account', 'utility_name', 'meter_number',
+		'name', 'latitude', 'longitude', 'department_id', 'utility', 'utility_account', 'utility_name', 'meter_number',
 		'address', 'city', 'contact_name', 'contact_phone', 'main_breaker_amps', 'voltage', 'phase_count', 'power_factor'
 	];
 	const out = {};
@@ -45,9 +45,10 @@ export const deleteBill = (billId) => axios.delete(`${API_BASE_URL}/sites/bills/
 export const getSiteMetrics = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}/metrics`);
 
 // Aggregate metrics with pagination
-export const getAggregateMetrics = ({ page = 1, perPage = 25, order = 'desc', sort = 'available_capacity_kw', search = '' } = {}) => {
+export const getAggregateMetrics = ({ page = 1, perPage = 25, order = 'desc', sort = 'available_capacity_kw', search = '', projectId = '' } = {}) => {
 	const params = new URLSearchParams({ page: String(page), per_page: String(perPage), order, sort });
 	if (search) params.append('search', search);
+	if (projectId) params.append('project_id', String(projectId));
 	return axios.get(`${API_BASE_URL}/sites/metrics/aggregate?${params.toString()}`);
 };
 
@@ -159,3 +160,4 @@ export const listVehicles = ({ page = 1, perPage = 25, order = 'asc', sort = 'eq
 export const createVehicle = (payload) => axios.post(`${API_BASE_URL}/vehicles/`, payload);
 export const updateVehicle = (vehicleId, payload) => axios.put(`${API_BASE_URL}/vehicles/${vehicleId}`, payload);
 export const deleteVehicle = (vehicleId) => axios.delete(`${API_BASE_URL}/vehicles/${vehicleId}`);
+export const getVehicleCountsBySite = () => axios.get(`${API_BASE_URL}/vehicles/counts-by-site`);

@@ -31,6 +31,9 @@ const Header = () => {
           <NavLink to="/vehicles" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Vehicles
           </NavLink>
+          <NavLink to="/sites/manage" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
+            Sites
+          </NavLink>
         </nav>
       </div>
     </header>

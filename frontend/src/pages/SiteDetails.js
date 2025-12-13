@@ -130,6 +130,7 @@ const SiteDetails = () => {
                             <h4 className="form-section-title">Location</h4>
                             <div className="form-grid">
                                 <div className="form-group"><label>Name</label><input className="input" name="name" value={formData.name || ""} onChange={handleChange} /></div>
+                                <div className="form-group"><label>Department ID</label><input className="input" name="department_id" value={formData.department_id || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>Address</label><input className="input" name="address" value={formData.address || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>City</label><input className="input" name="city" value={formData.city || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>Latitude</label><input className="input" name="latitude" value={formData.latitude || ""} onChange={handleChange} /></div>
@@ -174,6 +175,7 @@ const SiteDetails = () => {
                             <h4>Location</h4>
                             <div className="detail-pairs">
                                 <div><span>Name:</span><strong>{site.name}</strong></div>
+                                <div><span>Department ID:</span><strong>{site.department_id || 'N/A'}</strong></div>
                                 <div><span>Address:</span><strong>{site.address || 'N/A'}</strong></div>
                                 <div><span>City:</span><strong>{site.city || 'N/A'}</strong></div>
                                 <div><span>Latitude:</span><strong>{site.latitude}</strong></div>
@@ -318,7 +320,7 @@ const SiteDetails = () => {
                                         <div><strong>Total Charger kW (planned):</strong> {Math.round(total * 1000) / 1000}</div>
                                         <div><strong>Installed Charger kW:</strong> {Math.round(installed * 1000) / 1000}</div>
                                     </>
-                                );
+                                )
                             })()}
                         </div>
                         <div style={{marginBottom:12}}>

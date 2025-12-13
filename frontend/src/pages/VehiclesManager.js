@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { listVehicles, createVehicle, updateVehicle, deleteVehicle, getSites, getCatalog } from '../api';
 
 const VehiclesManager = () => {
@@ -112,7 +113,7 @@ const VehiclesManager = () => {
                 <th onClick={()=>toggleSort('site_id')} style={{ cursor:'pointer' }}>Site {sort==='site_id' ? (order==='asc'?'▲':'▼') : ''}</th>
                 <th onClick={()=>toggleSort('department_id')} style={{ cursor:'pointer' }}>Dept {sort==='department_id' ? (order==='asc'?'▲':'▼') : ''}</th>
                 <th onClick={()=>toggleSort('annual_miles')} style={{ cursor:'pointer' }}>Annual Miles {sort==='annual_miles' ? (order==='asc'?'▲':'▼') : ''}</th>
-                <th style={{ width:'160px' }}>Actions</th>
+                <th style={{ width:'220px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -166,6 +167,7 @@ const VehiclesManager = () => {
                         .then(() => load())
                         .catch(err => { console.error('Update failed', err); alert(err.response?.data?.error || 'Update failed'); });
                     }}>Save</button>
+                    <Link className="btn btn-secondary" to={`/vehicle/${e.id}`}>Details</Link>
                     <button className="btn btn-danger" onClick={()=>{
                       if (!window.confirm('Delete vehicle?')) return;
                       deleteVehicle(e.id)

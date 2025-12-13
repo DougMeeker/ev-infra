@@ -60,8 +60,12 @@ const MapView = ({ sites, focusSiteId, onClearFocus, enableAddSites, selectedPro
     try {
       const res = await createSite(newSite);
       setNewMarker(res.data); // Optional: show new marker immediately
-      alert("Site saved!");
-      window.location.reload(); // Or trigger a state update instead
+      // Set focus param so Home page zooms to new site after reload
+      try {
+        navigate({ pathname: '/', search: `?focus=${res.data.id}` });
+      } catch(e) { /* ignore */ }
+      // Reload to refresh site lists and metrics, which drives FocusHelper
+      window.location.reload();
     } catch (err) {
       console.error("Error saving site:", err);
       alert("Failed to save site.");
@@ -155,6 +159,7 @@ const MapView = ({ sites, focusSiteId, onClearFocus, enableAddSites, selectedPro
                   <div><span className="popup-label">Peak kW (Yr):</span> {site.last_year_peak_kw ?? '—'}</div>
                   <div><span className="popup-label">Capacity kW:</span> {site.theoretical_capacity_kw ?? '—'}</div>
                   <div><span className="popup-label">Utility:</span> {site.utility || '—'}</div>
+                  <div><span className="popup-label">Vehicles:</span> {site.vehicle_count ?? 0}</div>
                   <div><span className="popup-label">Meter #:</span> {site.meter_number || '—'}</div>
                   <div><span className="popup-label">Contact:</span> {site.contact_name ? `${site.contact_name}${site.contact_phone ? ' ('+site.contact_phone+')' : ''}` : '—'}</div>
                   <div><span className="popup-label">Location:</span> {site.address ? `${site.address}${site.city ? ', '+site.city : ''}` : (site.city || '—')}</div>
