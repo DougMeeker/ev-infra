@@ -7,15 +7,21 @@ This folder contains systemd unit files and an example nginx config to run the b
 - Create a service user (recommended): `useradd -r -s /usr/sbin/nologin evinfra`.
 
 ## Backend (Flask via Gunicorn)
-1. Install dependencies:
-   - Python 3.x and pip
-   - `pip install gunicorn sqlalchemy alembic python-dotenv psycopg[binary]`
+1. Create and use a Python virtual environment (recommended):
+   ```bash
+   sudo -u evinfra mkdir -p /opt/evinfra/backend
+   cd /opt/evinfra/backend
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install --upgrade pip
+   pip install gunicorn sqlalchemy alembic python-dotenv "psycopg[binary]"
+   ```
 2. Set env file `/etc/evinfra/backend.env` (create directory if needed):
    ```
    DATABASE_URL=postgresql+psycopg://evinfra:ChangeMe123!@localhost:5432/evinfra
    FLASK_ENV=production
    ```
-3. Copy unit file:
+3. Copy unit file (uses venv gunicorn at `/opt/evinfra/backend/venv/bin/gunicorn`):
    ```bash
    sudo cp deploy/systemd/evinfra-backend.service /etc/systemd/system/evinfra-backend.service
    sudo systemctl daemon-reload
@@ -52,8 +58,10 @@ Requires: `npm i -g serve` or use `npx serve`.
 2. TLS: replace `listen 80;` with your SSL setup (e.g., certbot).
 
 ## Alembic Migrations
+Run Alembic from the same venv:
 ```bash
 cd /opt/evinfra/backend
+source venv/bin/activate
 export DATABASE_URL=postgresql+psycopg://evinfra:ChangeMe123!@localhost:5432/evinfra
 alembic upgrade head
 ```

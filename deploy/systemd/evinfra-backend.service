@@ -10,8 +10,8 @@ Group=evinfra
 WorkingDirectory=/opt/evinfra/backend
 # Environment file to hold secrets and DATABASE_URL
 EnvironmentFile=/etc/evinfra/backend.env
-# Gunicorn serving the Flask factory app on localhost:5000
-ExecStart=/usr/bin/env bash -lc 'source /etc/evinfra/backend.env; /usr/bin/gunicorn --workers 3 --bind 127.0.0.1:5000 "app:create_app()"'
+# Use project virtual environment gunicorn
+ExecStart=/opt/evinfra/backend/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:5000 "app:create_app()"
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=30
