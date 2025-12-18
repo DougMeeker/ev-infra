@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getEquipment, createEquipment, getEquipmentEnergy } from '../api';
 
@@ -11,7 +11,7 @@ const EquipmentSection = ({ siteId }) => {
   const [newEq, setNewEq] = useState({ mc_code: '', equipment_identifier: '', department_id: '', annual_miles: '', downtime_hours: '' });
   // Streamlined: usage and annual/downtime edits moved to Vehicle Details page
 
-  const fetchAll = () => {
+  const fetchAll = useCallback(() => {
     setLoading(true);
     Promise.all([
       getEquipment(siteId),
@@ -23,9 +23,9 @@ const EquipmentSection = ({ siteId }) => {
       })
       .catch(err => console.error('Error loading equipment', err))
       .finally(() => setLoading(false));
-  };
+  }, [siteId]);
 
-  useEffect(() => { fetchAll(); }, [siteId]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleNewEqChange = (e) => setNewEq({ ...newEq, [e.target.name]: e.target.value });
 
@@ -65,6 +65,7 @@ const EquipmentSection = ({ siteId }) => {
           <h4 style={{ marginTop: 0 }}>Last Year Energy Summary ({energySummary.year})</h4>
           <p><strong>Total Miles:</strong> {energySummary.total_miles}</p>
           <p><strong>Total Energy (kWh):</strong> {energySummary.total_energy_kwh}</p>
+          <p><strong>Average Workday Energy (kWh):</strong> {Math.round(energySummary.total_energy_kwh/260)}</p>
         </div>
       )}
 

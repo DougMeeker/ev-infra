@@ -1,8 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { updateSite, deleteSite, getBills, createBill, updateBill, deleteBill, getSiteMetrics, getChargers, getProjects, updateCharger, deleteCharger, createCharger } from "../api";
+import { updateSite, deleteSite, getSiteMetrics } from "../api";
 import axios from "axios";
 import EquipmentSection from "../components/EquipmentSection";
+import BillsSection from "../components/BillsSection";
+import ProjectsSection from "../components/ProjectsSection";
+import ChargersSection from "../components/ChargersSection";
+const formatDate = (d) => {
+    if (!d) return '';
+    try {
+      const s = typeof d === 'date' ? d : new Date(d).toISOString().split('T')[0];
+      return s;
+    } catch {
+      return String(d);
+    }
+  };
 
 const SiteDetails = () => {
     const { id } = useParams();
@@ -10,20 +22,13 @@ const SiteDetails = () => {
     const [site, setSite] = useState(null);
     const [formData, setFormData] = useState({});
     const [editing, setEditing] = useState(false);
-    const [bills, setBills] = useState([]);
-    const [billsLoading, setBillsLoading] = useState(false);
-    const [newBill, setNewBill] = useState({ year: "", month: "", energy_usage: "", max_power: "" });
-    const [billEditingId, setBillEditingId] = useState(null);
-    const [billEditData, setBillEditData] = useState({});
+    const [billsTotalEnergyKwh, setBillsTotalEnergyKwh] = useState(0);
     const [metrics, setMetrics] = useState(null);
     const [metricsLoading, setMetricsLoading] = useState(false);
-    const [chargers, setChargers] = useState([]);
-    const [chargersLoading, setChargersLoading] = useState(false);
-    const [projects, setProjects] = useState([]);
-    const [editingChargerId, setEditingChargerId] = useState(null);
-    const [chargerEdit, setChargerEdit] = useState({});
-    const [adding, setAdding] = useState(false);
-    const [chargerNew, setChargerNew] = useState({ kw: '', manufacturer: '', project_id: '', date_installed: '' });
+    const [showProjects, setShowProjects] = useState(true);
+    const [showChargers, setShowChargers] = useState(true);
+    const [showEquipment, setShowEquipment] = useState(true);
+    const [showBills, setShowBills] = useState(true);
 
     useEffect(() => {
         axios.get(`http://localhost:5000/api/sites/${id}`)
@@ -33,24 +38,12 @@ const SiteDetails = () => {
                 setFormData(rest);
             })
             .catch(err => console.error("Error fetching site:", err));
-        setBillsLoading(true);
-        getBills(id)
-            .then(res => setBills(res.data))
-            .catch(err => console.error("Error fetching bills:", err))
-            .finally(() => setBillsLoading(false));
         setMetricsLoading(true);
         getSiteMetrics(id)
             .then(res => setMetrics(res.data))
             .catch(err => console.error("Error fetching metrics:", err))
             .finally(() => setMetricsLoading(false));
-        setChargersLoading(true);
-        getChargers(id)
-            .then(res => setChargers(res.data || []))
-            .catch(err => console.error("Error fetching chargers:", err))
-            .finally(() => setChargersLoading(false));
-        getProjects()
-            .then(res => setProjects(res.data || []))
-            .catch(err => console.error("Error fetching projects:", err));
+        // Chargers and Projects are loaded within their respective sections now
     }, [id]);
 
     const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -68,50 +61,7 @@ const SiteDetails = () => {
             .catch(err => { console.error("Error deleting site:", err); alert("Failed to delete site."); });
     };
 
-    const handleNewBillChange = (e) => setNewBill({ ...newBill, [e.target.name]: e.target.value });
-
-    const handleCreateBill = () => {
-        if (!newBill.year || !newBill.month) { alert("Year and month required"); return; }
-        const payload = {
-            year: parseInt(newBill.year, 10),
-            month: parseInt(newBill.month, 10),
-            energy_usage: newBill.energy_usage ? parseFloat(newBill.energy_usage) : null,
-            max_power: newBill.max_power ? parseFloat(newBill.max_power) : null
-        };
-        createBill(id, payload)
-            .then(res => { setBills([res.data, ...bills]); setNewBill({ year: "", month: "", energy_usage: "", max_power: "" }); })
-            .catch(err => { console.error("Error creating bill:", err); alert("Failed to create bill"); });
-    };
-
-    const startEditBill = (bill) => {
-        setBillEditingId(bill.id);
-        setBillEditData({
-            year: bill.year,
-            month: bill.month,
-            energy_usage: bill.energy_usage,
-            max_power: bill.max_power
-        });
-    };
-    const handleBillEditChange = (e) => setBillEditData({ ...billEditData, [e.target.name]: e.target.value });
-
-    const handleSaveBill = () => {
-        const payload = {
-            year: parseInt(billEditData.year, 10),
-            month: parseInt(billEditData.month, 10),
-            energy_usage: billEditData.energy_usage !== "" ? parseFloat(billEditData.energy_usage) : null,
-            max_power: billEditData.max_power !== "" ? parseFloat(billEditData.max_power) : null
-        };
-        updateBill(billEditingId, payload)
-            .then(res => { setBills(bills.map(b => b.id === billEditingId ? res.data : b)); setBillEditingId(null); setBillEditData({}); })
-            .catch(err => { console.error("Error updating bill:", err); alert("Failed to update bill"); });
-    };
-
-    const handleDeleteBill = (billId) => {
-        if (!window.confirm("Delete this bill?")) return;
-        deleteBill(billId)
-            .then(() => setBills(bills.filter(b => b.id !== billId)))
-            .catch(err => { console.error("Error deleting bill:", err); alert("Failed to delete bill"); });
-    };
+    const avgWorkdayEnergyKwh = billsTotalEnergyKwh / 260;
 
     if (!site) return <p>Loading...</p>;
 
@@ -223,6 +173,8 @@ const SiteDetails = () => {
                             <p><strong>Theoretical Capacity (kW):</strong> {metrics.theoretical_capacity_kw ?? 'N/A'}</p>
                             <p><strong>Available Capacity (kW):</strong> {metrics.available_capacity_kw ?? 'N/A'}</p>
                             <p><strong>Power Factor Used:</strong> {metrics.power_factor}</p>
+                            <p><strong>Total Energy (kWh):</strong> {Math.round(billsTotalEnergyKwh * 1000) / 1000}</p>
+                            <p><strong>Avg Workday Energy (kWh/day):</strong> {Math.round(avgWorkdayEnergyKwh * 1000) / 1000}</p>
                         </div>
                     )}
                     <button className="btn" onClick={() => setEditing(true)}>Edit</button>
@@ -230,197 +182,37 @@ const SiteDetails = () => {
             )}
             <button className="btn btn-danger" onClick={handleDelete}>Delete Site</button>
 
+            {/* Projects Section */}
             <hr />
-            <h3 style={{ marginTop: '32px' }}>Utility Bills</h3>
-            <div className="card">
-                <h4 style={{ marginTop: 0 }}>Add Bill</h4>
-                <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
-                    <input className="input" name="year" placeholder="Year" value={newBill.year} onChange={handleNewBillChange} style={{ width: '90px' }} />
-                    <input className="input" name="month" placeholder="Month" value={newBill.month} onChange={handleNewBillChange} style={{ width: '70px' }} />
-                    <input className="input" name="energy_usage" placeholder="Energy kWh" value={newBill.energy_usage} onChange={handleNewBillChange} style={{ width: '140px' }} />
-                    <input className="input" name="max_power" placeholder="Max kW" value={newBill.max_power} onChange={handleNewBillChange} style={{ width: '110px' }} />
-                    <button className="btn" onClick={handleCreateBill}>Add</button>
-                </div>
-            </div>
-
-            {billsLoading ? (
-                <table className="table">
-                    <tbody>
-                        {[...Array(3)].map((_, i) => (
-                            <tr className="sk-table-row" key={i}>
-                                <td><div className="skeleton sk-line" style={{ width: '40%' }} /></td>
-                                <td><div className="skeleton sk-line" /></td>
-                                <td><div className="skeleton sk-line" /></td>
-                                <td><div className="skeleton sk-line short" /></td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            ) : bills.length === 0 ? (
-                <p>No bills yet.</p>
-            ) : (
-                <table className="table">
-                    <thead>
-                        <tr>
-                            <th style={{ borderBottom: '1px solid #ddd' }}>Period</th>
-                            <th style={{ borderBottom: '1px solid #ddd' }}>Energy (kWh)</th>
-                            <th style={{ borderBottom: '1px solid #ddd' }}>Max Power (kW)</th>
-                            <th style={{ borderBottom: '1px solid #ddd' }}>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {bills.map(bill => (
-                            <tr key={bill.id}>
-                                <td>{bill.year}-{String(bill.month).padStart(2, '0')}</td>
-                                {billEditingId === bill.id ? (
-                                    <>
-                                        <td><input className="input" name="energy_usage" value={billEditData.energy_usage ?? ''} onChange={handleBillEditChange} style={{ width: '100px' }} /></td>
-                                        <td><input className="input" name="max_power" value={billEditData.max_power ?? ''} onChange={handleBillEditChange} style={{ width: '90px' }} /></td>
-                                        <td>
-                                            <button className="btn" onClick={handleSaveBill}>Save</button>
-                                            <button className="btn btn-secondary" onClick={() => setBillEditingId(null)}>Cancel</button>
-                                        </td>
-                                    </>
-                                ) : (
-                                    <>
-                                        <td>{bill.energy_usage ?? '—'}</td>
-                                        <td>{bill.max_power ?? '—'}</td>
-                                        <td>
-                                            <button className="btn btn-secondary" onClick={() => startEditBill(bill)}>Edit</button>
-                                            <button className="btn btn-danger" onClick={() => handleDeleteBill(bill.id)}>Delete</button>
-                                        </td>
-                                    </>
-                                )}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            )}
-
-            {/* Equipment Section */}
-            <EquipmentSection siteId={id} />
+            <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowProjects(v => !v)}>
+                {showProjects ? '▼' : '▶'} Projects
+            </h3>
+            {showProjects && (<ProjectsSection siteId={id} />)}
 
             {/* Chargers Section */}
             <hr />
-            <h3 style={{ marginTop: '32px' }}>Chargers</h3>
-            <div className="card">
-                {chargersLoading ? (
-                    <div>
-                        <div className="skeleton sk-line" style={{ width: '40%', marginBottom: 8 }} />
-                        <div className="skeleton sk-line" style={{ width: '60%', marginBottom: 8 }} />
-                    </div>
-                ) : (
-                    <>
-                        <div style={{ display:'flex', gap:'16px', flexWrap:'wrap', marginBottom:12 }}>
-                            {(() => {
-                                const total = chargers.reduce((sum, c) => sum + (typeof c.kw === 'number' ? c.kw : 0), 0);
-                                const installed = chargers.reduce((sum, c) => sum + (c.date_installed ? (typeof c.kw === 'number' ? c.kw : 0) : 0), 0);
-                                return (
-                                    <>
-                                        <div><strong>Total Charger kW (planned):</strong> {Math.round(total * 1000) / 1000}</div>
-                                        <div><strong>Installed Charger kW:</strong> {Math.round(installed * 1000) / 1000}</div>
-                                    </>
-                                )
-                            })()}
-                        </div>
-                        <div style={{marginBottom:12}}>
-                            {adding ? (
-                                <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
-                                    <input className="input" style={{width:90}} placeholder="kW" value={chargerNew.kw} onChange={e=>setChargerNew(prev=>({ ...prev, kw: e.target.value }))} />
-                                    <select className="input" value={chargerNew.manufacturer} onChange={e=>setChargerNew(prev=>({ ...prev, manufacturer: e.target.value }))}>
-                                        <option value="">Manufacturer</option>
-                                        {['KemPower','ABB','ChargePoint','Enphase/Clipper Creek','XOS','ChargePodX','BTC','Other'].map(m => (
-                                            <option key={m} value={m}>{m}</option>
-                                        ))}
-                                    </select>
-                                    <select className="input" value={chargerNew.project_id} onChange={e=>setChargerNew(prev=>({ ...prev, project_id: e.target.value }))}>
-                                        <option value="">Project</option>
-                                        {projects.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
-                                    </select>
-                                    <input className="input" type="date" value={chargerNew.date_installed} onChange={e=>setChargerNew(prev=>({ ...prev, date_installed: e.target.value }))} />
-                                    <button className="btn" onClick={async ()=>{
-                                        const payload = { ...chargerNew };
-                                        if (payload.kw === '') payload.kw = null; else { const n = parseFloat(payload.kw); if (!Number.isNaN(n)) payload.kw = n; }
-                                        if (payload.project_id === '') payload.project_id = null; else { const n = parseInt(payload.project_id,10); if (!Number.isNaN(n)) payload.project_id = n; }
-                                        await createCharger(id, payload);
-                                        setAdding(false); setChargerNew({ kw: '', manufacturer: '', project_id: '', date_installed: '' });
-                                        const res = await getChargers(id);
-                                        setChargers(res.data || []);
-                                    }}>Add Charger</button>
-                                    <button className="btn btn-secondary" onClick={()=>{ setAdding(false); setChargerNew({ kw: '', manufacturer: '', project_id: '', date_installed: '' }); }}>Cancel</button>
-                                </div>
-                            ) : (
-                                <button className="btn" onClick={()=>setAdding(true)}>Add Charger</button>
-                            )}
-                        </div>
-                        <table className="table">
-                            <thead>
-                                <tr>
-                                    <th>Power/Voltage/Amps</th>
-                                    <th>Ports</th>
-                                    <th>Handle</th>
-                                    <th>Manufacturer</th>
-                                    <th>Model #</th>
-                                    <th>Serial #</th>
-                                    <th>Installed</th>
-                                    <th>Project</th>
-                                    <th>Quick Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {chargers.map(c => (
-                                    <tr key={c.id}>
-                                        <td>{[c.kw ? `${c.kw} kW` : null, c.input_voltage ? `${c.input_voltage} V` : null, c.breaker_size ? `${c.breaker_size} A` : null].filter(Boolean).join(' / ')}</td>
-                                        <td>{c.port_count ?? ''}</td>
-                                        <td>{c.handle_type ?? ''}</td>
-                                        <td>{c.manufacturer ?? ''}</td>
-                                        <td>{c.model_number ?? ''}</td>
-                                        <td>{c.serial_number ?? ''}</td>
-                                        <td>{c.date_installed ?? ''}</td>
-                                        <td>{c.project_name ?? ''}</td>
-                                        <td>
-                                            {editingChargerId === c.id ? (
-                                                <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
-                                                    <input className="input" style={{width:90}} placeholder="kW" value={chargerEdit.kw ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, kw: e.target.value }))} />
-                                                    <select className="input" value={chargerEdit.manufacturer ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, manufacturer: e.target.value }))}>
-                                                        <option value="">Manufacturer</option>
-                                                        {['KemPower','ABB','ChargePoint','Enphase/Clipper Creek','XOS','ChargePodX','BTC','Other'].map(m => (
-                                                            <option key={m} value={m}>{m}</option>
-                                                        ))}
-                                                    </select>
-                                                    <select className="input" value={chargerEdit.project_id ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, project_id: e.target.value }))}>
-                                                        <option value="">Project</option>
-                                                        {projects.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
-                                                    </select>
-                                                    <input className="input" type="date" value={chargerEdit.date_installed ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, date_installed: e.target.value }))} />
-                                                    <button className="btn" onClick={async ()=>{
-                                                        const payload = { ...chargerEdit };
-                                                        if (payload.kw === '') payload.kw = null; else if (payload.kw != null) { const n = parseFloat(payload.kw); if (!Number.isNaN(n)) payload.kw = n; }
-                                                        if (payload.project_id === '') payload.project_id = null; else if (payload.project_id != null) { const n = parseInt(payload.project_id,10); if (!Number.isNaN(n)) payload.project_id = n; }
-                                                        await updateCharger(c.id, payload);
-                                                        setEditingChargerId(null);
-                                                        const res = await getChargers(id);
-                                                        setChargers(res.data || []);
-                                                    }}>Save</button>
-                                                    <button className="btn btn-secondary" onClick={()=>{ setEditingChargerId(null); setChargerEdit({}); }}>Cancel</button>
-                                                </div>
-                                            ) : (
-                                                <div style={{display:'flex', gap:8}}>
-                                                    <button className="btn btn-secondary" onClick={()=>{ setEditingChargerId(c.id); setChargerEdit({ kw: c.kw ?? '', manufacturer: c.manufacturer ?? '', project_id: c.project_id ?? '', date_installed: c.date_installed ?? '' }); }}>Edit</button>
-                                                    <button className="btn btn-danger" onClick={async ()=>{ if (!window.confirm('Delete this charger?')) return; await deleteCharger(c.id); const res = await getChargers(id); setChargers(res.data || []); }}>Delete</button>
-                                                </div>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {chargers.length === 0 && (
-                                    <tr><td colSpan={9} className="table-empty">No chargers</td></tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </>
-                )}
-            </div>
+            <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowChargers(v => !v)}>
+                {showChargers ? '▼' : '▶'} Chargers
+            </h3>
+            {showChargers && (<ChargersSection siteId={id} />)}
+
+            {/* Equipment Section */}
+            <hr />
+            <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowEquipment(v => !v)}>
+                {showEquipment ? '▼' : '▶'} Equipment
+            </h3>
+            {showEquipment && (
+                <EquipmentSection siteId={id} />
+            )}
+
+            {/* Bills Section */}
+            <hr />
+            <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowBills(v => !v)}>
+                {showBills ? '▼' : '▶'} Utility Bills
+            </h3>
+            {showBills && (
+                <BillsSection siteId={id} onTotalsChange={setBillsTotalEnergyKwh} />
+            )}
         </div>
     );
 };

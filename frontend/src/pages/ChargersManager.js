@@ -4,6 +4,16 @@ import { getSites, getChargers, createCharger, updateCharger, deleteCharger, get
 import ChargersTable from '../components/ChargersTable';
 import ChargerForm from '../components/ChargerForm';
 
+const formatDate = (d) => {
+    if (!d) return '';
+    try {
+      const s = typeof d === 'date' ? d : new Date(d).toISOString().split('T')[0];
+      return s;
+    } catch {
+      return String(d);
+    }
+  };
+
 export default function ChargersManager() {
   const [sites, setSites] = useState([]);
   const [siteId, setSiteId] = useState(null);
@@ -73,7 +83,13 @@ export default function ChargersManager() {
       {editing && (
         <ChargerForm initial={editing} onCancel={()=>setEditing(null)} onSubmit={onSubmit} projects={projects} />
       )}
-      {loading ? <div>Loading…</div> : <ChargersTable chargers={chargers} onEdit={setEditing} onDelete={onDelete} />}
+      {loading ? <div>Loading…</div> : (
+        <ChargersTable
+          chargers={chargers}
+          onEdit={(c) => setEditing({ ...c, date_installed: formatDate(c.date_installed) })}
+          onDelete={onDelete}
+        />
+      )}
     </div>
   );
 }

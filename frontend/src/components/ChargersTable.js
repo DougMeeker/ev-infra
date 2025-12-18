@@ -1,6 +1,15 @@
 import React from 'react';
 
 export default function ChargersTable({ chargers = [], onEdit, onDelete }) {
+  const formatDate = (d) => {
+    if (!d) return '';
+    try {
+      const s = typeof d === 'date' ? d : new Date(d).toISOString().split('T')[0];
+      return s;
+    } catch {
+      return String(d);
+    }
+  };
   return (
     <table className="table">
       <thead>
@@ -25,7 +34,7 @@ export default function ChargersTable({ chargers = [], onEdit, onDelete }) {
             <td>{c.manufacturer ?? ''}</td>
             <td>{c.model_number ?? ''}</td>
             <td>{c.serial_number ?? ''}</td>
-            <td>{c.date_installed ?? ''}</td>
+            <td>{formatDate(c.date_installed)}</td>
             <td>{c.project_name ?? ''}</td>
             <td>
               <button onClick={() => onEdit?.(c)}>Edit</button>
