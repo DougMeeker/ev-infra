@@ -39,6 +39,20 @@ Recommended: build and serve static from nginx (no Node process needed).
    ```
 2. Nginx will serve `/opt/evinfra/frontend/build` directly.
 
+### One-command build + rsync deploy
+Use the helper script to build and rsync with correct permissions and SELinux context:
+```bash
+sudo deploy/scripts/deploy_frontend.sh \
+   --src /opt/evinfra/frontend \
+   --target /opt/evinfra/frontend/build \
+   --owner nginx:nginx \
+   --chmod "Du=rwx,Dgo=rx,Fu=rw,Fgo=r"
+```
+Notes:
+- Adjust `--owner` to match your nginx user/group (omit if unsure).
+- To deploy to a separate web root (e.g., `/var/www/evinfra`), change `--target` and update nginx `root` accordingly, then reload nginx.
+- The script persists SELinux labeling with `semanage fcontext` (if available) and applies `restorecon`.
+
 Optional: If you prefer a Node static server, use the provided unit:
 ```bash
 sudo cp deploy/systemd/evinfra-frontend.service /etc/systemd/system/evinfra-frontend.service

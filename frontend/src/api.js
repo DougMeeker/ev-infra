@@ -1,6 +1,22 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://localhost:5000/api";
+// Determine API base:
+// - In production (served by nginx) use same-origin "/api" to avoid CORS
+// - In CRA dev (port 3000) use http://localhost:5000/api
+// - Allow override via REACT_APP_API_BASE
+function resolveApiBase() {
+	const envOverride = process.env.REACT_APP_API_BASE;
+	if (envOverride && typeof envOverride === 'string') return envOverride.replace(/\/$/, "");
+	if (typeof window !== 'undefined') {
+		if (window.location && window.location.port === '3000') {
+			return 'http://localhost:5000/api';
+		}
+		return `${window.location.origin}/api`;
+	}
+	return 'http://localhost:5000/api';
+}
+
+const API_BASE_URL = resolveApiBase();
 
 // Site endpoints
 export const getSites = () => axios.get(`${API_BASE_URL}/sites`);
@@ -34,6 +50,8 @@ const sanitizeSitePayload = (site) => {
 export const createSite = (site) => axios.post(`${API_BASE_URL}/sites/`, sanitizeSitePayload(site));
 export const updateSite = (id, site) => axios.put(`${API_BASE_URL}/sites/${id}`, sanitizeSitePayload(site));
 export const deleteSite = (id) => axios.delete(`${API_BASE_URL}/sites/${id}`);
+// Single site by id
+export const getSite = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}`);
 
 // Utility bill endpoints
 export const getBills = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}/bills`);

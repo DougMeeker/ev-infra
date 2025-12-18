@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { updateSite, deleteSite, getSiteMetrics } from "../api";
-import axios from "axios";
+import { updateSite, deleteSite, getSiteMetrics, getSite } from "../api";
 import EquipmentSection from "../components/EquipmentSection";
 import BillsSection from "../components/BillsSection";
 import ProjectsSection from "../components/ProjectsSection";
@@ -31,7 +30,7 @@ const SiteDetails = () => {
     const [showBills, setShowBills] = useState(true);
 
     useEffect(() => {
-        axios.get(`http://localhost:5000/api/sites/${id}`)
+        getSite(id)
             .then(res => {
                 setSite(res.data);
                 const { bills, ...rest } = res.data || {};
