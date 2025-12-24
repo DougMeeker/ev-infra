@@ -9,7 +9,7 @@ const VehiclesManager = () => {
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(0);
   const [order, setOrder] = useState('asc');
-  const [sort, setSort] = useState('equipment_identifier');
+  const [sort, setSort] = useState('equipment_id');
   const [search, setSearch] = useState('');
   const [siteId, setSiteId] = useState('');
   const [departmentId, setDepartmentId] = useState('');
@@ -53,8 +53,8 @@ const VehiclesManager = () => {
     const payload = {
       site_id: siteId ? Number(siteId) : undefined,
       mc_code: mcCode || undefined,
-      equipment_identifier: '',
-      department_id: departmentId ? Number(departmentId) : undefined,
+      equipment_id: undefined,
+      department_id: departmentId || undefined,
     };
     if (!payload.site_id || !payload.mc_code) {
       alert('Select Site and MC Code to create'); return;
@@ -107,7 +107,7 @@ const VehiclesManager = () => {
           <table className="table">
             <thead>
               <tr>
-                <th onClick={()=>toggleSort('equipment_identifier')} style={{ cursor:'pointer' }}>Identifier {sort==='equipment_identifier' ? (order==='asc'?'▲':'▼') : ''}</th>
+                <th onClick={()=>toggleSort('equipment_id')} style={{ cursor:'pointer' }}>Identifier {sort==='equipment_id' ? (order==='asc'?'▲':'▼') : ''}</th>
                 <th onClick={()=>toggleSort('mc_code')} style={{ cursor:'pointer' }}>MC {sort==='mc_code' ? (order==='asc'?'▲':'▼') : ''}</th>
                 <th>Category</th>
                 <th onClick={()=>toggleSort('site_id')} style={{ cursor:'pointer' }}>Site {sort==='site_id' ? (order==='asc'?'▲':'▼') : ''}</th>
@@ -120,9 +120,9 @@ const VehiclesManager = () => {
               {items.map(e => (
                 <tr key={e.id}>
                   <td>
-                    <input className="input" value={e.equipment_identifier || ''} onChange={ev=>{
+                    <input className="input" value={e.equipment_id ?? ''} onChange={ev=>{
                       const v = ev.target.value;
-                      setItems(prev => prev.map(x => x.id===e.id ? { ...x, equipment_identifier: v } : x));
+                      setItems(prev => prev.map(x => x.id===e.id ? { ...x, equipment_id: v } : x));
                     }} />
                   </td>
                   <td>
@@ -157,7 +157,7 @@ const VehiclesManager = () => {
                   <td style={{ display:'flex', gap:'4px' }}>
                     <button className="btn" onClick={()=>{
                       const payload = {
-                        equipment_identifier: e.equipment_identifier,
+                        equipment_id: e.equipment_id !== '' ? Number(e.equipment_id) : null,
                         mc_code: e.mc_code,
                         site_id: e.site_id,
                         department_id: e.department_id,

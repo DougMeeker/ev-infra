@@ -5,7 +5,7 @@ import SiteDetails from "./pages/SiteDetails";
 import CatalogManager from "./pages/CatalogManager";
 import SiteImporter from "./pages/SiteImporter";
 import ProjectsManager from "./pages/ProjectsManager";
-import ProjectStatusForm from "./pages/ProjectStatusForm";
+import ProjectStatus from "./pages/ProjectStatus";
 import Header from "./components/Header";
 import ChargersManager from "./pages/ChargersManager";
 import VehiclesManager from "./pages/VehiclesManager";
@@ -22,8 +22,14 @@ function App() {
         <Route path="/catalog" element={<CatalogManager />} />
         <Route path="/sites/import" element={<SiteImporter />} />
         <Route path="/projects" element={<ProjectsManager />} />
-        <Route path="/projects/:projectId/status/:siteId" element={<ProjectStatusForm />} />
-        <Route path="/projects/status" element={<ProjectStatusForm />} />
+        {/* Allow deep-linking to a project without explicit 'status' */}
+        <Route path="/projects/:projectId" element={<ProjectStatus />} />
+        <Route path="/projects/:projectId/status" element={<ProjectStatus />} />
+        <Route path="/projects/:projectId/status/:siteId" element={<ProjectStatus />} />
+        {/* Preferred singular form: /project/:projectId and /project/:projectId/site/:siteId */}
+        <Route path="/project/:projectId" element={<ProjectStatus />} />
+        <Route path="/project/:projectId/site/:siteId" element={<ProjectStatus />} />
+        <Route path="/projects/status" element={<ProjectStatus />} />
         <Route path="/chargers" element={<ChargersManager />} />
         <Route path="/vehicles" element={<VehiclesManager />} />
         <Route path="/vehicle/:id" element={<VehicleDetails />} />

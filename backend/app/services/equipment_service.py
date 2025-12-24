@@ -49,10 +49,16 @@ def create_equipment(site_id, data):
     catalog = EquipmentCatalog.query.get(mc_code)
     if not catalog:
         return {"error": f"MC code {mc_code} not found in catalog"}, 400
+    # equipment_id is an external/fleet numeric identifier (optional)
+    ext_id = data.get('equipment_id')
+    try:
+        ext_id = int(ext_id) if ext_id is not None and str(ext_id).strip() != '' else None
+    except Exception:
+        ext_id = None
     eq = Equipment(
         site_id=site_id,
         mc_code=mc_code,
-        equipment_identifier=data.get('equipment_identifier'),
+        equipment_id=ext_id,
         department_id=data.get('department_id'),
         annual_miles=data.get('annual_miles'),
         downtime_hours=data.get('downtime_hours')
@@ -73,8 +79,12 @@ def update_equipment(equipment_id, data):
     eq = Equipment.query.get(equipment_id)
     if not eq:
         return {"error": "Equipment not found"}, 404
-    if 'equipment_identifier' in data:
-        eq.equipment_identifier = data['equipment_identifier']
+    if 'equipment_id' in data:
+        try:
+            val = data.get('equipment_id')
+            eq.equipment_id = int(val) if val is not None and str(val).strip() != '' else None
+        except Exception:
+            pass
     if 'department_id' in data:
         eq.department_id = data['department_id']
     if 'annual_miles' in data:
@@ -162,8 +172,8 @@ def site_equipment_energy(site_id, target_year):
         if energy_kwh:
             total_energy += energy_kwh
         items.append({
-            'equipment_id': eq.id,
-            'equipment_identifier': eq.equipment_identifier,
+            'id': eq.id,
+            'equipment_id': eq.equipment_id,
             'mc_code': eq.mc_code,
             'department_id': eq.department_id,
             'miles': miles,

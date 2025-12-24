@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getProjects } from '../api';
 import { useNavigate } from 'react-router-dom';
+import ProjectRow from './ProjectRow';
 
 export default function ProjectsSection({ siteId }) {
   const navigate = useNavigate();
@@ -38,21 +39,16 @@ export default function ProjectsSection({ siteId }) {
             <tr>
               <th style={{ borderBottom: '1px solid #ddd' }}>Project</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Description</th>
+              <th style={{ borderBottom: '1px solid #ddd', width: 240 }}>Site Actions</th>
             </tr>
           </thead>
           <tbody>
             {associated.map(p => (
-              <tr key={p.id}>
-                <td>{p.name}</td>
-                <td>{p.description || '—'}</td>
-              </tr>
+              <ProjectRow key={p.id} project={p} siteId={siteId} />
             ))}
           </tbody>
         </table>
       )}
-      <div className="flex-row gap-sm">
-        <button className="btn btn-secondary" onClick={() => navigate('/projects')}>Open Projects Manager</button>
-      </div>
     </div>
   );
 }

@@ -8,7 +8,7 @@ const EquipmentSection = ({ siteId }) => {
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(false);
   const [energySummary, setEnergySummary] = useState(null);
-  const [newEq, setNewEq] = useState({ mc_code: '', equipment_identifier: '', department_id: '', annual_miles: '', downtime_hours: '' });
+  const [newEq, setNewEq] = useState({ mc_code: '', equipment_id: '', department_id: '', annual_miles: '', downtime_hours: '' });
   // Streamlined: usage and annual/downtime edits moved to Vehicle Details page
 
   const fetchAll = useCallback(() => {
@@ -33,13 +33,13 @@ const EquipmentSection = ({ siteId }) => {
     if (!newEq.mc_code) { alert('MC code required'); return; }
     const payload = {
       mc_code: newEq.mc_code.trim(),
-      equipment_identifier: newEq.equipment_identifier || undefined,
-      department_id: newEq.department_id ? parseInt(newEq.department_id, 10) : undefined,
+      equipment_id: newEq.equipment_id ? parseInt(newEq.equipment_id, 10) : undefined,
+      department_id: newEq.department_id || undefined,
       annual_miles: newEq.annual_miles ? parseFloat(newEq.annual_miles) : undefined,
       downtime_hours: newEq.downtime_hours ? parseFloat(newEq.downtime_hours) : undefined
     };
     createEquipment(siteId, payload)
-      .then(() => { setNewEq({ mc_code: '', equipment_identifier: '', department_id: '', annual_miles: '', downtime_hours: '' }); fetchAll(); })
+      .then(() => { setNewEq({ mc_code: '', equipment_id: '', department_id: '', annual_miles: '', downtime_hours: '' }); fetchAll(); })
       .catch(err => { console.error('Failed to create equipment', err); alert('Create failed'); });
   };
 
@@ -52,7 +52,7 @@ const EquipmentSection = ({ siteId }) => {
         <h4 style={{ marginTop: 0 }}>Add Equipment</h4>
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
           <input className="input" style={{ width: '120px' }} name="mc_code" placeholder="MC Code" value={newEq.mc_code} onChange={handleNewEqChange} />
-          <input className="input" style={{ width: '180px' }} name="equipment_identifier" placeholder="Identifier" value={newEq.equipment_identifier} onChange={handleNewEqChange} />
+          <input className="input" style={{ width: '180px' }} name="equipment_id" placeholder="Identifier" value={newEq.equipment_id} onChange={handleNewEqChange} />
           <input className="input" style={{ width: '140px' }} name="department_id" placeholder="Dept ID" value={newEq.department_id} onChange={handleNewEqChange} />
           <input className="input" style={{ width: '140px' }} name="annual_miles" placeholder="Annual Miles" value={newEq.annual_miles} onChange={handleNewEqChange} />
           <input className="input" style={{ width: '140px' }} name="downtime_hours" placeholder="Downtime Hrs" value={newEq.downtime_hours} onChange={handleNewEqChange} />
@@ -94,7 +94,7 @@ const EquipmentSection = ({ siteId }) => {
               const editMiles = eq.last_year_miles ?? '';
               return (
                 <tr key={eq.id}>
-                  <td>{eq.equipment_identifier || '—'}</td>
+                  <td>{eq.equipment_id ?? '—'}</td>
                   <td>{eq.mc_code}</td>
                   <td>{eq.catalog?.description || '—'}</td>
                   <td>{eq.department_id ?? '—'}</td>

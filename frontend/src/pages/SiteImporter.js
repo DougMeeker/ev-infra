@@ -288,7 +288,7 @@ const SiteImporter = () => {
               <tbody>
                 {fleetPreview.slice(0, 25).map((r, i) => (
                   <tr key={i}>
-                    <td>{r.equipment_identifier}</td>
+                    <td>{r.equipment_id ?? '—'}</td>
                     <td>{r.mc_code}</td>
                     <td>{r.mc_known ? 'Yes' : 'No'}</td>
                     <td>{r.department_name || r.department_id}</td>

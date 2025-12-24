@@ -201,8 +201,13 @@ def import_site_department_mapping():
                     skipped += 1
                     errors.append({'row': idx, 'error': 'No site match above confidence threshold', 'dept_id': dept_id, 'dept_name': dept_name, 'confidence': round(confidence, 3)})
                     continue
-                # Update department_id
-                target.department_id = dept_id or None
+                # Update department_id: allow comma-separated list, append if new
+                if dept_id:
+                    existing = (target.department_id or '').strip()
+                    tokens = [t.strip() for t in existing.split(',') if t.strip()]
+                    if dept_id not in tokens:
+                        tokens.append(dept_id)
+                    target.department_id = ','.join(tokens) if tokens else None
                 # Optionally rename placeholder site names when confidence is high
                 RENAME_CONF = max(min_conf, 0.8)
                 if dept_name and target.name:

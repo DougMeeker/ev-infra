@@ -10,7 +10,7 @@ const VehicleDetails = () => {
   const [vehicle, setVehicle] = useState(null);
   const [sites, setSites] = useState([]);
   const [catalog, setCatalog] = useState([]);
-  const [editing, setEditing] = useState({ equipment_identifier: '', site_id: '', mc_code: '', department_id: '', annual_miles: '', downtime_hours: '' });
+  const [editing, setEditing] = useState({ equipment_id: '', site_id: '', mc_code: '', department_id: '', annual_miles: '', downtime_hours: '' });
   const [usage, setUsage] = useState([]);
   const [newUsage, setNewUsage] = useState({ year: String(lastYear), miles: '' });
   const [loading, setLoading] = useState(false);
@@ -29,7 +29,7 @@ const VehicleDetails = () => {
       setSites(sitesRes.data || []);
       setCatalog(catRes.data || []);
       setEditing({
-        equipment_identifier: vehRes.data.equipment_identifier ?? '',
+        equipment_id: vehRes.data.equipment_id ?? '',
         site_id: vehRes.data.site_id ?? '',
         mc_code: vehRes.data.mc_code ?? '',
         department_id: vehRes.data.department_id ?? '',
@@ -47,10 +47,10 @@ const VehicleDetails = () => {
 
   const saveMeta = async () => {
     const payload = {
-      equipment_identifier: editing.equipment_identifier,
+      equipment_id: editing.equipment_id !== '' ? Number(editing.equipment_id) : null,
       site_id: editing.site_id ? Number(editing.site_id) : undefined,
       mc_code: editing.mc_code || undefined,
-      department_id: editing.department_id !== '' ? Number(editing.department_id) : null,
+      department_id: editing.department_id !== '' ? editing.department_id : null,
       annual_miles: editing.annual_miles !== '' ? Number(editing.annual_miles) : null,
       downtime_hours: editing.downtime_hours !== '' ? Number(editing.downtime_hours) : null,
     };
@@ -100,7 +100,7 @@ const VehicleDetails = () => {
       <div className="card" style={{ marginBottom: 16 }}>
         <h4 style={{ marginTop: 0 }}>Metadata</h4>
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
-          <input className="input" style={{ width: 200 }} placeholder="Identifier" value={editing.equipment_identifier} onChange={e=>setEditing(prev=>({ ...prev, equipment_identifier: e.target.value }))} />
+          <input className="input" style={{ width: 200 }} placeholder="Identifier" value={editing.equipment_id} onChange={e=>setEditing(prev=>({ ...prev, equipment_id: e.target.value }))} />
           <select className="input" value={editing.site_id} onChange={e=>setEditing(prev=>({ ...prev, site_id: e.target.value }))}>
             {sites.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
           </select>

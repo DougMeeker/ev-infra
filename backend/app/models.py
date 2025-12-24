@@ -13,7 +13,7 @@ project_sites = db.Table(
 class Site(db.Model):
     __tablename__ = 'sites'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(128))
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
@@ -41,11 +41,12 @@ class Site(db.Model):
     # Relationship to per-site project status updates
     project_statuses = relationship('ProjectStatus', back_populates='site', cascade='all, delete-orphan')
 
-    def to_dict(self):
+    def to_dict(self, include_bills: bool = False):
         data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
-        # Include bills summary (without heavy details) for convenience
-        data['bills'] = [bill.to_dict() for bill in self.bills]
-        # Include project ids for convenience
+        # Optionally include bills (can be large; disabled by default for performance)
+        if include_bills:
+            data['bills'] = [bill.to_dict() for bill in self.bills]
+        # Include project ids for convenience (small payload)
         if hasattr(self, 'projects'):
             data['project_ids'] = [p.id for p in self.projects]
         return data
@@ -54,7 +55,7 @@ class Site(db.Model):
 class UtilityBill(db.Model):
     __tablename__ = 'utility_bills'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     site_id = db.Column(db.Integer, db.ForeignKey('sites.id'), nullable=False, index=True)
     year = db.Column(db.Integer, nullable=False)
     month = db.Column(db.Integer, nullable=False)  # 1-12
@@ -113,11 +114,11 @@ class EquipmentCategory(db.Model):
 class Equipment(db.Model):
     __tablename__ = 'equipment'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     site_id = db.Column(db.Integer, db.ForeignKey('sites.id'), nullable=False, index=True)
-    equipment_identifier = db.Column(db.String(64))  # external or fleet ID
+    equipment_id = db.Column(db.Integer)  # external or fleet ID
     mc_code = db.Column(db.String(16), db.ForeignKey('equipment_catalog.mc_code'), nullable=False, index=True)
-    department_id = db.Column(db.Integer)  # optional owning department
+    department_id = db.Column(db.String(32))  # optional owning department
     annual_miles = db.Column(db.Float)  # projected annual miles (overrides usage for energy calcs if set)
     downtime_hours = db.Column(db.Float)  # annual downtime hours (reduces operating hours for kW calc)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -138,7 +139,7 @@ class Equipment(db.Model):
 class EquipmentUsage(db.Model):
     __tablename__ = 'equipment_usage'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=False, index=True)
     year = db.Column(db.Integer, nullable=False)
     miles = db.Column(db.Float)  # miles driven in the year
@@ -158,7 +159,7 @@ class EquipmentUsage(db.Model):
 class Project(db.Model):
     __tablename__ = 'projects'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(128), nullable=False, unique=True)
     description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -180,7 +181,7 @@ class Project(db.Model):
 class ProjectStatus(db.Model):
     __tablename__ = 'project_status'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
     site_id = db.Column(db.Integer, db.ForeignKey('sites.id', ondelete='CASCADE'), nullable=False, index=True)
     status_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -205,7 +206,7 @@ class ProjectStatus(db.Model):
 class ProjectStep(db.Model):
     __tablename__ = 'project_steps'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
     step_order = db.Column(db.Integer, nullable=False)
     title = db.Column(db.String(128), nullable=False)
@@ -226,7 +227,7 @@ class ProjectStep(db.Model):
 class Charger(db.Model):
     __tablename__ = 'chargers'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     site_id = db.Column(db.Integer, db.ForeignKey('sites.id', ondelete='CASCADE'), nullable=False, index=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='SET NULL'), nullable=True, index=True)
 
@@ -252,4 +253,21 @@ class Charger(db.Model):
     )
 
     def to_dict(self):
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        # Normalize date/datetime fields for JSON serialization
+        try:
+            if data.get('date_installed') is not None:
+                data['date_installed'] = data['date_installed'].isoformat()
+        except Exception:
+            pass
+        try:
+            if data.get('created_at') is not None:
+                data['created_at'] = data['created_at'].isoformat()
+        except Exception:
+            pass
+        try:
+            if data.get('updated_at') is not None:
+                data['updated_at'] = data['updated_at'].isoformat()
+        except Exception:
+            pass
+        return data

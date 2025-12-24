@@ -63,8 +63,16 @@ export const deleteBill = (billId) => axios.delete(`${API_BASE_URL}/sites/bills/
 export const getSiteMetrics = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}/metrics`);
 
 // Aggregate metrics with pagination
-export const getAggregateMetrics = ({ page = 1, perPage = 25, order = 'desc', sort = 'available_capacity_kw', search = '', projectId = '' } = {}) => {
-	const params = new URLSearchParams({ page: String(page), per_page: String(perPage), order, sort });
+export const getAggregateMetrics = ({ page = 1, perPage = 25, order = 'desc', sort = 'available_capacity_kw', search = '', projectId = '', limit } = {}) => {
+	const params = new URLSearchParams({ order, sort });
+	if (limit != null) {
+		params.append('limit', String(limit));
+		// when using limit, align to first page for consistency
+		params.append('page', '1');
+	} else {
+		params.append('page', String(page));
+		params.append('per_page', String(perPage));
+	}
 	if (search) params.append('search', search);
 	if (projectId) params.append('project_id', String(projectId));
 	return axios.get(`${API_BASE_URL}/sites/metrics/aggregate?${params.toString()}`);
@@ -167,7 +175,7 @@ export const updateProjectStep = (projectId, stepId, payload) => axios.put(`${AP
 export const deleteProjectStep = (projectId, stepId) => axios.delete(`${API_BASE_URL}/projects/${projectId}/steps/${stepId}`);
 
 // Vehicles endpoints
-export const listVehicles = ({ page = 1, perPage = 25, order = 'asc', sort = 'equipment_identifier', search = '', siteId = '', departmentId = '', mcCode = '' } = {}) => {
+export const listVehicles = ({ page = 1, perPage = 25, order = 'asc', sort = 'equipment_id', search = '', siteId = '', departmentId = '', mcCode = '' } = {}) => {
 	const params = new URLSearchParams({ page: String(page), per_page: String(perPage), order, sort });
 	if (search) params.append('search', search);
 	if (siteId) params.append('site_id', String(siteId));

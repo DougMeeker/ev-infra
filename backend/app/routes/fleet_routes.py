@@ -20,15 +20,23 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * c
 
 
+def _site_has_department(site: Site, dept_id: str) -> bool:
+    s = (site.department_id or '').strip()
+    if not s or not dept_id:
+        return False
+    tokens = [t.strip() for t in s.split(',') if t.strip()]
+    return dept_id.strip() in tokens
+
+
 def find_best_site(dept_name: str, district: str, lat: float, lon: float, dept_id: str = None):
     sites = Site.query.filter_by(is_deleted=False).all()
     best = None
     confidence = 0.0
 
-    # Rule 0: direct department_id match
+    # Rule 0: direct department_id match (supports comma-separated lists)
     if dept_id:
         for s in sites:
-            if (s.department_id or '').strip() == dept_id.strip():
+            if _site_has_department(s, dept_id):
                 best = s
                 confidence = 0.99
                 break
@@ -154,7 +162,11 @@ def match_preview():
         reader = csv.DictReader(f)
         raw_rows = [norm_row_keys(r) for r in reader]
         for row in raw_rows:
-            eq_id = (getv(row, 'Eq ID', 'EQ ID', 'eq id', 'equipment_id', 'equipment_identifier') or '').strip()
+            raw_eq_id = (getv(row, 'Eq ID', 'EQ ID', 'eq id', 'equipment_id', 'equipment_identifier') or '').strip()
+            try:
+                eq_id = int(raw_eq_id) if raw_eq_id != '' else None
+            except Exception:
+                eq_id = None
             mc_code = (getv(row, 'MC', 'mc') or '').strip()
             dept_id = (getv(row, 'Dept ID', 'DEPT ID', 'dept id', 'department_id') or '').strip()
             dept_name = (getv(row, 'DEPT ID NAME', 'dept id name', 'department_name') or '').strip()
@@ -166,7 +178,7 @@ def match_preview():
             if site and conf >= min_conf:
                 catalog_exists = catalog_has_mc(mc_code)
                 previews.append({
-                    'equipment_identifier': eq_id,
+                    'equipment_id': eq_id,
                     'mc_code': mc_code,
                     'mc_known': catalog_exists,
                     'department_id': dept_id or None,
@@ -207,7 +219,11 @@ def import_fleet():
         raw_rows = [norm_row_keys(r) for r in reader]
         for idx, row in enumerate(raw_rows):
             try:
-                eq_id = (getv(row, 'Eq ID', 'EQ ID', 'eq id', 'equipment_id', 'equipment_identifier') or '').strip()
+                raw_eq_id = (getv(row, 'Eq ID', 'EQ ID', 'eq id', 'equipment_id', 'equipment_identifier') or '').strip()
+                try:
+                    eq_id = int(raw_eq_id) if raw_eq_id != '' else None
+                except Exception:
+                    eq_id = None
                 mc_code = (getv(row, 'MC', 'mc') or '').strip()
                 dept_id = (getv(row, 'Dept ID', 'DEPT ID', 'dept id', 'department_id') or '').strip()
                 dept_name = (getv(row, 'DEPT ID NAME', 'dept id name', 'department_name') or '').strip()
@@ -215,11 +231,11 @@ def import_fleet():
                 lat = normalize_float(getv(row, 'CT_DEPT_LATITUDE', 'dept_latitude', 'latitude', 'lat'))
                 lon = normalize_float(getv(row, 'CT_DEPT_LONGITUDE', 'dept_longitude', 'longitude', 'lon'))
 
-                if not eq_id:
+                if eq_id is None:
                     skipped += 1
                     continue
                 if not mc_code:
-                    errors.append({'row': idx, 'error': 'Missing MC code', 'equipment_identifier': eq_id})
+                    errors.append({'row': idx, 'error': 'Missing MC code', 'equipment_id': eq_id})
                     skipped += 1
                     continue
 
@@ -230,29 +246,29 @@ def import_fleet():
                     if alt and alt != mc_code:
                         catalog = EquipmentCatalog.query.get(alt)
                 if not catalog:
-                    errors.append({'row': idx, 'error': f'MC code {mc_code} not in catalog', 'equipment_identifier': eq_id})
+                    errors.append({'row': idx, 'error': f'MC code {mc_code} not in catalog', 'equipment_id': eq_id})
                     skipped += 1
                     continue
 
                 site, conf = find_best_site(dept_name, district, lat, lon, dept_id)
                 if site is None or conf < min_conf:
-                    errors.append({'row': idx, 'error': 'No site match above confidence threshold', 'department_name': dept_name, 'district': district, 'equipment_identifier': eq_id, 'confidence': round(conf, 3)})
+                    errors.append({'row': idx, 'error': 'No site match above confidence threshold', 'department_name': dept_name, 'district': district, 'equipment_id': eq_id, 'confidence': round(conf, 3)})
                     skipped += 1
                     continue
 
-                existing = Equipment.query.filter_by(site_id=site.id, equipment_identifier=eq_id).first()
+                existing = Equipment.query.filter_by(site_id=site.id, equipment_id=eq_id).first()
                 # Use the catalog's canonical mc_code
                 canonical_mc = catalog.mc_code if catalog else mc_code
                 if existing:
                     existing.mc_code = canonical_mc
-                    existing.department_id = dept_id or existing.department_id
+                    existing.department_id = (dept_id or existing.department_id)
                     updated += 1
                 else:
                     eq = Equipment(
                         site_id=site.id,
                         mc_code=canonical_mc,
-                        equipment_identifier=eq_id,
-                        department_id=dept_id or None
+                        equipment_id=eq_id,
+                        department_id=(dept_id or None)
                     )
                     db.session.add(eq)
                     added += 1

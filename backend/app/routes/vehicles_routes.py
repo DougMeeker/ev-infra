@@ -27,7 +27,7 @@ def list_vehicles():
     page = _parse_int(request.args.get('page', 1), 1)
     per_page = _parse_int(request.args.get('per_page', 25), 25)
     order = (request.args.get('order') or 'asc').lower()
-    sort = (request.args.get('sort') or 'equipment_identifier')
+    sort = (request.args.get('sort') or 'equipment_id')
     search = (request.args.get('search') or '').strip()
     site_id = request.args.get('site_id')
     department_id = request.args.get('department_id')
@@ -37,15 +37,28 @@ def list_vehicles():
     if site_id:
         q = q.filter(Equipment.site_id == _parse_int(site_id))
     if department_id:
-        q = q.filter(Equipment.department_id == _parse_int(department_id))
+        q = q.filter(Equipment.department_id == department_id)
     if mc_code:
         q = q.filter(Equipment.mc_code == mc_code)
     if search:
+        # Allow searching by equipment_id (numeric) or string fields
+        from sqlalchemy import or_, cast, String
         like = f"%{search}%"
-        q = q.filter(Equipment.equipment_identifier.ilike(like))
+        try:
+            s_int = int(search)
+        except Exception:
+            s_int = None
+        conds = [
+            cast(Equipment.equipment_id, String).ilike(like),
+            Equipment.mc_code.ilike(like),
+            Equipment.department_id.ilike(like)
+        ]
+        if s_int is not None:
+            conds.append(Equipment.equipment_id == s_int)
+        q = q.filter(or_(*conds))
 
     # Sorting
-    sort_attr = getattr(Equipment, sort, Equipment.equipment_identifier)
+    sort_attr = getattr(Equipment, sort, Equipment.equipment_id)
     if order == 'desc':
         q = q.order_by(sort_attr.desc())
     else:
@@ -94,11 +107,17 @@ def create_vehicle():
         return {'error': 'site_id not found'}, 404
     if not EquipmentCatalog.query.get(mc_code):
         return {'error': 'mc_code not found in catalog'}, 404
+    # external equipment_id (optional numeric)
+    ext_id = data.get('equipment_id')
+    try:
+        ext_id = int(ext_id) if ext_id is not None and str(ext_id).strip() != '' else None
+    except Exception:
+        ext_id = None
     e = Equipment(
         site_id=site_id,
         mc_code=mc_code,
-        equipment_identifier=(data.get('equipment_identifier') or '').strip() or None,
-        department_id=_parse_int(data.get('department_id')),
+        equipment_id=ext_id,
+        department_id=(data.get('department_id') or '').strip() or None,
         annual_miles=_parse_float(data.get('annual_miles')),
         downtime_hours=_parse_float(data.get('downtime_hours')),
     )
@@ -125,10 +144,14 @@ def update_vehicle(vehicle_id):
             e.mc_code = mc
         else:
             return {'error': 'invalid mc_code'}, 400
-    if 'equipment_identifier' in data:
-        e.equipment_identifier = (data.get('equipment_identifier') or '').strip() or None
+    if 'equipment_id' in data:
+        try:
+            val = data.get('equipment_id')
+            e.equipment_id = int(val) if val is not None and str(val).strip() != '' else None
+        except Exception:
+            pass
     if 'department_id' in data:
-        e.department_id = _parse_int(data.get('department_id'))
+        e.department_id = (data.get('department_id') or '').strip() or None
     if 'annual_miles' in data:
         e.annual_miles = _parse_float(data.get('annual_miles'))
     if 'downtime_hours' in data:

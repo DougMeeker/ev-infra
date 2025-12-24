@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getChargers, getProjects, createCharger, updateCharger, deleteCharger } from '../api';
+import { Link, NavLink } from "react-router-dom";
 
 const formatDate = (d) => {
   if (!d) return '';
@@ -104,7 +105,7 @@ export default function ChargersSection({ siteId }) {
             <tbody>
               {chargers.map(c => (
                 <tr key={c.id}>
-                  <td>{[c.kw ? `${c.kw} kW` : null, c.input_voltage ? `${c.input_voltage} V` : null, c.breaker_size ? `${c.breaker_size} A` : null].filter(Boolean).join(' / ')}</td>
+                  <td><Link to={`/chargers/?siteId=${c.site_id}`}>{[c.kw ? `${c.kw} kW` : null, c.input_voltage ? `${c.input_voltage} V` : null, c.breaker_size ? `${c.breaker_size} A` : null].filter(Boolean).join(' / ')}</Link></td>
                   <td>{c.port_count ?? ''}</td>
                   <td>{c.handle_type ?? ''}</td>
                   <td>{c.manufacturer ?? ''}</td>

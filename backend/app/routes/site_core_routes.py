@@ -27,7 +27,7 @@ def get_sites():
 
     rows = []
     for s in sites:
-        d = s.to_dict()
+        d = s.to_dict(include_bills=False)
         total_kw = totals.get(s.id)
         d['total_charger_kw'] = round(total_kw, 3) if total_kw is not None else 0.0
         rows.append(d)
@@ -39,7 +39,65 @@ def get_site(site_id):
     site = Site.query.get(site_id)
     if not site or site.is_deleted:
         return {"error": "Site not found"}, 404
-    return site.to_dict()
+    # Return lean site payload (bills fetched via dedicated endpoint)
+    return site.to_dict(include_bills=False)
+
+
+@site_bp.route("/<int:site_id>/metrics", methods=["GET"])
+def get_site_metrics(site_id):
+    site = Site.query.get(site_id)
+    if not site or site.is_deleted:
+        return {"error": "Site not found"}, 404
+
+    cutoff = datetime.utcnow() - timedelta(days=365)
+    bills = (
+        UtilityBill.query
+        .filter_by(site_id=site_id, is_deleted=False)
+        .all()
+    )
+    # Filter to last ~year and compute peak kW
+    last_year_peak_kw = 0.0
+    for b in bills:
+        try:
+            bill_dt = datetime(b.year, b.month, 1)
+        except ValueError:
+            continue
+        if bill_dt < cutoff:
+            continue
+        if b.max_power is not None:
+            try:
+                val = float(b.max_power)
+            except (TypeError, ValueError):
+                val = None
+            if val is not None:
+                last_year_peak_kw = max(last_year_peak_kw, val)
+
+    # Capacity calcs
+    pf = site.power_factor if (site.power_factor is not None) else 0.95
+    theoretical_capacity_kw = None
+    if site.main_breaker_amps and site.voltage and site.phase_count:
+        try:
+            amps = float(site.main_breaker_amps)
+            volts = float(site.voltage)
+            if int(site.phase_count) == 3:
+                theoretical_capacity_kw = amps * volts * math.sqrt(3) * pf / 1000.0
+            else:
+                theoretical_capacity_kw = amps * volts * pf / 1000.0
+        except Exception:
+            theoretical_capacity_kw = None
+
+    available_capacity_kw = None
+    if theoretical_capacity_kw is not None:
+        available_capacity_kw = max(theoretical_capacity_kw - last_year_peak_kw, 0.0)
+
+    result = {
+        "site_id": site_id,
+        "last_year_peak_kw": round(last_year_peak_kw, 3),
+        "theoretical_capacity_kw": round(theoretical_capacity_kw, 3) if theoretical_capacity_kw is not None else None,
+        "available_capacity_kw": round(available_capacity_kw, 3) if available_capacity_kw is not None else None,
+        "power_factor": pf,
+    }
+    return jsonify(result), 200
 
 
 @site_bp.route("/<int:site_id>", methods=["PUT"])
@@ -202,8 +260,21 @@ def aggregate_site_metrics():
         if theoretical_capacity_kw is not None:
             available_capacity_kw = max(theoretical_capacity_kw - last_year_peak_kw, 0)
         rows.append({
+            # identifiers
             "site_id": s.id,
+            "id": s.id,
             "name": s.name,
+            # location & contact (for map popups and completeness checks)
+            "latitude": s.latitude,
+            "longitude": s.longitude,
+            "address": s.address,
+            "city": s.city,
+            "contact_name": s.contact_name,
+            "contact_phone": s.contact_phone,
+            # utility basics used in UI
+            "utility": s.utility,
+            "meter_number": s.meter_number,
+            # capacity fields
             "last_year_peak_kw": round(last_year_peak_kw, 3),
             "theoretical_capacity_kw": round(theoretical_capacity_kw, 3) if theoretical_capacity_kw is not None else None,
             "available_capacity_kw": round(available_capacity_kw, 3) if available_capacity_kw is not None else None,
@@ -211,6 +282,7 @@ def aggregate_site_metrics():
             "phase_count": s.phase_count,
             "main_breaker_amps": s.main_breaker_amps,
             "power_factor": pf,
+            # charger aggregates & vehicles
             "total_charger_kw": round(charger_totals.get(s.id, 0.0), 3),
             "installed_charger_kw": round(charger_installed_totals.get(s.id, 0.0), 3),
             "vehicle_count": vehicle_counts.get(s.id, 0)
@@ -240,15 +312,15 @@ def aggregate_site_metrics():
         return val
 
     rows.sort(key=sort_key, reverse=(order != 'asc'))
-    if offset is not None and offset >= 0:
-        end = offset + (limit if limit is not None else per_page)
-        rows = rows[offset:end]
+    # Apply explicit limit/offset first if provided
+    if offset is not None and limit is not None and offset >= 0 and limit > 0:
+        rows = rows[offset: offset + limit]
+    elif limit is not None and limit > 0:
+        rows = rows[:limit]
     elif page is not None and page > 0:
         start = (page - 1) * per_page
         end = start + per_page
         rows = rows[start:end]
-    elif limit is not None and limit > 0:
-        rows = rows[:limit]
 
     meta = {
         "total": filtered_total,

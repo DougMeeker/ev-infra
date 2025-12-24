@@ -1,18 +1,17 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { getSites, getAggregateMetrics, getProjects, getLatestProjectStatuses, getVehicleCountsBySite } from "../api";
+import { getAggregateMetrics, getProjects, getLatestProjectStatuses } from "../api";
 import { Link, useSearchParams } from "react-router-dom";
 import MapView from "../components/MapView";
 import StatusLegend from "../components/StatusLegend";
 import { ratioFrom, getStatusShade } from "../utils/statusShading";
 
 const Home = () => {
-  const [sites, setSites] = useState([]);
   const [metrics, setMetrics] = useState([]);
   const [meta, setMeta] = useState(null);
   const [focusSiteId, setFocusSiteId] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
+  const [perPage, setPerPage] = useState(25); // number | 'all'
   const [order, setOrder] = useState('desc');
   const [sort, setSort] = useState('available_capacity_kw');
   const [search, setSearch] = useState('');
@@ -32,7 +31,6 @@ const Home = () => {
     }
     return 'capacity';
   }); // 'capacity' | 'status'
-  const [vehicleCounts, setVehicleCounts] = useState({});
   useEffect(() => {
     try { window.localStorage.setItem('markerColorMode', markerColorMode); } catch(e) { /* ignore */ }
   }, [markerColorMode]);
@@ -43,15 +41,9 @@ const Home = () => {
   }, [page, search]);
 
   useEffect(() => {
-    getSites()
-      .then((res) => setSites(res.data))
-      .catch((err) => console.error("Error fetching sites:", err));
     getProjects()
       .then((res) => setProjects(res.data))
       .catch((err) => console.error("Error fetching projects:", err));
-    getVehicleCountsBySite()
-      .then(res => setVehicleCounts(res.data.counts || {}))
-      .catch(err => console.error('Error fetching vehicle counts:', err));
   }, []);
 
   // Initialize focus from query param ?focus=<id>
@@ -63,13 +55,15 @@ const Home = () => {
     }
     // Initialize controls from URL on first load
     const p = parseInt(searchParams.get('page') || '1', 10);
-    const pp = parseInt(searchParams.get('perPage') || '25', 10);
+    const ppRaw = searchParams.get('perPage');
+    const pp = ppRaw === 'all' ? 'all' : parseInt(ppRaw || '25', 10);
     const ord = searchParams.get('order');
     const srt = searchParams.get('sort');
     const sch = searchParams.get('search');
     const pid = searchParams.get('projectId');
     if (!Number.isNaN(p) && p > 0) setPage(p);
-    if (!Number.isNaN(pp) && [10,25,50].includes(pp)) setPerPage(pp);
+    if (pp === 'all') setPerPage('all');
+    else if (!Number.isNaN(pp) && [10,25,50,100].includes(pp)) setPerPage(pp);
     if (ord === 'asc' || ord === 'desc') setOrder(ord);
     if (srt) setSort(srt);
     if (typeof sch === 'string') { setSearch(sch); setSearchInput(sch); }
@@ -108,7 +102,8 @@ const Home = () => {
 
     setLoadingMetrics(true);
     setErrorMetrics(null);
-    getAggregateMetrics({ page, perPage, order, sort, search, projectId: selectedProjectId })
+    const isAll = perPage === 'all';
+    getAggregateMetrics({ page: isAll ? 1 : page, perPage: isAll ? undefined : perPage, order, sort, search, projectId: selectedProjectId, limit: isAll ? 1000000 : undefined })
       .then(res => {
         setMetrics(res.data.data);
         setMeta(res.data.meta);
@@ -147,12 +142,14 @@ const Home = () => {
   }, [selectedProjectId, markerColorMode]);
 
   const nextPage = () => {
+    if (perPage === 'all') return;
     if (meta && page >= Math.ceil(meta.total / perPage)) return;
     setPage(p => p + 1);
   };
   const prevPage = () => setPage(p => (p > 1 ? p - 1 : p));
   const handlePerPageChange = (e) => {
-    setPerPage(parseInt(e.target.value, 10) || 25);
+    const val = e.target.value;
+    setPerPage(val === 'all' ? 'all' : (parseInt(val, 10) || 25));
     setPage(1);
   };
   const toggleOrder = () => setOrder(o => (o === 'desc' ? 'asc' : 'desc'));
@@ -176,30 +173,15 @@ const Home = () => {
     setPage(1);
   };
 
-  // Build quick lookup of metrics by site_id
-  const metricsMap = useMemo(() => {
-    const m = {};
-    metrics.forEach(row => { m[row.site_id] = row; });
-    return m;
+  // For map markers, use metrics rows directly and normalize id
+  const sitesWithMetrics = useMemo(() => {
+    return metrics.map(row => ({ ...row, id: row.site_id }));
   }, [metrics]);
 
-  // Build quick lookup of sites by id (for address/contact details)
-  const sitesMap = useMemo(() => {
-    const sm = {};
-    sites.forEach(s => { sm[s.id] = s; });
-    return sm;
-  }, [sites]);
-
-  // Merge base site info with metrics (for map & table so missing detection works)
-  const sitesWithMetrics = useMemo(() => {
-    return sites.map(s => ({ ...s, ...metricsMap[s.id], vehicle_count: vehicleCounts[s.id] || 0 }));
-  }, [sites, metricsMap, vehicleCounts]);
-
-  // Metrics rows merged with site info (table uses backend ordering but enriched locally)
+  // Table rows are the metrics rows (already include needed fields)
   const metricsWithSite = useMemo(() => {
-    // Use server-side ordering; just enrich rows
-    return metrics.map(row => ({ ...row, ...sitesMap[row.site_id], vehicle_count: vehicleCounts[row.site_id] || 0 }));
-  }, [metrics, sitesMap, vehicleCounts]);
+    return metrics.map(row => ({ ...row, id: row.site_id }));
+  }, [metrics]);
 
   // Determine missing info (capacity prerequisites or contact/location fields)
   const missingFieldsForRow = (row) => {
@@ -257,15 +239,17 @@ const Home = () => {
 
       <div className="card">
         <div className="flex-row gap-md align-center justify-between" style={{marginBottom:'10px'}}>
-          <h2 style={{margin:0}}>Sites (Capacity, Demand & Chargers)</h2>
+          <h2 style={{margin:0}}>Sites</h2>
           <div className="flex-row gap-sm align-center">
             <button className="btn" onClick={prevPage} disabled={page === 1}>Prev</button>
             <span>Page {page}</span>
-            <button className="btn" onClick={nextPage} disabled={meta && page >= Math.ceil(meta.total / perPage)}>Next</button>
-            <select className="input" value={perPage} onChange={handlePerPageChange}>
+            <button className="btn" onClick={nextPage} disabled={perPage === 'all' || (meta && typeof perPage === 'number' && page >= Math.ceil(meta.total / perPage))}>Next</button>
+            <select className="input" value={String(perPage)} onChange={handlePerPageChange}>
               <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value="all">All</option>
             </select>
             <button className="btn btn-secondary" onClick={toggleOrder}>Order: {order.toUpperCase()}</button>
             <div className="flex-row gap-sm align-center">
