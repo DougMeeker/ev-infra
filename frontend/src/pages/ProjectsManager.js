@@ -182,7 +182,7 @@ export default function ProjectsManager() {
   const filteredSites = useMemo(() => {
     if (!debouncedSearch) return sites;
     const term = debouncedSearch.toLowerCase();
-    return sites.filter(s => (s.name || '').toLowerCase().includes(term) || String(s.id).includes(term));
+    return sites.filter(s => ((s.name || '') + (s.address || '') + (s.city || '') + (s.state || '') + (s.zip || '')).toLowerCase().includes(term) || String(s.id).includes(term));
   }, [debouncedSearch, sites]);
 
   const totalPages = Math.max(1, Math.ceil(sitesTotal / sitesPageSize));

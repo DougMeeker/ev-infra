@@ -80,6 +80,16 @@ Projects manage many Sites. Each project can define ordered steps; sites report 
   - Project selector applies latest statuses to table and map
   - Marker color mode: Capacity or Status; Status requires a selected project
 
+#### Project Status UI
+
+- Page: `/projects/:projectId` (also `/project/:projectId`)
+- Deep-link to a specific site: `/project/:projectId/site/:siteId`
+- Features:
+  - Choose step via buttons (no dropdowns)
+  - Add status with optional message and costs
+  - View latest status per site in a responsive grid
+  - Click a site box to select and scroll to its history
+
 ### Migrations
 
 Run migrations after pulling:
