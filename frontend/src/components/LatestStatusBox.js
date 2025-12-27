@@ -1,8 +1,8 @@
 import React from 'react';
 import { ratioFrom, getStatusShade } from '../utils/statusShading';
-import styles from '../pages/ProjectStatus.module.css';
+import styles from '../pages/Status.module.css';
 
-export default function LatestStatusBox({ item, stepsCount, onUpdate, isSelected = false }) {
+export default function LatestStatusBox({ item, stepsCount, onUpdate, isSelected = false, actions }) {
   const ratio = ratioFrom(item.current_step, stepsCount);
   const col = getStatusShade(ratio);
 
@@ -12,22 +12,35 @@ export default function LatestStatusBox({ item, stepsCount, onUpdate, isSelected
   };
 
   const content = (
-    <div className={styles.latestRowContent}>
-      <strong className={styles.siteName}>{item.site_name || `Site ${item.site_id}`}</strong>
-      <span className={styles.token}>Step {item.current_step ?? '—'}</span>
-      {item.status_date && (
-        <span className={styles.tokenMuted}>{new Date(item.status_date).toLocaleDateString()}</span>
+    <>
+      <div className={styles.latestRowContent}>
+        <div className={styles.latestRowHeader}>
+          <strong className={styles.siteName}>{item.site_name || `Site ${item.site_id}`}</strong>
+          <div className={styles.metaGroup}>
+            <span className={styles.token}>Step {item.current_step ?? '—'}</span>
+            {item.status_date && (
+              <span className={styles.tokenMuted}>{new Date(item.status_date).toLocaleDateString()}</span>
+            )}
+          </div>
+        </div>
+        <div className={styles.latestRowDetails}>
+          {item.status_message && (
+            <span className={styles.msgToken} title={item.status_message}>{item.status_message}</span>
+          )}
+          {typeof item.estimated_cost === 'number' && (
+            <span className={styles.token}>Est ${item.estimated_cost.toLocaleString()}</span>
+          )}
+          {typeof item.actual_cost === 'number' && (
+            <span className={styles.token}>Actual ${item.actual_cost.toLocaleString()}</span>
+          )}
+        </div>
+      </div>
+      {actions && (
+        <div className={styles.latestRowActions}>
+          {actions}
+        </div>
       )}
-      {item.status_message && (
-        <span className={styles.msgToken} title={item.status_message}>{item.status_message}</span>
-      )}
-      {typeof item.estimated_cost === 'number' && (
-        <span className={styles.token}>Est ${item.estimated_cost.toLocaleString()}</span>
-      )}
-      {typeof item.actual_cost === 'number' && (
-        <span className={styles.token}>Actual ${item.actual_cost.toLocaleString()}</span>
-      )}
-    </div>
+    </>
   );
 
   const handleSelect = () => onUpdate?.(String(item.site_id), item.current_step);

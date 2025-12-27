@@ -19,10 +19,10 @@ const Header = () => {
           <NavLink to="/sites/import" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Imports
           </NavLink>
-          <NavLink to="/projects" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
+          <NavLink to="/project" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Projects
           </NavLink>
-          <NavLink to="/projects/status" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
+          <NavLink to="/project" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Status
           </NavLink>
           <NavLink to="/chargers" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>

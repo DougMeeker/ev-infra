@@ -1,7 +1,10 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { ratioFrom, getStatusShade } from '../utils/statusShading';
-import StatusLegend from '../components/StatusLegend';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { ratioFrom } from '../utils/statusShading';
+import StatusEditor from '../components/StatusEditor';
+import ProjectsSection from '../components/ProjectsSection';
+import SitesSection from '../components/SitesSection';
+import StepsSection from '../components/StepsSection';
+import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import {
   getProjects,
   createProject,
@@ -16,29 +19,47 @@ import {
   createProjectStep,
   updateProjectStep,
   deleteProjectStep,
+  getProjectSiteStatuses,
+  createProjectSiteStatus,
+  getAggregateMetrics,
 } from '../api';
 
 export default function ProjectsManager() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const params = useParams();
+  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
-  const [sites, setSites] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
   const [newProject, setNewProject] = useState({ name: '', description: '' });
   const [editProject, setEditProject] = useState({ name: '', description: '' });
-  const [assignment, setAssignment] = useState({ siteId: '' });
+  const [assignment, setAssignment] = useState({ siteId: '', siteName: '' });
   const [siteSearch, setSiteSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [loadingProjects, setLoadingProjects] = useState(false);
-  const [loadingSites, setLoadingSites] = useState(false);
   const [loadingProjectSites, setLoadingProjectSites] = useState(false);
   const [latestStatuses, setLatestStatuses] = useState([]);
   const [sortMode, setSortMode] = useState('name'); // 'name' | 'status'
   const [projectSites, setProjectSites] = useState([]);
+  const [selectedSiteId, setSelectedSiteId] = useState('');
   const [sitesPage, setSitesPage] = useState(1);
   const [sitesPageSize, setSitesPageSize] = useState(25);
   const [sitesTotal, setSitesTotal] = useState(0);
   const [steps, setSteps] = useState([]);
   const [newStep, setNewStep] = useState({ title: '', step_order: '', description: '' });
+  const [showSitesSection, setShowSitesSection] = useState(true);
+  const [showStepsSection, setShowStepsSection] = useState(true);
+  const gridRef = useRef(null);
+  const [gridCols, setGridCols] = useState(3);
+  const pageSizeOptions = useMemo(() => {
+    const base = [2, 6, 12];
+    return base.map(n => Math.max(1, gridCols * n));
+  }, [gridCols]);
+  const [statuses, setStatuses] = useState([]);
+  const [loadingStatuses, setLoadingStatuses] = useState(false);
+  const [statusForm, setStatusForm] = useState({ current_step: '', status_message: '', status_date: new Date().toISOString().slice(0,10), estimated_cost: '', actual_cost: '' });
+  const [showStatusEditor, setShowStatusEditor] = useState(false);
+  const [projectAverages, setProjectAverages] = useState({});
 
   const loadProjects = async () => {
     setLoadingProjects(true);
@@ -49,152 +70,353 @@ export default function ProjectsManager() {
       setLoadingProjects(false);
     }
   };
-  const loadSites = async () => {
-    setLoadingSites(true);
-    try {
-      const { data } = await getSites();
-      data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setSites(data);
-    } finally {
-      setLoadingSites(false);
-    }
-  };
-  const loadProjectSites = useCallback(async (projectId) => {
-    if (!projectId) return;
-    setLoadingProjectSites(true);
-    try {
-      const effectivePageSize = sortMode === 'status' ? 500 : sitesPageSize;
-      const effectivePage = sortMode === 'status' ? 1 : sitesPage;
-      const { data } = await getProjectSites(projectId, { q: debouncedSearch, page: effectivePage, page_size: effectivePageSize });
-      const items = Array.isArray(data) ? data : (data.items || []);
-      setProjectSites(items);
-      const total = Array.isArray(data) ? items.length : ((data.meta && typeof data.meta.total === 'number') ? data.meta.total : (data.total || items.length || 0));
-      setSitesTotal(total);
-      // Fetch latest statuses for badges
-      const { data: latest } = await getLatestProjectStatuses(projectId);
-      setLatestStatuses(latest);
-      const { data: stepData } = await getProjectSteps(projectId);
-      setSteps(stepData);
-    } finally {
-      setLoadingProjectSites(false);
-    }
-  }, [debouncedSearch, sitesPage, sitesPageSize, sortMode]);
-  // Derived sorted list for Sites in Project section
-  const sortedProjectSites = useMemo(() => {
-    const arr = [...projectSites];
-    if (sortMode === 'name') {
-      arr.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      return arr;
-    }
-    // status mode: order complete -> in progress -> no status, each group by name
-    const project = projects.find(p => String(p.id) === String(selectedProjectId));
-    const stepsCount = (project && typeof project.steps_count === 'number') ? project.steps_count : steps.length;
-    const getRatio = (siteId) => {
-      const status = latestStatuses.find(ls => String(ls.site_id) === String(siteId));
-      if (!project || !status || status.current_step == null || !stepsCount) return null;
-      return ratioFrom(status.current_step, stepsCount);
-    };
-    const getBucket = (r) => {
-      if (r === null) return 2; // no status
-      return r >= 1 ? 0 : 1;    // 0 complete, 1 in progress
-    };
-    arr.sort((a, b) => {
-      const ra = getRatio(a.id);
-      const rb = getRatio(b.id);
-      const ba = getBucket(ra);
-      const bb = getBucket(rb);
-      if (ba !== bb) return ba - bb;
-      // Within same bucket, sort by ratio desc (further along first), then by name
-      if (ra !== null && rb !== null && ra !== rb) return rb - ra;
-      return (a.name || '').localeCompare(b.name || '');
-    });
-    return arr;
-  }, [projectSites, sortMode, latestStatuses, projects, selectedProjectId, steps.length]);
-
-
+  // Initial load of projects and sites
   useEffect(() => {
     loadProjects();
-    loadSites();
   }, []);
 
-  // Keep edit form in sync with selected project
+  // Compute average progress per project for project cards
   useEffect(() => {
-    const p = projects.find(pr => String(pr.id) === String(selectedProjectId));
-    if (p) {
-      setEditProject({ name: p.name || '', description: p.description || '' });
-    } else {
-      setEditProject({ name: '', description: '' });
-    }
-  }, [selectedProjectId, projects]);
+    (async () => {
+      if (!projects || projects.length === 0) { setProjectAverages({}); return; }
+      try {
+        const entries = await Promise.all(projects.map(async (p) => {
+          const stepsCount = (typeof p.steps_count === 'number' && p.steps_count > 0) ? p.steps_count : null;
+          if (!stepsCount) return [p.id, { avg: null, count: 0 }];
+          try {
+            const { data: latest } = await getLatestProjectStatuses(p.id);
+            const ratios = (latest || [])
+              .map(ls => ratioFrom(ls?.current_step, stepsCount))
+              .filter(r => r != null);
+            const avg = ratios.length ? (ratios.reduce((a,b)=>a+b,0) / ratios.length) : null;
+            return [p.id, { avg, count: ratios.length }];
+          } catch {
+            return [p.id, { avg: null, count: 0 }];
+          }
+        }));
+        const map = Object.fromEntries(entries);
+        setProjectAverages(map);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [projects]);
 
-  // Debounce search input
+  // Initialize selected project from route
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(siteSearch), 250);
+    if (params.projectId) {
+      setSelectedProjectId(Number(params.projectId));
+    }
+  }, [params.projectId]);
+
+  // Reset to first page when switching projects
+  useEffect(() => {
+    if (selectedProjectId) setSitesPage(1);
+  }, [selectedProjectId]);
+
+  // Initialize state from URL search params
+  useEffect(() => {
+    const q = searchParams.get('q');
+    const sort = searchParams.get('sort');
+    const siteIdQ = searchParams.get('siteId');
+    const page = Number(searchParams.get('page')) || undefined;
+    const perPage = Number(searchParams.get('per_page')) || undefined;
+    if (q !== null) setSiteSearch(q);
+    if (sort === 'name' || sort === 'status') setSortMode(sort);
+    if (siteIdQ) setSelectedSiteId(siteIdQ);
+    if (page && page > 0) setSitesPage(page);
+    if (perPage && perPage > 0) setSitesPageSize(perPage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounce site search input
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(siteSearch), 300);
     return () => clearTimeout(t);
   }, [siteSearch]);
 
-  useEffect(() => {
-    loadProjectSites(selectedProjectId);
-  }, [selectedProjectId, loadProjectSites]);
-
-  // Reset pagination when selecting a different project
+  // When search or sort changes, reset to first page to avoid empty pages
   useEffect(() => {
     setSitesPage(1);
-  }, [selectedProjectId]);
+  }, [debouncedSearch, sortMode]);
 
-  // When switching to status sort, reset to page 1 because we fetch all items
+  // Persist filters to URL
   useEffect(() => {
-    if (sortMode === 'status') setSitesPage(1);
-  }, [sortMode]);
+    const paramsObj = {};
+    if (debouncedSearch) paramsObj.q = debouncedSearch;
+    if (sortMode) paramsObj.sort = sortMode;
+    if (sitesPage) paramsObj.page = String(sitesPage);
+    if (sitesPageSize) paramsObj.per_page = String(sitesPageSize);
+    if (selectedSiteId) paramsObj.siteId = String(selectedSiteId);
+    setSearchParams(paramsObj);
+  }, [debouncedSearch, sortMode, sitesPage, sitesPageSize, selectedSiteId, setSearchParams]);
+
+  // Observe grid (and parent) width to compute responsive column count more reliably
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const MIN_ITEM_WIDTH = 320;
+
+    const calcCols = () => {
+      const parent = el.parentElement;
+      const width = (parent?.getBoundingClientRect()?.width)
+        ?? (el.getBoundingClientRect()?.width)
+        ?? el.clientWidth
+        ?? 0;
+      const cols = Math.max(1, Math.floor(width / MIN_ITEM_WIDTH));
+      setGridCols(cols);
+    };
+
+    // Initial calculation
+    calcCols();
+
+    const ro = new ResizeObserver(() => {
+      calcCols();
+    });
+    ro.observe(el);
+    if (el.parentElement) ro.observe(el.parentElement);
+    window.addEventListener('resize', calcCols);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', calcCols);
+    };
+  }, [gridRef, showSitesSection, selectedProjectId]);
+
+  // Auto-adjust page size to nearest responsive option when columns change
+  useEffect(() => {
+    if (!pageSizeOptions.includes(sitesPageSize)) {
+      const nearest = pageSizeOptions.reduce((prev, curr) => (
+        Math.abs(curr - sitesPageSize) < Math.abs(prev - sitesPageSize) ? curr : prev
+      ), pageSizeOptions[0]);
+      setSitesPageSize(nearest);
+      setSitesPage(1);
+    }
+  }, [pageSizeOptions]);
+
+  const loadProjectSites = useCallback(async () => {
+    if (!selectedProjectId) return;
+    setLoadingProjectSites(true);
+    try {
+      // Load assigned sites with server-side search + pagination
+      const { data } = await getProjectSites(selectedProjectId, {
+        q: debouncedSearch,
+        page: sitesPage,
+        page_size: sitesPageSize,
+      });
+      const items = data?.items || [];
+      setProjectSites(items);
+      setSitesTotal(data?.meta?.total ?? items.length);
+      // Latest statuses for badge shading
+      const { data: latest } = await getLatestProjectStatuses(selectedProjectId);
+      setLatestStatuses(latest || []);
+      // Steps for this project
+      const { data: stepData } = await getProjectSteps(selectedProjectId);
+      setSteps(stepData || []);
+      // Seed edit form values if available
+      const proj = projects.find(p => String(p.id) === String(selectedProjectId));
+      if (proj) setEditProject({ name: proj.name || '', description: proj.description || '' });
+    } finally {
+      setLoadingProjectSites(false);
+    }
+  }, [selectedProjectId, debouncedSearch, sitesPage, sitesPageSize, projects]);
+
+  // Reload project data when selection or filters change
+  useEffect(() => {
+    loadProjectSites();
+  }, [loadProjectSites, selectedProjectId, debouncedSearch, sitesPage, sitesPageSize, sortMode]);
+
+  // Keep selected project's average up to date when its statuses or steps change
+  useEffect(() => {
+    (async () => {
+      const selId = selectedProjectId;
+      if (!selId) return;
+      const proj = projects.find(p => String(p.id) === String(selId));
+      const stepsCount = (proj && typeof proj.steps_count === 'number') ? proj.steps_count : steps.length;
+      const ratios = (latestStatuses || [])
+        .map(ls => ratioFrom(ls?.current_step, stepsCount))
+        .filter(r => r != null);
+      const avg = ratios.length ? (ratios.reduce((a,b)=>a+b,0) / ratios.length) : null;
+      setProjectAverages(prev => ({ ...prev, [selId]: { avg, count: ratios.length } }));
+    })();
+  }, [selectedProjectId, latestStatuses, steps.length, projects]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!newProject.name) return;
-    await createProject({
-      name: newProject.name,
-      description: newProject.description || undefined,
-    });
+    const name = newProject.name.trim();
+    if (!name) return;
+    const payload = { name, description: newProject.description?.trim() || undefined };
+    const { data: created } = await createProject(payload);
     setNewProject({ name: '', description: '' });
     await loadProjects();
+    setSelectedProjectId(created.id);
+    navigate(`/project/${created.id}`);
   };
 
-  const handleDelete = async (projectId) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Delete project?')) return;
-    await deleteProject(projectId);
-    if (selectedProjectId === projectId) setSelectedProjectId(null);
+    await deleteProject(id);
     await loadProjects();
+    if (String(id) === String(selectedProjectId)) {
+      setSelectedProjectId(null);
+      setProjectSites([]);
+      setLatestStatuses([]);
+      setSteps([]);
+    }
   };
+
+  // Sites available for assignment (filters search and excludes already assigned)
+  const assignedIds = useMemo(() => new Set(projectSites.map(s => String(s.id))), [projectSites]);
+  // Async loader for combobox options (server-side search)
+  const allSitesCacheRef = useRef(null);
+  const loadSiteOptions = useCallback(async (q) => {
+    const query = (q || '').trim();
+    if (!query || query.length < 2) return [];
+    // Primary: server-side aggregate metrics search (fast)
+    const { data } = await getAggregateMetrics({ search: query, limit: 50 });
+    const items = Array.isArray(data?.data) ? data.data : [];
+    let opts = items
+      .filter(s => !assignedIds.has(String(s.id)))
+      .map(s => ({ id: s.site_id ?? s.id, name: s.name, address: s.address, city: s.city }));
+    // If no results (likely searching by address), fallback to local address filter over all sites
+    if (opts.length === 0) {
+      let allSites = allSitesCacheRef.current;
+      if (!Array.isArray(allSites)) {
+        try {
+          const { data: all } = await getSites();
+          allSites = Array.isArray(all) ? all : [];
+          allSitesCacheRef.current = allSites;
+        } catch {
+          allSites = [];
+        }
+      }
+      const qLower = query.toLowerCase();
+      opts = allSites
+        .filter(s => !assignedIds.has(String(s.id)))
+        .filter(s => (
+          (s.name && String(s.name).toLowerCase().includes(qLower)) ||
+          (s.address && String(s.address).toLowerCase().includes(qLower)) ||
+          (s.city && String(s.city).toLowerCase().includes(qLower))
+        ))
+        .slice(0, 50)
+        .map(s => ({ id: s.id, name: s.name, address: s.address, city: s.city }));
+    }
+    opts.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    return opts;
+  }, [assignedIds]);
+
+  const sortedProjectSites = useMemo(() => {
+    const arr = [...projectSites];
+    if (sortMode === 'status') {
+      return arr.sort((a,b) => {
+        const sa = latestStatuses.find(ls => String(ls.site_id) === String(a.id));
+        const sb = latestStatuses.find(ls => String(ls.site_id) === String(b.id));
+        const ra = ratioFrom(sa?.current_step, steps.length);
+        const rb = ratioFrom(sb?.current_step, steps.length);
+        const av = ra === null ? -1 : ra;
+        const bv = rb === null ? -1 : rb;
+        if (av !== bv) return bv - av; // descending by progress
+        return (a.name||'').localeCompare(b.name||'');
+      });
+    }
+    return arr.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  }, [projectSites, latestStatuses, steps.length, sortMode]);
+
+  // If redirected with a specific siteId, ensure it's visible
+  useEffect(() => {
+    const siteIdParam = searchParams.get('siteId');
+    if (siteIdParam && sortedProjectSites.length > 0) {
+      const idx = sortedProjectSites.findIndex(s => String(s.id) === String(siteIdParam));
+      if (idx >= 0) {
+        const targetPage = Math.floor(idx / sitesPageSize) + 1;
+        if (targetPage !== sitesPage) setSitesPage(targetPage);
+      }
+      if (siteIdParam !== selectedSiteId) setSelectedSiteId(siteIdParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedProjectSites, sitesPageSize]);
+
+  const totalPages = useMemo(() => {
+    const total = sitesTotal || projectSites.length;
+    return Math.max(1, Math.ceil(total / sitesPageSize));
+  }, [sitesTotal, projectSites.length, sitesPageSize]);
 
   const handleAssignSite = async (e) => {
     e.preventDefault();
-    if (!selectedProjectId || !assignment.siteId) return;
-    await addSiteToProject(selectedProjectId, Number(assignment.siteId));
-    setAssignment({ siteId: '' });
-    await loadProjectSites(selectedProjectId);
+    if (!assignment.siteId || !selectedProjectId) return;
+    // optimistic add
+    const site = assignment.siteName ? { id: assignment.siteId, name: assignment.siteName } : null;
+    if (site) {
+      setProjectSites(prev => [...prev, site].sort((a,b) => (a.name||'').localeCompare(b.name||'')));
+    }
+    try {
+      await addSiteToProject(selectedProjectId, assignment.siteId);
+      await loadProjectSites();
+    } finally {
+      setAssignment({ siteId: '', siteName: '' });
+    }
+  };
+  // Load status history when a site is selected
+  useEffect(() => {
+    (async () => {
+      if (!selectedProjectId || !selectedSiteId) { setStatuses([]); return; }
+      setLoadingStatuses(true);
+      try {
+        const { data } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
+        setStatuses(data || []);
+      } finally {
+        setLoadingStatuses(false);
+      }
+    })();
+  }, [selectedProjectId, selectedSiteId]);
+
+  const submitStatus = async (e) => {
+    e.preventDefault();
+    if (!selectedProjectId || !selectedSiteId || !statusForm.current_step) return;
+    const payload = {
+      current_step: Number(statusForm.current_step),
+      status_message: statusForm.status_message || undefined,
+      status_date: statusForm.status_date || undefined,
+      estimated_cost: statusForm.estimated_cost ? Number(statusForm.estimated_cost) : undefined,
+      actual_cost: statusForm.actual_cost ? Number(statusForm.actual_cost) : undefined,
+    };
+    await createProjectSiteStatus(selectedProjectId, selectedSiteId, payload);
+    setStatusForm({ current_step: '', status_message: '', status_date: new Date().toISOString().slice(0,10), estimated_cost: '', actual_cost: '' });
+    // Reload statuses and latest
+    setLoadingStatuses(true);
+    try {
+      const { data } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
+      setStatuses(data || []);
+    } finally {
+      setLoadingStatuses(false);
+    }
+    const { data: latest } = await getLatestProjectStatuses(selectedProjectId);
+    setLatestStatuses(latest || []);
+    // Removed historyRef scroll (no linked element)
   };
 
   const handleRemoveSite = async (siteId) => {
-    if (!selectedProjectId) return;
-    await removeSiteFromProject(selectedProjectId, siteId);
-    await loadProjectSites(selectedProjectId);
+    if (!window.confirm('Remove this site from the project?')) return;
+    // optimistic remove
+    const prev = projectSites;
+    setProjectSites(p => p.filter(s => String(s.id) !== String(siteId)));
+    try {
+      await removeSiteFromProject(selectedProjectId, siteId);
+      await loadProjectSites();
+    } catch (e) {
+      setProjectSites(prev);
+    }
   };
-
-  const filteredSites = useMemo(() => {
-    if (!debouncedSearch) return sites;
-    const term = debouncedSearch.toLowerCase();
-    return sites.filter(s => ((s.name || '') + (s.address || '') + (s.city || '') + (s.state || '') + (s.zip || '')).toLowerCase().includes(term) || String(s.id).includes(term));
-  }, [debouncedSearch, sites]);
-
-  const totalPages = Math.max(1, Math.ceil(sitesTotal / sitesPageSize));
 
   const handleCreateStep = async (e) => {
     e.preventDefault();
-    if (!selectedProjectId || !newStep.title) return;
+    if (!selectedProjectId) return;
     const payload = {
-      title: newStep.title,
-      description: newStep.description || undefined,
+      title: (newStep.title || '').trim(),
+      description: newStep.description ? newStep.description.trim() : undefined,
       step_order: newStep.step_order ? Number(newStep.step_order) : undefined,
     };
+    if (!payload.title) return;
     // optimistic add: assign next order locally
     const nextOrder = (steps[steps.length - 1]?.step_order || 0) + 1;
     const tempStep = { id: `tmp-${Date.now()}`, project_id: selectedProjectId, title: payload.title, description: payload.description, step_order: payload.step_order || nextOrder };
@@ -239,184 +461,83 @@ export default function ProjectsManager() {
     <div style={{ padding: 16 }}>
       <h2>Projects Manager</h2>
 
-      <section style={{ marginBottom: 24 }}>
-        <h3>Create Project</h3>
-        <form onSubmit={handleCreate}>
-          <input
-            placeholder="Name"
-            value={newProject.name}
-            onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-            style={{ marginRight: 8 }}
-          />
-          <input
-            placeholder="Description"
-            value={newProject.description}
-            onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-            style={{ marginRight: 8, width: 300 }}
-          />
-          <button type="submit">Create</button>
-        </form>
-      </section>
+      <ProjectsSection
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        latestStatuses={latestStatuses}
+        stepsCount={steps.length}
+        projectAverages={projectAverages}
+        loadingProjects={loadingProjects}
+        onSelectProject={(id) => { setSelectedProjectId(id); navigate(`/project/${id}`); }}
+        onDeleteProject={handleDelete}
+        editProject={editProject}
+        setEditProject={setEditProject}
+        onSaveEdit={async (payload) => {
+          const data = { name: payload.name, description: payload.description || undefined };
+          await updateProject(selectedProjectId, data);
+          await loadProjects();
+        }}
+      />
+      
+      <StatusEditor
+        steps={steps}
+        statusForm={statusForm}
+        setStatusForm={setStatusForm}
+        showStatusEditor={showStatusEditor}
+        setShowStatusEditor={setShowStatusEditor}
+        selectedProjectId={selectedProjectId}
+        selectedSiteId={selectedSiteId}
+        selectedSiteName={projectSites.find(s => String(s.id) === String(selectedSiteId))?.name}
+        onSubmitStatus={submitStatus}
+      />
+      
+      <SitesSection
+        selectedProjectId={selectedProjectId}
+        assignment={assignment}
+        setAssignment={setAssignment}
+        loadSiteOptions={loadSiteOptions}
+        onAssign={handleAssignSite}
+        sortMode={sortMode}
+        setSortMode={setSortMode}
+        siteSearch={siteSearch}
+        setSiteSearch={setSiteSearch}
+        sortedProjectSites={sortedProjectSites}
+        sitesPage={sitesPage}
+        setSitesPage={setSitesPage}
+        sitesPageSize={sitesPageSize}
+        setSitesPageSize={setSitesPageSize}
+        totalPages={totalPages}
+        pageSizeOptions={pageSizeOptions}
+        latestStatuses={latestStatuses}
+        stepsCount={steps.length}
+        selectedSiteId={selectedSiteId}
+        setSelectedSiteId={setSelectedSiteId}
+        onOpenSite={(siteId, currentStep) => {
+          const id = String(siteId);
+          setSelectedSiteId(id);
+          const next = currentStep != null ? Number(currentStep) + 1 : '';
+          setStatusForm(f => ({ ...f, current_step: next }));
+          navigate(`/project/${selectedProjectId}?siteId=${id}`);
+        }}
+        onOpenDetails={(siteId) => navigate(`/site/${siteId}`)}
+        onRemove={handleRemoveSite}
+        sitesTotal={sitesTotal || projectSites.length}
+        gridRef={gridRef}
+        showSitesSection={showSitesSection}
+        setShowSitesSection={setShowSitesSection}
+      />
 
-      <section style={{ display: 'flex', gap: 24 }}>
-        <div style={{ flex: 1 }}>
-          <h3>Projects {loadingProjects && <small style={{ fontWeight:'normal' }}>Loading...</small>}</h3>
-          <ul>
-            {projects.map((p) => (
-              <li key={p.id} style={{ marginBottom: 8 }}>
-                <button onClick={() => setSelectedProjectId(p.id)} style={{ marginRight: 8 }}>
-                  Select
-                </button>
-                <strong>{p.name}</strong> (steps: {typeof p.steps_count === 'number' ? p.steps_count : '—'})
-                <button onClick={() => handleDelete(p.id)} style={{ marginLeft: 8 }}>Delete</button>
-              </li>
-            ))}
-          </ul>
-          {selectedProjectId && (
-            <div className="card" style={{ marginTop: 12 }}>
-              <h4>Edit Project</h4>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const payload = { name: editProject.name, description: editProject.description || undefined };
-                  await updateProject(selectedProjectId, payload);
-                  await loadProjects();
-                }}
-                style={{ marginBottom: 12 }}
-              >
-                <input
-                  placeholder="Project Name"
-                  value={editProject.name}
-                  onChange={(e) => setEditProject({ ...editProject, name: e.target.value })}
-                  style={{ marginRight: 8 }}
-                />
-                <input
-                  placeholder="Description"
-                  value={editProject.description}
-                  onChange={(e) => setEditProject({ ...editProject, description: e.target.value })}
-                  style={{ marginRight: 8, width: 300 }}
-                />
-                <button type="submit" className="btn">Save Changes</button>
-              </form>
-              <h4>Project Steps</h4>
-              <ul style={{ listStyle:'none', padding:0 }}>
-                {steps.map((st, idx) => (
-                  <li key={st.id} style={{ padding:'6px 8px', borderBottom:'1px solid var(--card-border)', display:'flex', alignItems:'center', gap:8 }}>
-                    <strong>#{st.step_order}</strong> {st.title}
-                    {st.due_date && <span style={{ marginLeft:8, color:'var(--muted)' }}>Due: {st.due_date}</span>}
-                    <div style={{ marginTop:6 }}>
-                      <input placeholder="Title" defaultValue={st.title} onBlur={(e)=>handleUpdateStep(st.id, { title: e.target.value })} style={{ marginRight:8 }} />
-                      <input type="number" placeholder="Order" defaultValue={st.step_order} onBlur={(e)=>handleUpdateStep(st.id, { step_order: Number(e.target.value) })} style={{ width:90, marginRight:8 }} />
-                      {/* Due date removed; per-site status dates will be used */}
-                      <button className="btn-danger" onClick={()=>handleDeleteStep(st.id)}>Delete</button>
-                    </div>
-                    {st.description && <div style={{ marginTop:4, fontSize:'0.85rem', color:'var(--muted)' }}>{st.description}</div>}
-                  </li>
-                ))}
-              </ul>
-              <form onSubmit={handleCreateStep} style={{ marginTop:12 }}>
-                <input placeholder="Step Title" value={newStep.title} onChange={(e)=>setNewStep({ ...newStep, title: e.target.value })} style={{ marginRight:8 }} />
-                <input type="number" placeholder="Order" value={newStep.step_order} onChange={(e)=>setNewStep({ ...newStep, step_order: e.target.value })} style={{ width:90, marginRight:8 }} />
-                {/* Due date input removed */}
-                <input placeholder="Description" value={newStep.description} onChange={(e)=>setNewStep({ ...newStep, description: e.target.value })} style={{ width:240, marginRight:8 }} />
-                <button type="submit" className="btn">Add Step</button>
-              </form>
-            </div>
-          )}
-        </div>
-
-        <div style={{ flex: 1 }}>
-          <h3>Assign Sites to Project {loadingSites && <small style={{ fontWeight:'normal' }}>Loading sites...</small>} {loadingProjectSites && <small style={{ fontWeight:'normal' }}>Refreshing project sites...</small>}</h3>
-          {selectedProjectId ? (
-            <>
-              <form onSubmit={handleAssignSite} style={{ marginBottom: 12 }}>
-                <input
-                  placeholder="Search sites..."
-                  value={siteSearch}
-                  onChange={(e) => setSiteSearch(e.target.value)}
-                  style={{ marginRight: 8 }}
-                />
-                <select
-                  value={assignment.siteId}
-                  onChange={(e) => setAssignment({ siteId: e.target.value })}
-                  style={{ marginRight: 8, minWidth: 200 }}
-                >
-                  <option value="">Select a site</option>
-                  {filteredSites.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name || `Site ${s.id}`}</option>
-                  ))}
-                </select>
-                <button type="submit">Add to Project</button>
-              </form>
-
-              <h4>
-                Sites in Project {loadingProjectSites && <small style={{ fontWeight:'normal' }}>Loading...</small>}
-                <span style={{ marginLeft:12, fontWeight:'normal' }}>
-                  Sort:
-                  <label style={{ marginLeft:8 }}>
-                    <input type="radio" name="sortMode" value="name" checked={sortMode==='name'} onChange={() => setSortMode('name')} /> Name
-                  </label>
-                  <label style={{ marginLeft:8 }}>
-                    <input type="radio" name="sortMode" value="status" checked={sortMode==='status'} onChange={() => setSortMode('status')} /> Status
-                  </label>
-                </span>
-              </h4>
-              {/* Top pagination controls placed near sort options */}
-              {(() => {
-                const effectiveTotalPages = sortMode==='status' ? Math.max(1, Math.ceil(sortedProjectSites.length / sitesPageSize)) : totalPages;
-                return (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-                    <span>Page:</span>
-                    <button className="btn" disabled={sitesPage<=1} onClick={()=>setSitesPage(1)}>First</button>
-                    <button className="btn" disabled={sitesPage<=1} onClick={()=>setSitesPage(p=>Math.max(1,p-1))}>Prev</button>
-                    <span>{sitesPage} / {effectiveTotalPages}</span>
-                    <button className="btn" disabled={sitesPage>=effectiveTotalPages} onClick={()=>setSitesPage(p=>p+1)}>Next</button>
-                    <button className="btn" disabled={sitesPage>=effectiveTotalPages} onClick={()=>setSitesPage(effectiveTotalPages)}>Last</button>
-                    <span style={{ marginLeft:12 }}>Per page:</span>
-                    <select className="input" value={sitesPageSize} onChange={(e)=>{ setSitesPageSize(Number(e.target.value)); setSitesPage(1); }}>
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </div>
-                );
-              })()}
-              <ul style={{ listStyle:'none', padding:0 }}>
-                {(sortMode === 'status' ? sortedProjectSites.slice((sitesPage-1)*sitesPageSize, (sitesPage-1)*sitesPageSize + sitesPageSize) : sortedProjectSites).map((s) => {
-                  const status = latestStatuses.find(ls => String(ls.site_id) === String(s.id));
-                  const project = projects.find(p => String(p.id) === String(selectedProjectId));
-                  const stepsCount = steps.length;
-                  const ratio = ratioFrom(status?.current_step, stepsCount);
-                  const col = getStatusShade(ratio);
-                  const badgeStyle = {
-                    display:'inline-block',
-                    marginLeft:8,
-                    padding:'2px 6px',
-                    borderRadius:999,
-                    fontSize:'0.75rem',
-                    background: col.bg,
-                    border: '1px solid ' + col.border,
-                    color: '#0f172a'
-                  };
-                  const badgeText = ratio === null ? 'No Status' : `Step ${status.current_step}`;
-                  return (
-                    <li key={s.id} style={{ padding:'6px 8px', borderBottom:'1px solid #eee' }}>
-                      {s.name || `Site ${s.id}`}
-                      <Link to={`/projects/${selectedProjectId}/status/${s.id}`} style={{ textDecoration:'none' }}>
-                        <span style={badgeStyle} title={status && status.status_date ? `As of ${new Date(status.status_date).toLocaleDateString()}` : ''}>{badgeText}</span>
-                      </Link>
-                      <button onClick={() => handleRemoveSite(s.id)} style={{ marginLeft: 8 }}>Remove</button>
-                    </li>
-                  );
-                })}
-              </ul>
-              {/* Bottom controls removed; controls are now at the top */}
-            </>
-          ) : (
-            <p>Select a project to manage site assignments.</p>
-          )}
-        </div>
-      </section>
+      <StepsSection
+        selectedProjectId={selectedProjectId}
+        steps={steps}
+        showStepsSection={showStepsSection}
+        setShowStepsSection={setShowStepsSection}
+        handleUpdateStep={handleUpdateStep}
+        handleDeleteStep={handleDeleteStep}
+        newStep={newStep}
+        setNewStep={setNewStep}
+        handleCreateStep={handleCreateStep}
+      />
     </div>
   );
 }

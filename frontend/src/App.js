@@ -5,7 +5,8 @@ import SiteDetails from "./pages/SiteDetails";
 import CatalogManager from "./pages/CatalogManager";
 import SiteImporter from "./pages/SiteImporter";
 import ProjectsManager from "./pages/ProjectsManager";
-import ProjectStatus from "./pages/ProjectStatus";
+// Consolidate status into ProjectsManager; keep legacy /status routes via redirect
+import { useEffect } from "react";
 import Header from "./components/Header";
 import ChargersManager from "./pages/ChargersManager";
 import VehiclesManager from "./pages/VehiclesManager";
@@ -21,15 +22,13 @@ function App() {
         <Route path="/site/:id" element={<SiteDetails />} />
         <Route path="/catalog" element={<CatalogManager />} />
         <Route path="/sites/import" element={<SiteImporter />} />
-        <Route path="/projects" element={<ProjectsManager />} />
-        {/* Allow deep-linking to a project without explicit 'status' */}
-        <Route path="/projects/:projectId" element={<ProjectStatus />} />
-        <Route path="/projects/:projectId/status" element={<ProjectStatus />} />
-        <Route path="/projects/:projectId/status/:siteId" element={<ProjectStatus />} />
-        {/* Preferred singular form: /project/:projectId and /project/:projectId/site/:siteId */}
-        <Route path="/project/:projectId" element={<ProjectStatus />} />
-        <Route path="/project/:projectId/site/:siteId" element={<ProjectStatus />} />
-        <Route path="/projects/status" element={<ProjectStatus />} />
+        {/* Project Manager routes */}
+        <Route path="/project" element={<ProjectsManager />} />
+        <Route path="/project/:projectId" element={<ProjectsManager />} />
+        {/* Legacy status routes redirect to ProjectsManager with optional siteId */}
+        <Route path="/status" element={<StatusRedirect />} />
+        <Route path="/status/:projectId" element={<StatusRedirect />} />
+        <Route path="/status/:projectId/:siteId" element={<StatusRedirect />} />
         <Route path="/chargers" element={<ChargersManager />} />
         <Route path="/vehicles" element={<VehiclesManager />} />
         <Route path="/vehicle/:id" element={<VehicleDetails />} />
@@ -40,3 +39,22 @@ function App() {
 }
 
 export default App;
+
+// Local component to handle legacy status route redirects
+function StatusRedirect() {
+  const navigate = require("react-router-dom").useNavigate();
+  const params = require("react-router-dom").useParams();
+  useEffect(() => {
+    const projectId = params.projectId;
+    const siteId = params.siteId;
+    if (projectId) {
+      const target = siteId
+        ? `/project/${projectId}?siteId=${encodeURIComponent(siteId)}`
+        : `/project/${projectId}`;
+      navigate(target, { replace: true });
+    } else {
+      navigate(`/project`, { replace: true });
+    }
+  }, [navigate, params.projectId, params.siteId]);
+  return null;
+}

@@ -1,12 +1,20 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, abort
 from ..extensions import db
 from ..models import Project, Site, ProjectStatus, ProjectStep
 
 project_bp = Blueprint('projects', __name__, url_prefix='/api/projects')
 
+def _get_project_or_404(project_id):
+    """Coerce to int and fetch via filter_by to avoid Session.get identifier issues."""
+    try:
+        pid = int(project_id)
+    except Exception:
+        abort(404)
+    return Project.query.filter_by(id=pid, is_deleted=False).first_or_404()
+
 @project_bp.route('', methods=['GET'])
 def list_projects():
-    projects = Project.query.order_by(Project.name).all()
+    projects = Project.query.filter_by(is_deleted=False).order_by(Project.name).all()
     return jsonify([p.to_dict() for p in projects])
 
 @project_bp.route('', methods=['POST'])
@@ -16,7 +24,15 @@ def create_project():
     description = data.get('description')
     if not name:
         return jsonify({'error': 'name is required'}), 400
-    if Project.query.filter_by(name=name).first():
+    existing = Project.query.filter_by(name=name).first()
+    if existing:
+        if existing.is_deleted:
+            # Restore soft-deleted project by updating fields and clearing deletion
+            if description is not None:
+                existing.description = description
+            existing.is_deleted = False
+            db.session.commit()
+            return jsonify(existing.to_dict()), 200
         return jsonify({'error': 'project name already exists'}), 409
     project = Project(name=name, description=description)
     db.session.add(project)
@@ -25,12 +41,12 @@ def create_project():
 
 @project_bp.route('/<int:project_id>', methods=['GET'])
 def get_project(project_id):
-    project = Project.query.get_or_404(project_id)
+    project = _get_project_or_404(project_id)
     return jsonify(project.to_dict())
 
 @project_bp.route('/<int:project_id>', methods=['PUT'])
 def update_project(project_id):
-    project = Project.query.get_or_404(project_id)
+    project = _get_project_or_404(project_id)
     data = request.get_json() or {}
     if 'name' in data:
         project.name = data['name']
@@ -41,14 +57,14 @@ def update_project(project_id):
 
 @project_bp.route('/<int:project_id>', methods=['DELETE'])
 def delete_project(project_id):
-    project = Project.query.get_or_404(project_id)
-    db.session.delete(project)
+    project = _get_project_or_404(project_id)
+    project.is_deleted = True
     db.session.commit()
     return jsonify({'status': 'deleted'})
 
 @project_bp.route('/<int:project_id>/sites', methods=['POST'])
 def add_site_to_project(project_id):
-    project = Project.query.get_or_404(project_id)
+    project = _get_project_or_404(project_id)
     data = request.get_json() or {}
     site_id = data.get('site_id')
     if not site_id:
@@ -65,7 +81,7 @@ def list_project_sites(project_id):
     Query params: q (search by site name), page (default 1), page_size (default 25)
     Returns a simple array of site dicts sorted by name.
     """
-    project = Project.query.get_or_404(project_id)
+    project = _get_project_or_404(project_id)
     q = (request.args.get('q') or '').strip()
     try:
         page = int(request.args.get('page', '1'))
@@ -78,10 +94,15 @@ def list_project_sites(project_id):
 
     # Base query: join through association table `project_sites`
     from ..models import project_sites
+    from sqlalchemy import or_
     site_query = Site.query.join(project_sites, Site.id == project_sites.c.site_id).filter(project_sites.c.project_id == project_id)
     if q:
         like = f"%{q}%"
-        site_query = site_query.filter(Site.name.ilike(like))
+        site_query = site_query.filter(or_(
+            Site.name.ilike(like),
+            Site.address.ilike(like),
+            Site.city.ilike(like)
+        ))
     site_query = site_query.order_by(Site.name)
 
     if page <= 0:
@@ -102,7 +123,7 @@ def list_project_sites(project_id):
 
 @project_bp.route('/<int:project_id>/sites/<int:site_id>', methods=['DELETE'])
 def remove_site_from_project(project_id, site_id):
-    project = Project.query.get_or_404(project_id)
+    project = _get_project_or_404(project_id)
     site = Site.query.get_or_404(site_id)
     if site in project.sites:
         project.sites.remove(site)
@@ -112,7 +133,7 @@ def remove_site_from_project(project_id, site_id):
 # Status routes
 @project_bp.route('/<int:project_id>/sites/<int:site_id>/status', methods=['GET'])
 def list_statuses(project_id, site_id):
-    Project.query.get_or_404(project_id)
+    _get_project_or_404(project_id)
     Site.query.get_or_404(site_id)
     statuses = ProjectStatus.query\
         .filter_by(project_id=project_id, site_id=site_id)\
@@ -122,7 +143,7 @@ def list_statuses(project_id, site_id):
 
 @project_bp.route('/<int:project_id>/sites/<int:site_id>/status', methods=['POST'])
 def create_status(project_id, site_id):
-    project = Project.query.get_or_404(project_id)
+    project = _get_project_or_404(project_id)
     site = Site.query.get_or_404(site_id)
     data = request.get_json() or {}
     current_step = data.get('current_step')
@@ -164,7 +185,7 @@ def create_status(project_id, site_id):
 @project_bp.route('/<int:project_id>/status/latest', methods=['GET'])
 def latest_statuses(project_id):
     """Return the latest status entry per site in the project, including sites without status."""
-    project = Project.query.get_or_404(project_id)
+    project = _get_project_or_404(project_id)
     # Subquery to get max status_date per site
     from sqlalchemy import func, and_
     subq = db.session.query(
@@ -206,13 +227,13 @@ def latest_statuses(project_id):
 # ---- Project Steps CRUD ----
 @project_bp.route('/<int:project_id>/steps', methods=['GET'])
 def list_steps(project_id):
-    Project.query.get_or_404(project_id)
+    _get_project_or_404(project_id)
     steps = ProjectStep.query.filter_by(project_id=project_id).order_by(ProjectStep.step_order).all()
     return jsonify([s.to_dict() for s in steps])
 
 @project_bp.route('/<int:project_id>/steps', methods=['POST'])
 def create_step(project_id):
-    Project.query.get_or_404(project_id)
+    _get_project_or_404(project_id)
     data = request.get_json() or {}
     title = data.get('title')
     step_order = data.get('step_order')
@@ -230,7 +251,7 @@ def create_step(project_id):
 
 @project_bp.route('/<int:project_id>/steps/<int:step_id>', methods=['PUT'])
 def update_step(project_id, step_id):
-    Project.query.get_or_404(project_id)
+    _get_project_or_404(project_id)
     step = ProjectStep.query.filter_by(id=step_id, project_id=project_id).first_or_404()
     data = request.get_json() or {}
     if 'title' in data:
@@ -244,7 +265,7 @@ def update_step(project_id, step_id):
 
 @project_bp.route('/<int:project_id>/steps/<int:step_id>', methods=['DELETE'])
 def delete_step(project_id, step_id):
-    Project.query.get_or_404(project_id)
+    _get_project_or_404(project_id)
     step = ProjectStep.query.filter_by(id=step_id, project_id=project_id).first_or_404()
     db.session.delete(step)
     db.session.commit()

@@ -162,6 +162,7 @@ class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(128), nullable=False, unique=True)
     description = db.Column(db.Text)
+    is_deleted = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

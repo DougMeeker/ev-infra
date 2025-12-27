@@ -14,7 +14,7 @@ This folder contains systemd unit files and an example nginx config to run the b
    python3 -m venv venv
    source venv/bin/activate
    pip install --upgrade pip
-   pip install gunicorn sqlalchemy alembic python-dotenv "psycopg[binary]"
+   pip install flask flask_cors flask_sqlalchemy gunicorn sqlalchemy alembic python-dotenv "psycopg[binary]"
    ```
 2. Set env file `/etc/evinfra/backend.env` (create directory if needed):
    ```
@@ -60,6 +60,40 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now evinfra-frontend
 ```
 Requires: `npm i -g serve` or use `npx serve`.
+
+## Combined Deploy (Frontend + Backend)
+
+Use the helper script to build and deploy both sides, apply Alembic migrations, and restart services.
+
+Examples:
+```bash
+# Serve frontend via systemd service (proxy on :3000) and restart backend
+sudo deploy/scripts/deploy_all.sh \
+   --front-src /opt/evinfra/frontend \
+   --front-target /opt/evinfra/frontend/build \
+   --frontend-mode serve \
+   --back-dir /opt/evinfra/backend \
+   --back-env /etc/evinfra/backend.env
+
+# Deploy static frontend to nginx web root and run migrations
+sudo deploy/scripts/deploy_all.sh \
+   --frontend-mode static \
+   --front-target /var/www/evinfra \
+   --owner nginx:nginx
+```
+
+Options:
+- `--front-src`: Frontend source directory (contains `package.json`).
+- `--front-target`: Target directory for built assets (use `/var/www/evinfra` for nginx static).
+- `--frontend-mode`: `serve` (restart `evinfra-frontend`) or `static` (rsync + SELinux relabel).
+- `--owner` / `--chmod` / `--no-selinux`: control rsync permissions and labeling for static deploys.
+- `--back-dir`: Backend working directory (contains `alembic.ini`).
+- `--back-env`: Backend env file sourced for Alembic (e.g., `DATABASE_URL`).
+- `--back-venv`: Backend venv path (default `/opt/evinfra/backend/venv`).
+- `--front-service` / `--back-service`: systemd unit names (defaults provided).
+- `--skip-migrate`: skip Alembic migration.
+
+The script restarts services with `systemctl` and will gracefully skip migrations if Alembic is not found.
 
 ## Nginx
 1. Copy config and enable:

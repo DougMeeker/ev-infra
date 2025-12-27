@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { getAggregateMetrics, getProjects, getLatestProjectStatuses } from "../api";
+import { getAggregateMetrics, getProjects, getLatestProjectStatuses, getSite } from "../api";
 import { Link, useSearchParams } from "react-router-dom";
 import MapView from "../components/MapView";
 import StatusLegend from "../components/StatusLegend";
@@ -174,8 +174,34 @@ const Home = () => {
   };
 
   // For map markers, use metrics rows directly and normalize id
-  const sitesWithMetrics = useMemo(() => {
-    return metrics.map(row => ({ ...row, id: row.site_id }));
+  const [sitesForMap, setSitesForMap] = useState([]);
+
+  // Build map sites and lazily fill missing coords by fetching single site details
+  useEffect(() => {
+    const base = metrics.map(row => ({ ...row, id: row.site_id }));
+    if (base.length === 0) { setSitesForMap([]); return; }
+    const missing = base.filter(r => !(r.latitude != null && r.longitude != null));
+    if (missing.length === 0) { setSitesForMap(base); return; }
+    Promise.all(missing.map(r => (
+      getSite(r.site_id)
+        .then(res => {
+          const d = res.data || {};
+          return {
+            ...r,
+            latitude: d.latitude ?? r.latitude,
+            longitude: d.longitude ?? r.longitude,
+            address: d.address ?? r.address,
+            city: d.city ?? r.city
+          };
+        })
+        .catch(() => r)
+    )))
+      .then(filled => {
+        const filledById = new Map(filled.map(f => [f.site_id, f]));
+        const final = base.map(r => filledById.get(r.site_id) ?? r);
+        setSitesForMap(final);
+      })
+      .catch(() => setSitesForMap(base));
   }, [metrics]);
 
   // Table rows are the metrics rows (already include needed fields)
@@ -226,7 +252,7 @@ const Home = () => {
         </div>
         <MarkerLegend mode={markerColorMode} hasProject={!!selectedProjectId} />
         <MapView
-          sites={sitesWithMetrics}
+          sites={sitesForMap}
           focusSiteId={focusSiteId}
           onClearFocus={clearFocus}
           enableAddSites={allowAdd}
@@ -338,7 +364,7 @@ const Home = () => {
                       };
                       const badgeText = ratio === null ? 'No Status' : `Step ${status.current_step}`;
                       return (
-                        <Link to={`/projects/${selectedProjectId}/status/${row.site_id}`} style={{ textDecoration:'none' }}>
+                        <Link to={`/status/${selectedProjectId}/${row.site_id}`} style={{ textDecoration:'none' }}>
                           <span style={badgeStyle} title={status && status.status_date ? `As of ${new Date(status.status_date).toLocaleDateString()}` : ''}>{badgeText}</span>
                         </Link>
                       );
