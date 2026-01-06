@@ -17,7 +17,7 @@ class Site(db.Model):
     name = db.Column(db.String(128))
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
-    department_id = db.Column(db.String(32))
+    department_id = db.Column(db.Text)
     utility = db.Column(db.String(64))
     utility_account = db.Column(db.String(64))
     utility_name = db.Column(db.String(64))

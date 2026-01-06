@@ -41,10 +41,11 @@ const FocusHelper = ({ focusSite, onClearFocus }) => {
   return null;
 };
 
-const MapView = ({ sites, focusSiteId, onClearFocus, enableAddSites, selectedProjectId, latestStatuses = [], project, colorMode = 'capacity' }) => {
+const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, selectedProjectId, latestStatuses = [], project, colorMode = 'capacity' }) => {
   const center = [37.5, -120];
   const [newMarker, setNewMarker] = useState(null);
-  const focusSite = focusSiteId ? sites.find(s => s.id === focusSiteId) : null;
+  const list = Array.isArray(sites) ? sites : [];
+  const focusSite = focusSiteId ? list.find(s => s.id === focusSiteId) : null;
   const navigate = useNavigate();
 
   const handleMapClick = async (latlng) => {
@@ -122,7 +123,7 @@ const MapView = ({ sites, focusSiteId, onClearFocus, enableAddSites, selectedPro
   {enableAddSites && <ClickHandler onMapClick={handleMapClick} />}
   <FocusHelper focusSite={focusSite} onClearFocus={onClearFocus} />
 
-      {sites.filter(s => s.latitude !== null && s.latitude !== undefined && s.longitude !== null && s.longitude !== undefined)
+      {list.filter(s => s.latitude !== null && s.latitude !== undefined && s.longitude !== null && s.longitude !== undefined)
             .filter(s => !selectedProjectId || projectSiteIdSet.has(s.id))
             .map(site => {
         const cap = site.available_capacity_kw;

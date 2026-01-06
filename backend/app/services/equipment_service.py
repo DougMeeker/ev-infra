@@ -4,11 +4,18 @@ from ..models import Site, Equipment, EquipmentUsage, EquipmentCatalog
 from ..extensions import db
 
 
-def list_equipment(site_id, target_year):
+def list_equipment(site_id, target_year, page=1, per_page=25):
     site = Site.query.get(site_id)
     if not site or site.is_deleted:
         return {"error": "Site not found"}, 404
-    equipment_rows = Equipment.query.filter_by(site_id=site_id).all()
+    base_query = Equipment.query.filter_by(site_id=site_id)
+    total = base_query.count()
+    if page is None or page <= 0:
+        page = 1
+    if per_page is None or per_page <= 0:
+        per_page = 25
+    offset = (page - 1) * per_page
+    equipment_rows = base_query.order_by(Equipment.id.asc()).offset(offset).limit(per_page).all()
     results = []
     for eq in equipment_rows:
         usage = EquipmentUsage.query.filter_by(equipment_id=eq.id, year=target_year).first()
@@ -36,7 +43,16 @@ def list_equipment(site_id, target_year):
         data['last_year_energy_kwh'] = energy_kwh
         data['avg_power_kw'] = average_power_kw
         results.append(data)
-    return jsonify(results), 200
+    payload = {
+        'items': results,
+        'meta': {
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'returned': len(results)
+        }
+    }
+    return jsonify(payload), 200
 
 
 def create_equipment(site_id, data):

@@ -112,20 +112,17 @@ Recent migrations include:
 New model `UtilityBill` added with fields:
 - site_id (FK to Site)
 - year, month (unique per site/month)
-- energy_usage (kWh)
 - max_power (kW)
 - timestamps and soft delete flag
 
 ### Run Migration
 In PowerShell:
 
-```powershell
 cd backend
 alembic upgrade head
 ```
 
 If Alembic isn't initialized in your environment, ensure the `ALEMBIC` config points to the same database URI as in `app/config.py`.
-
 ### API Endpoints
 List bills for a site:
 GET /api/sites/<site_id>/bills
@@ -133,28 +130,22 @@ GET /api/sites/<site_id>/bills
 Create bill:
 POST /api/sites/<site_id>/bills {"year":2025,"month":11,"energy_usage":1234.5,"max_power":250.0}
 
-Get single bill:
 GET /api/sites/bills/<bill_id>
 
 Update bill:
 PUT /api/sites/bills/<bill_id>
 
 Soft delete bill:
-DELETE /api/sites/bills/<bill_id>
 
 ### Capacity & Metrics
 
 Added site fields:
 - main_breaker_amps (Amps)
-- voltage (Line voltage, e.g. 240, 480)
 - phase_count (1 or 3)
 - power_factor (default 0.95, configurable)
 
 Metrics endpoint:
 GET /api/sites/<site_id>/metrics
-
-Returns JSON:
-```
 {
   "site_id": 12,
   "last_year_peak_kw": 180.4,
@@ -165,7 +156,9 @@ Returns JSON:
   "voltage": 480,
   "main_breaker_amps": 300
 }
-```
+ http://localhost:5000/api/fleet/match-preview?min_confidence=0.7
+
+ Note: If you click a relative `/api/...` link while running the React dev server on port 3000, the browser will navigate to `http://localhost:3000/api/...` and the SPA will serve the frontend shell (nav/blank page). Use the explicit backend URL above (port 5000) or run the request via curl/Postman.
 
 Formulas:
 - Single-phase capacity (kW) ≈ Amps * Volts * PF / 1000

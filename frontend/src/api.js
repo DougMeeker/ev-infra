@@ -79,9 +79,12 @@ export const getAggregateMetrics = ({ page = 1, perPage = 25, order = 'desc', so
 };
 
 // Equipment endpoints
-export const getEquipment = (siteId, { year } = {}) => {
-	const params = year ? `?year=${year}` : '';
-	return axios.get(`${API_BASE_URL}/sites/${siteId}/equipment${params}`);
+export const getEquipment = (siteId, { year, page = 1, perPage = 25 } = {}) => {
+	const params = new URLSearchParams();
+	if (year) params.append('year', String(year));
+	if (page != null) params.append('page', String(page));
+	if (perPage != null) params.append('per_page', String(perPage));
+	return axios.get(`${API_BASE_URL}/sites/${siteId}/equipment?${params.toString()}`);
 };
 export const createEquipment = (siteId, payload) => axios.post(`${API_BASE_URL}/sites/${siteId}/equipment`, payload);
 export const getEquipmentEnergy = (siteId, { year } = {}) => {
@@ -187,3 +190,12 @@ export const createVehicle = (payload) => axios.post(`${API_BASE_URL}/vehicles/`
 export const updateVehicle = (vehicleId, payload) => axios.put(`${API_BASE_URL}/vehicles/${vehicleId}`, payload);
 export const deleteVehicle = (vehicleId) => axios.delete(`${API_BASE_URL}/vehicles/${vehicleId}`);
 export const getVehicleCountsBySite = () => axios.get(`${API_BASE_URL}/vehicles/counts-by-site`);
+
+// Caltrans Project Tracker import
+export const importCaltransProjectCsv = (projectId, file) => {
+	const formData = new FormData();
+	formData.append('file', file);
+	return axios.post(`${API_BASE_URL}/projects/${projectId}/import-caltrans`, formData, {
+		headers: { 'Content-Type': 'multipart/form-data' },
+	});
+};

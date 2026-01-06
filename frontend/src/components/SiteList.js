@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-const SiteList = ({ sites }) => (
+const SiteList = ({ sites = [] }) => (
   <ul>
     {sites.map((site) => (
       <li key={site.id}>

@@ -13,17 +13,11 @@ const Header = () => {
           <NavLink to="/" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Home
           </NavLink>
-          <NavLink to="/catalog" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
-            Catalog
-          </NavLink>
-          <NavLink to="/sites/import" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
-            Imports
+          <NavLink to="/sites/manage" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
+            Sites
           </NavLink>
           <NavLink to="/project" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Projects
-          </NavLink>
-          <NavLink to="/project" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
-            Status
           </NavLink>
           <NavLink to="/chargers" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Chargers
@@ -31,8 +25,8 @@ const Header = () => {
           <NavLink to="/vehicles" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
             Vehicles
           </NavLink>
-          <NavLink to="/sites/manage" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
-            Sites
+          <NavLink to="/catalog" style={({isActive}) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration:'none' })}>
+            Catalog
           </NavLink>
         </nav>
       </div>

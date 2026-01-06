@@ -70,7 +70,7 @@ export default function ChargersSection({ siteId }) {
                 </select>
                 <select className="input" value={chargerNew.project_id} onChange={e=>setChargerNew(prev=>({ ...prev, project_id: e.target.value }))}>
                   <option value="">Project</option>
-                  {projects.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                  {(Array.isArray(projects) ? projects : []).map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
                 </select>
                 <input className="input" type="date" value={chargerNew.date_installed} onChange={e=>setChargerNew(prev=>({ ...prev, date_installed: e.target.value }))} />
                 <button className="btn" onClick={async ()=>{
@@ -125,7 +125,7 @@ export default function ChargersSection({ siteId }) {
                         </select>
                         <select className="input" value={chargerEdit.project_id ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, project_id: e.target.value }))}>
                           <option value="">Project</option>
-                          {projects.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                          {(Array.isArray(projects) ? projects : []).map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
                         </select>
                         <input className="input" type="date" value={chargerEdit.date_installed ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, date_installed: e.target.value }))} />
                         <button className="btn" onClick={async ()=>{

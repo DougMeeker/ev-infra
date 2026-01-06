@@ -9,21 +9,31 @@ const EquipmentSection = ({ siteId }) => {
   const [loading, setLoading] = useState(false);
   const [energySummary, setEnergySummary] = useState(null);
   const [newEq, setNewEq] = useState({ mc_code: '', equipment_id: '', department_id: '', annual_miles: '', downtime_hours: '' });
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [returned, setReturned] = useState(0);
   // Streamlined: usage and annual/downtime edits moved to Vehicle Details page
 
   const fetchAll = useCallback(() => {
     setLoading(true);
     Promise.all([
-      getEquipment(siteId),
+      getEquipment(siteId, { page, perPage }),
       getEquipmentEnergy(siteId)
     ])
       .then(([eqRes, energyRes]) => {
-        setEquipment(eqRes.data);
+        const data = eqRes.data || { items: [], meta: { total: 0, page: 1, per_page: perPage, returned: 0 } };
+        setEquipment(Array.isArray(data.items) ? data.items : []);
+        const meta = data.meta || {};
+        setTotal(meta.total || 0);
+        setReturned(meta.returned || (Array.isArray(data.items) ? data.items.length : 0));
+        setPage(meta.page || page);
+        setPerPage(meta.per_page || perPage);
         setEnergySummary(energyRes.data);
       })
       .catch(err => console.error('Error loading equipment', err))
       .finally(() => setLoading(false));
-  }, [siteId]);
+  }, [siteId, page, perPage]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -69,6 +79,24 @@ const EquipmentSection = ({ siteId }) => {
         </div>
       )}
 
+      {/* Pagination controls */}
+      <div className="flex-row gap-sm" style={{ alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap' }}>
+        <span>Showing {total === 0 ? 0 : ((page - 1) * perPage + 1)}–{(page - 1) * perPage + returned} of {total}</span>
+        <div className="flex-row gap-sm">
+          <button className="btn" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Prev</button>
+          <button className="btn" disabled={(page * perPage) >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+        </div>
+        <div className="flex-row gap-sm">
+          <label>Per page</label>
+          <select className="input" value={perPage} onChange={e => { setPage(1); setPerPage(parseInt(e.target.value, 10)); }}>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+            <option value={250}>250</option>
+          </select>
+        </div>
+      </div>
+
       {loading ? (
         <p>Loading equipment...</p>
       ) : equipment.length === 0 ? (
@@ -83,9 +111,9 @@ const EquipmentSection = ({ siteId }) => {
               <th style={{ borderBottom: '1px solid #ddd' }}>Department</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Miles ({lastYear})</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Energy/mi</th>
+              <th style={{ borderBottom: '1px solid #ddd' }}>Miles Source</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Energy kWh</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Avg kW</th>
-              <th style={{ borderBottom: '1px solid #ddd' }}>Miles Source</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Details</th>
             </tr>
           </thead>
@@ -103,7 +131,6 @@ const EquipmentSection = ({ siteId }) => {
                   <td>{eq.miles_source || '—'}</td>
                   <td>{eq.last_year_energy_kwh != null ? eq.last_year_energy_kwh.toFixed(2) : '—'}</td>
                   <td>{eq.avg_power_kw != null ? eq.avg_power_kw.toFixed(2) : '—'}</td>
-                  <td>{eq.miles_source || '—'}</td>
                   <td>
                     <Link className="btn btn-secondary" to={`/vehicle/${eq.id}`}>Details</Link>
                   </td>

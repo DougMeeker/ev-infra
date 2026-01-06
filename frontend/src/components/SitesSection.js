@@ -32,7 +32,10 @@ export default function SitesSection({
   showSitesSection,
   setShowSitesSection,
 }) {
-  const effectiveTotalPages = sortMode==='status' ? Math.max(1, Math.ceil(sortedProjectSites.length / sitesPageSize)) : totalPages;
+  const sps = Array.isArray(sortedProjectSites) ? sortedProjectSites : [];
+  const latest = Array.isArray(latestStatuses) ? latestStatuses : [];
+  const pageOpts = Array.isArray(pageSizeOptions) ? pageSizeOptions : [];
+  const effectiveTotalPages = sortMode==='status' ? Math.max(1, Math.ceil(sps.length / sitesPageSize)) : (totalPages || 1);
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="flex-row justify-between align-center" style={{ marginBottom: 8 }}>
@@ -88,17 +91,17 @@ export default function SitesSection({
               <button className="btn" disabled={sitesPage>=effectiveTotalPages} onClick={()=>setSitesPage(effectiveTotalPages)}>Last</button>
               <span style={{ marginLeft:12 }}>Per page:</span>
               <select className="input" value={sitesPageSize} onChange={(e)=>{ setSitesPageSize(Number(e.target.value)); setSitesPage(1); }}>
-                {(!pageSizeOptions.includes(sitesPageSize)) && (
+                {(!pageOpts.includes(sitesPageSize)) && (
                   <option value={sitesPageSize}>{sitesPageSize}</option>
                 )}
-                {pageSizeOptions.map(opt => (
+                {pageOpts.map(opt => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
             </div>
-            <div ref={gridRef} className={styles.latestGrid}>
-              {(sortMode === 'status' ? sortedProjectSites.slice((sitesPage-1)*sitesPageSize, (sitesPage-1)*sitesPageSize + sitesPageSize) : sortedProjectSites).map((s) => {
-                const status = latestStatuses.find(ls => String(ls.site_id) === String(s.id));
+              <div ref={gridRef} className={styles.latestGrid}>
+              {(sortMode === 'status' ? sps.slice((sitesPage-1)*sitesPageSize, (sitesPage-1)*sitesPageSize + sitesPageSize) : sps).map((s) => {
+                const status = latest.find(ls => String(ls.site_id) === String(s.id));
                 const item = status ? status : {
                   id: null,
                   project_id: Number(selectedProjectId),

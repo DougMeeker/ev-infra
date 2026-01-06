@@ -20,7 +20,19 @@ def list_equipment(site_id):
         target_year = int(year) if year else (datetime.utcnow().year - 1)
     except ValueError:
         target_year = datetime.utcnow().year - 1
-    return svc_list_equipment(site_id, target_year)
+    # Optional pagination
+    def to_int(val, default=None):
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return default
+    page = to_int(request.args.get('page'), 1)
+    per_page = to_int(request.args.get('per_page'), 25)
+    if page is None or page <= 0:
+        page = 1
+    if per_page is None or per_page <= 0:
+        per_page = 25
+    return svc_list_equipment(site_id, target_year, page=page, per_page=per_page)
 
 
 @site_bp.route("/<int:site_id>/equipment", methods=["POST"])

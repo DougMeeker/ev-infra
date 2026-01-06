@@ -1,6 +1,10 @@
 from flask import Blueprint, request, jsonify, abort
 from ..extensions import db
 from ..models import Project, Site, ProjectStatus, ProjectStep
+import csv
+import io
+import re
+from datetime import datetime, date
 
 project_bp = Blueprint('projects', __name__, url_prefix='/api/projects')
 
@@ -159,7 +163,6 @@ def create_status(project_id, site_id):
         current_step=int(current_step),
         status_message=status_message,
     )
-    from datetime import datetime, date
     if status_date:
         # Accept YYYY-MM-DD or full ISO timestamp
         try:
@@ -270,3 +273,215 @@ def delete_step(project_id, step_id):
     db.session.delete(step)
     db.session.commit()
     return jsonify({'status': 'deleted'})
+
+
+def _normalize_date_token(token: str):
+    if token is None:
+        return None
+    s = str(token).strip()
+    if not s:
+        return None
+    # Normalize common variants like "7-3" or accidental double slashes
+    s = s.replace('--', '-').replace('//', '/')
+    # Accept M/D or M-D
+    m = re.match(r"^(\d{1,2})\s*[/\-]\s*(\d{1,2})$", s)
+    if not m:
+        return None
+    mm = int(m.group(1))
+    dd = int(m.group(2))
+    # Assume year 2025 as per instructions
+    try:
+        return datetime(2025, mm, dd)
+    except Exception:
+        return None
+
+
+def _parse_status_segments(raw: str):
+    """Parse the 'Project Status' free text into dated segments.
+    Returns list of tuples: (status_date: datetime, message: str)
+    Rules:
+    - Segments are separated by ';'
+    - Segments may start with a date token like '9/22' or '7-3'
+    - If the first segment has no date, assume 2025-01-01
+    - All undated non-first segments are skipped
+    """
+    results = []
+    if not raw:
+        return results
+    try:
+        parts = [p.strip() for p in str(raw).split(';')]
+    except Exception:
+        parts = [str(raw).strip()]
+
+    first_assigned = False
+    for idx, part in enumerate(parts):
+        if not part:
+            continue
+        # Try to pull a leading date token "M/D" or "M-D"
+        # Also handle formats like "9/22 - ..." (optional dash)
+        m = re.match(r"^\s*(\d{1,2}\s*[/\-]\s*\d{1,2})\s*-?\s*(.*)$", part)
+        if m:
+            dt = _normalize_date_token(m.group(1))
+            msg = (m.group(2) or '').strip()
+            if dt is not None and msg:
+                results.append((dt, msg))
+            elif dt is not None:
+                results.append((dt, ''))
+            # If msg empty, still keep dated entry
+            first_assigned = True
+            continue
+        # No explicit date
+        if idx == 0:
+            # Assume 2025-01-01
+            assumed = datetime(2025, 1, 1)
+            results.append((assumed, part))
+            first_assigned = True
+        else:
+            # Skip undated later segments
+            continue
+    return results
+
+
+@project_bp.route('/<int:project_id>/import-caltrans', methods=['POST'])
+def import_caltrans_csv(project_id):
+    """Import Caltrans Project Tracker CSV to update site membership and project statuses.
+    Expected CSV headers (case-sensitive per provided file):
+    - 'Site Address'
+    - 'Site City'
+    - 'Road Map Step #'
+    - 'Project Status'
+    Behavior:
+    - Match sites by exact address+city (case-insensitive). If not found, create site.
+    - If site not linked to project, link it.
+    - Parse 'Project Status' into dated segments and upsert ProjectStatus entries
+      (unique by project_id, site_id, status_date). current_step from 'Road Map Step #' or 1.
+    """
+    project = _get_project_or_404(project_id)
+    if 'file' not in request.files:
+        return jsonify({'error': 'file is required'}), 400
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'error': 'no file provided'}), 400
+
+    # Read file content into text stream
+    try:
+        content = file.read()
+        text = content.decode('utf-8', errors='replace')
+    except Exception as e:
+        return jsonify({'error': f'failed to read file: {e}'}), 400
+
+    reader = csv.DictReader(io.StringIO(text))
+    # Counters
+    sites_created = 0
+    sites_linked = 0
+    statuses_created = 0
+    statuses_updated = 0
+    rows_processed = 0
+    skipped = 0
+    errors = []
+
+    # Build quick lookup of current project site IDs for O(1) membership checks
+    current_site_ids = set([s.id for s in project.sites])
+
+    # Helper to find site by address+city
+    def find_site(addr_raw, city_raw):
+        if not addr_raw or not city_raw:
+            return None
+        addr = str(addr_raw).strip().lower()
+        city = str(city_raw).strip().lower()
+        if not addr or not city:
+            return None
+        return Site.query.filter(
+            db.func.lower(Site.address) == addr,
+            db.func.lower(Site.city) == city,
+            Site.is_deleted.is_(False)
+        ).first()
+
+    for idx, row in enumerate(reader):
+        rows_processed += 1
+        try:
+            # Extract fields
+            addr = (row.get('Site Address') or '').strip()
+            city = (row.get('Site City') or '').strip()
+            step_raw = (row.get('Road Map Step #') or '').strip()
+            status_raw = row.get('Project Status') or ''
+
+            # Determine step
+            try:
+                current_step = int(step_raw)
+            except Exception:
+                current_step = 1
+
+            site = find_site(addr, city)
+            if site is None:
+                # Create new site with name as address, city
+                name = f"{addr}, {city}".strip(', ')
+                site = Site(name=name, address=addr or None, city=city or None)
+                db.session.add(site)
+                db.session.flush()  # get id
+                sites_created += 1
+
+            # Link to project if not already
+            if site.id not in current_site_ids:
+                try:
+                    project.sites.append(site)
+                    sites_linked += 1
+                    current_site_ids.add(site.id)
+                except Exception:
+                    # Ignore if already linked
+                    pass
+
+            # Parse and upsert statuses
+            segments = _parse_status_segments(status_raw)
+            for dt, msg in segments:
+                # Ensure midnight time (matching other APIs)
+                if isinstance(dt, date) and not isinstance(dt, datetime):
+                    dt = datetime.combine(dt, datetime.min.time())
+                existing = ProjectStatus.query.filter_by(
+                    project_id=project.id,
+                    site_id=site.id,
+                    status_date=dt
+                ).first()
+                if existing:
+                    # Update message and step if changed
+                    prev_msg = existing.status_message or ''
+                    prev_step = existing.current_step
+                    changed = False
+                    if (msg or '') != prev_msg:
+                        existing.status_message = msg
+                        changed = True
+                    if int(current_step) != int(prev_step):
+                        existing.current_step = int(current_step)
+                        changed = True
+                    if changed:
+                        statuses_updated += 1
+                else:
+                    st = ProjectStatus(
+                        project_id=project.id,
+                        site_id=site.id,
+                        status_date=dt,
+                        status_message=msg,
+                        current_step=int(current_step)
+                    )
+                    db.session.add(st)
+                    statuses_created += 1
+        except Exception as e:
+            errors.append({'row': idx, 'error': str(e)})
+            skipped += 1
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'failed to import: {e}'}), 500
+
+    return jsonify({
+        'message': 'Caltrans CSV import complete',
+        'rows_processed': rows_processed,
+        'sites_created': sites_created,
+        'sites_added_to_project': sites_linked,
+        'statuses_created': statuses_created,
+        'statuses_updated': statuses_updated,
+        'skipped': skipped,
+        'errors': errors[:25]
+    }), 200

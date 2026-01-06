@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { uploadSitesGeoJSON, importDgsProperties, previewFleetMatches, importFleet, previewDepartmentMapping, importDepartmentMapping } from '../api';
+import React, { useEffect, useRef, useState } from 'react';
+import { uploadSitesGeoJSON, importDgsProperties, previewFleetMatches, importFleet, previewDepartmentMapping, importDepartmentMapping, getProjects, importCaltransProjectCsv } from '../api';
 
 const SiteImporter = () => {
   const [file, setFile] = useState(null);
@@ -18,6 +18,12 @@ const SiteImporter = () => {
   const [deptImportLoading, setDeptImportLoading] = useState(false);
   const [deptImportResult, setDeptImportResult] = useState(null);
   const fileInputRef = useRef(null);
+  // Caltrans import state
+  const [caltransFile, setCaltransFile] = useState(null);
+  const [caltransImporting, setCaltransImporting] = useState(false);
+  const [caltransResult, setCaltransResult] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
 
   const handleFileChange = (e) => {
     setFile(e.target.files?.[0] || null);
@@ -97,6 +103,41 @@ const SiteImporter = () => {
     return Math.max(0, Math.min(1, n));
   };
 
+  // Load projects for dropdown
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await getProjects();
+        setProjects(Array.isArray(res.data) ? res.data : []);
+      } catch (e) {
+        console.error('Failed to load projects', e);
+      }
+    })();
+  }, []);
+
+  const handleCaltransFileChange = (e) => {
+    setCaltransFile(e.target.files?.[0] || null);
+  };
+
+  const doImportCaltrans = async () => {
+    if (!selectedProjectId) { alert('Select a project first'); return; }
+    if (!caltransFile) { alert('Select a CSV file first'); return; }
+    setCaltransImporting(true);
+    setCaltransResult(null);
+    try {
+      const res = await importCaltransProjectCsv(selectedProjectId, caltransFile);
+      setCaltransResult(res.data);
+      const d = res.data || {};
+      alert(`Caltrans import complete. Sites added to project: ${d.sites_added_to_project ?? 0}. Statuses created: ${d.statuses_created ?? 0}. Updated: ${d.statuses_updated ?? 0}.`);
+    } catch (e) {
+      console.error('Caltrans import failed', e);
+      alert(e.response?.data?.error || 'Caltrans import failed');
+    } finally {
+      setCaltransImporting(false);
+      setCaltransFile(null);
+    }
+  };
+
   const doPreviewDepartments = async () => {
     const conf = clampConfidence(deptMinConf);
     setDeptPreviewLoading(true);
@@ -133,6 +174,53 @@ const SiteImporter = () => {
   return (
     <div className="container" style={{ paddingTop: '24px' }}>
       <h2 className="page-header">Imports</h2>
+      <div className="card" style={{ marginBottom: '16px' }}>
+        <h4 style={{ marginTop:0 }}>Caltrans Project Tracker</h4>
+        <p style={{ marginTop: 0 }}>
+          Upload the Caltrans Project Tracker CSV to add/match sites to a selected project by address and import dated status entries.
+          Date tokens like <em>9/22</em> are treated as 2025-09-22. The first undated segment assumes 2025-01-01.
+        </p>
+        <div className="flex-row gap-sm" style={{ flexWrap:'wrap', alignItems:'center' }}>
+          <label><strong>Project:</strong></label>
+          <select value={selectedProjectId} onChange={(e)=>setSelectedProjectId(e.target.value)} className="input">
+            <option value="">Select a project…</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleCaltransFileChange}
+          />
+          <button className="btn" onClick={doImportCaltrans} disabled={caltransImporting || !caltransFile || !selectedProjectId}>
+            {caltransImporting ? 'Importing…' : (caltransFile ? `Import ${caltransFile.name}` : 'Import CSV')}
+          </button>
+        </div>
+        {caltransResult && (
+          <div style={{ marginTop:'8px' }}>
+            <div className="flex-row gap-md" style={{ flexWrap:'wrap' }}>
+              <div><strong>Rows:</strong> {caltransResult.rows_processed ?? 0}</div>
+              <div><strong>Sites Created:</strong> {caltransResult.sites_created ?? 0}</div>
+              <div><strong>Added to Project:</strong> {caltransResult.sites_added_to_project ?? 0}</div>
+              <div><strong>Status Created:</strong> {caltransResult.statuses_created ?? 0}</div>
+              <div><strong>Status Updated:</strong> {caltransResult.statuses_updated ?? 0}</div>
+              <div><strong>Skipped:</strong> {caltransResult.skipped ?? 0}</div>
+            </div>
+            {Array.isArray(caltransResult.errors) && caltransResult.errors.length > 0 && (
+              <div style={{ marginTop:'8px' }}>
+                <strong>Errors (first {Math.min(10, caltransResult.errors.length)}):</strong>
+                <ul style={{ margin:'8px 0 0 16px' }}>
+                  {caltransResult.errors.slice(0,10).map((e,i)=>(
+                    <li key={i}>Row {e.row}: {String(e.error || 'Unknown error')}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="card" style={{ marginBottom: '16px' }}>
         <h4 style={{ marginTop:0 }}>Import from GeoJSON</h4>
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>

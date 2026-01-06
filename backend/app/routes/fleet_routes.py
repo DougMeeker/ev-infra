@@ -256,14 +256,24 @@ def import_fleet():
                     skipped += 1
                     continue
 
-                existing = Equipment.query.filter_by(site_id=site.id, equipment_id=eq_id).first()
+                # Upsert globally by equipment_id to prevent duplicates across sites
+                existing = Equipment.query.filter_by(equipment_id=eq_id).order_by(Equipment.id).first()
                 # Use the catalog's canonical mc_code
                 canonical_mc = catalog.mc_code if catalog else mc_code
                 if existing:
+                    # Move/align to matched site and update metadata
+                    existing.site_id = site.id
                     existing.mc_code = canonical_mc
-                    existing.department_id = (dept_id or existing.department_id)
+                    # Merge department_id tokens uniquely
+                    if dept_id:
+                        current = (existing.department_id or '').strip()
+                        tokens = [t.strip() for t in current.split(',') if t.strip()]
+                        if dept_id not in tokens:
+                            tokens.append(dept_id)
+                        existing.department_id = ','.join(tokens) if tokens else None
                     updated += 1
                 else:
+                    # Create new equipment entry
                     eq = Equipment(
                         site_id=site.id,
                         mc_code=canonical_mc,

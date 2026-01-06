@@ -7,7 +7,6 @@ import StepsSection from '../components/StepsSection';
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import {
   getProjects,
-  createProject,
   updateProject,
   deleteProject,
   getSites,
@@ -19,7 +18,6 @@ import {
   createProjectStep,
   updateProjectStep,
   deleteProjectStep,
-  getProjectSiteStatuses,
   createProjectSiteStatus,
   getAggregateMetrics,
 } from '../api';
@@ -31,13 +29,11 @@ export default function ProjectsManager() {
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
-  const [newProject, setNewProject] = useState({ name: '', description: '' });
   const [editProject, setEditProject] = useState({ name: '', description: '' });
   const [assignment, setAssignment] = useState({ siteId: '', siteName: '' });
   const [siteSearch, setSiteSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [loadingProjects, setLoadingProjects] = useState(false);
-  const [loadingProjectSites, setLoadingProjectSites] = useState(false);
   const [latestStatuses, setLatestStatuses] = useState([]);
   const [sortMode, setSortMode] = useState('name'); // 'name' | 'status'
   const [projectSites, setProjectSites] = useState([]);
@@ -55,8 +51,6 @@ export default function ProjectsManager() {
     const base = [2, 6, 12];
     return base.map(n => Math.max(1, gridCols * n));
   }, [gridCols]);
-  const [statuses, setStatuses] = useState([]);
-  const [loadingStatuses, setLoadingStatuses] = useState(false);
   const [statusForm, setStatusForm] = useState({ current_step: '', status_message: '', status_date: new Date().toISOString().slice(0,10), estimated_cost: '', actual_cost: '' });
   const [showStatusEditor, setShowStatusEditor] = useState(false);
   const [projectAverages, setProjectAverages] = useState({});
@@ -192,11 +186,10 @@ export default function ProjectsManager() {
       setSitesPageSize(nearest);
       setSitesPage(1);
     }
-  }, [pageSizeOptions]);
+  }, [pageSizeOptions, sitesPageSize]);
 
   const loadProjectSites = useCallback(async () => {
     if (!selectedProjectId) return;
-    setLoadingProjectSites(true);
     try {
       // Load assigned sites with server-side search + pagination
       const { data } = await getProjectSites(selectedProjectId, {
@@ -217,7 +210,6 @@ export default function ProjectsManager() {
       const proj = projects.find(p => String(p.id) === String(selectedProjectId));
       if (proj) setEditProject({ name: proj.name || '', description: proj.description || '' });
     } finally {
-      setLoadingProjectSites(false);
     }
   }, [selectedProjectId, debouncedSearch, sitesPage, sitesPageSize, projects]);
 
@@ -241,17 +233,7 @@ export default function ProjectsManager() {
     })();
   }, [selectedProjectId, latestStatuses, steps.length, projects]);
 
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    const name = newProject.name.trim();
-    if (!name) return;
-    const payload = { name, description: newProject.description?.trim() || undefined };
-    const { data: created } = await createProject(payload);
-    setNewProject({ name: '', description: '' });
-    await loadProjects();
-    setSelectedProjectId(created.id);
-    navigate(`/project/${created.id}`);
-  };
+  // Create project handler is not currently used by the UI; remove to satisfy lint
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete project?')) return;
@@ -356,19 +338,7 @@ export default function ProjectsManager() {
       setAssignment({ siteId: '', siteName: '' });
     }
   };
-  // Load status history when a site is selected
-  useEffect(() => {
-    (async () => {
-      if (!selectedProjectId || !selectedSiteId) { setStatuses([]); return; }
-      setLoadingStatuses(true);
-      try {
-        const { data } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
-        setStatuses(data || []);
-      } finally {
-        setLoadingStatuses(false);
-      }
-    })();
-  }, [selectedProjectId, selectedSiteId]);
+  // Status history is no longer rendered here; skipping its fetch to reduce unused state
 
   const submitStatus = async (e) => {
     e.preventDefault();
@@ -382,14 +352,7 @@ export default function ProjectsManager() {
     };
     await createProjectSiteStatus(selectedProjectId, selectedSiteId, payload);
     setStatusForm({ current_step: '', status_message: '', status_date: new Date().toISOString().slice(0,10), estimated_cost: '', actual_cost: '' });
-    // Reload statuses and latest
-    setLoadingStatuses(true);
-    try {
-      const { data } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
-      setStatuses(data || []);
-    } finally {
-      setLoadingStatuses(false);
-    }
+    // Reload latest statuses for shading
     const { data: latest } = await getLatestProjectStatuses(selectedProjectId);
     setLatestStatuses(latest || []);
     // Removed historyRef scroll (no linked element)
