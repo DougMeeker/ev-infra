@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from ..extensions import db
 from ..models import Site, Equipment, EquipmentCatalog
+from ..services.utilization_service import import_utilization
 import csv
 import os
 import math
@@ -299,3 +300,14 @@ def import_fleet():
         'skipped': skipped,
         'errors': errors[:25]
     }, 200
+
+
+@fleet_bp.route("/usage/import", methods=["POST"])
+def usage_import():
+    """Import GPS Vehicle Utilization CSV (month inferred from filename).
+    Accepts multipart/form-data with field name 'file'.
+    """
+    if 'file' not in request.files:
+        return {"error": "No file provided (field 'file')"}, 400
+    file_storage = request.files['file']
+    return import_utilization(file_storage)

@@ -102,6 +102,7 @@ Recent migrations include:
 - Add `project_steps` table
 - Drop `projects.total_steps` (derived from steps)
 - Drop `project_steps.due_date` (use per-site status dates instead)
+- Make `equipment_usage` monthly and add `driving_hours`; rename `equipment.downtime_hours` to `driving_hours` (2026-01-08)
 
 ### Notes
 
@@ -194,6 +195,27 @@ Example response:
 ]
 
 ### Frontend Pagination
+
+### Vehicle Utilization Import (Monthly)
+
+- Backend endpoint: `POST /api/fleet/usage/import`
+- Accepts `multipart/form-data` with field `file` and infers year/month from filename pattern like `GPS-Vehicle-Utilization-YYYY-MM.csv`.
+- Upserts monthly `equipment_usage` rows by `equipment_id`, including `miles` and `driving_hours`.
+
+Windows (PowerShell) example:
+```powershell
+# From project root
+cd frontend
+# Use the API helper in the UI or call directly via curl
+
+# Using curl with a local CSV
+curl -F file=@../GPS-Vehicle-Utilization-2022-12.csv http://localhost:5000/api/fleet/usage/import
+```
+
+Frontend changes:
+- `Downtime Hrs` field renamed to `Driving Hrs (annual)`
+- Vehicle Usage now supports Year+Month, with optional Driving Hours per month.
+
 
 On the Home page a table lists site capacity and demand metrics with controls:
 - Prev / Next page buttons

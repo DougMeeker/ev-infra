@@ -95,7 +95,7 @@ export const getEquipmentDetails = (equipmentId) => axios.get(`${API_BASE_URL}/s
 export const updateEquipmentDetails = (equipmentId, payload) => axios.put(`${API_BASE_URL}/sites/equipment/${equipmentId}`, payload);
 export const deleteEquipmentItem = (equipmentId) => axios.delete(`${API_BASE_URL}/sites/equipment/${equipmentId}`);
 export const getEquipmentUsage = (equipmentId) => axios.get(`${API_BASE_URL}/sites/equipment/${equipmentId}/usage`);
-export const upsertEquipmentUsage = (equipmentId, { year, miles }) => axios.post(`${API_BASE_URL}/sites/equipment/${equipmentId}/usage`, { year, miles });
+export const upsertEquipmentUsage = (equipmentId, { year, month, miles, driving_hours, days_utilized }) => axios.post(`${API_BASE_URL}/sites/equipment/${equipmentId}/usage`, { year, month, miles, driving_hours, days_utilized });
 
 // Charger endpoints
 export const getChargers = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}/chargers`);
@@ -198,4 +198,11 @@ export const importCaltransProjectCsv = (projectId, file) => {
 	return axios.post(`${API_BASE_URL}/projects/${projectId}/import-caltrans`, formData, {
 		headers: { 'Content-Type': 'multipart/form-data' },
 	});
+};
+
+// Vehicle utilization import (monthly)
+export const importVehicleUtilization = (file) => {
+	const formData = new FormData();
+	formData.append('file', file);
+	return axios.post(`${API_BASE_URL}/fleet/usage/import`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 };

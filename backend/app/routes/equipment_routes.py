@@ -1,5 +1,8 @@
 from datetime import datetime
 from flask import request
+from sqlalchemy import func
+from ..extensions import db
+from ..models import Equipment, EquipmentUsage
 from .site_routes import site_bp
 from ..services.equipment_service import (
     list_equipment as svc_list_equipment,
@@ -17,7 +20,15 @@ from ..services.equipment_service import (
 def list_equipment(site_id):
     year = request.args.get('year')
     try:
-        target_year = int(year) if year else (datetime.utcnow().year - 1)
+        if year:
+            target_year = int(year)
+        else:
+            # Use latest available usage year for this site's equipment
+            latest_year = db.session.query(func.max(EquipmentUsage.year))\
+                .join(Equipment, Equipment.id == EquipmentUsage.equipment_id)\
+                .filter(Equipment.site_id == site_id)\
+                .scalar()
+            target_year = int(latest_year) if latest_year is not None else (datetime.utcnow().year - 1)
     except ValueError:
         target_year = datetime.utcnow().year - 1
     # Optional pagination
@@ -72,7 +83,14 @@ def upsert_equipment_usage(equipment_id):
 def site_equipment_energy(site_id):
     year_param = request.args.get('year')
     try:
-        target_year = int(year_param) if year_param else (datetime.utcnow().year - 1)
+        if year_param:
+            target_year = int(year_param)
+        else:
+            latest_year = db.session.query(func.max(EquipmentUsage.year))\
+                .join(Equipment, Equipment.id == EquipmentUsage.equipment_id)\
+                .filter(Equipment.site_id == site_id)\
+                .scalar()
+            target_year = int(latest_year) if latest_year is not None else (datetime.utcnow().year - 1)
     except ValueError:
         target_year = datetime.utcnow().year - 1
     return svc_site_equipment_energy(site_id, target_year)

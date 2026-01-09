@@ -106,6 +106,7 @@ class EquipmentCategory(db.Model):
     description = db.Column(db.String(128), nullable=False)
     # Moved from EquipmentCatalog: energy factor per category
     energy_per_mile = db.Column(db.Float)  # kWh per mile (nullable until set)
+    miles_per_kwh = db.Column(db.Float)    # miles per kWh (optional; if set, overrides energy_per_mile via inversion)
 
     def to_dict(self):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -120,7 +121,7 @@ class Equipment(db.Model):
     mc_code = db.Column(db.String(16), db.ForeignKey('equipment_catalog.mc_code'), nullable=False, index=True)
     department_id = db.Column(db.String(32))  # optional owning department
     annual_miles = db.Column(db.Float)  # projected annual miles (overrides usage for energy calcs if set)
-    downtime_hours = db.Column(db.Float)  # annual downtime hours (reduces operating hours for kW calc)
+    driving_hours = db.Column(db.Float)  # annual driving hours used for average power calc
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -142,12 +143,15 @@ class EquipmentUsage(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     equipment_id = db.Column(db.Integer, db.ForeignKey('equipment.id'), nullable=False, index=True)
     year = db.Column(db.Integer, nullable=False)
-    miles = db.Column(db.Float)  # miles driven in the year
+    month = db.Column(db.Integer, nullable=False)  # 1-12, monthly usage
+    miles = db.Column(db.Float)  # miles driven in the month
+    driving_hours = db.Column(db.Float)  # hours driven in the month
+    days_utilized = db.Column(db.Integer)  # number of days the vehicle was utilized in the month
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
-        db.UniqueConstraint('equipment_id', 'year', name='uq_equipment_year'),
+        db.UniqueConstraint('equipment_id', 'year', 'month', name='uq_equipment_year_month'),
     )
 
     equipment = relationship('Equipment', back_populates='usage_entries')

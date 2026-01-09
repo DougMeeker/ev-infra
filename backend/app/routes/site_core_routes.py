@@ -2,7 +2,7 @@ from flask import jsonify, request
 from datetime import datetime, timedelta
 import math
 from .site_routes import site_bp
-from ..models import Site, UtilityBill, Charger, Equipment
+from ..models import Site, UtilityBill, Charger, Equipment, EquipmentUsage, EquipmentCatalog, EquipmentCategory
 from ..extensions import db
 from ..models import project_sites
 
@@ -180,7 +180,7 @@ def delete_site(site_id):
 
 @site_bp.route("/metrics/aggregate", methods=["GET"])
 def aggregate_site_metrics():
-        # Vehicle counts by site
+    # Vehicle counts by site
     vehicle_counts = {}
     try:
         from sqlalchemy import func
@@ -224,6 +224,71 @@ def aggregate_site_metrics():
     filtered_total = site_query.count()
     sites = site_query.all()
     site_ids = [s.id for s in sites]
+    # Precompute daily avg/max kWh per site for latest usage year in a single batched query
+    daily_metrics_by_site = {}
+    try:
+        if site_ids:
+            from sqlalchemy import func, case, and_
+            latest_years_sub = (
+                db.session.query(
+                    Equipment.site_id.label('site_id'),
+                    func.max(EquipmentUsage.year).label('latest_year')
+                )
+                .join(EquipmentUsage, Equipment.id == EquipmentUsage.equipment_id)
+                .filter(Equipment.site_id.in_(site_ids))
+                .group_by(Equipment.site_id)
+            ).subquery()
+
+            # kWh per mile factor: prefer energy_per_mile, else invert miles_per_kwh
+            kwh_per_mile = case(
+                (
+                    and_(EquipmentCategory.energy_per_mile.isnot(None), EquipmentCategory.energy_per_mile > 0),
+                    EquipmentCategory.energy_per_mile
+                ),
+                else_=case(
+                    (
+                        and_(EquipmentCategory.miles_per_kwh.isnot(None), EquipmentCategory.miles_per_kwh > 0),
+                        (1.0 / EquipmentCategory.miles_per_kwh)
+                    ),
+                    else_=None
+                )
+            )
+
+            month_energy = (EquipmentUsage.miles * kwh_per_mile)
+            daily_value = month_energy / func.nullif(EquipmentUsage.days_utilized, 0)
+
+            agg = (
+                db.session.query(
+                    Equipment.site_id.label('site_id'),
+                    func.max(daily_value).label('daily_max'),
+                    func.sum(
+                        case((EquipmentUsage.days_utilized > 0, month_energy), else_=0.0)
+                    ).label('total_energy'),
+                    func.sum(
+                        case((EquipmentUsage.days_utilized > 0, EquipmentUsage.days_utilized), else_=0)
+                    ).label('total_days')
+                )
+                .join(Equipment, Equipment.id == EquipmentUsage.equipment_id)
+                .join(latest_years_sub, and_(latest_years_sub.c.site_id == Equipment.site_id, latest_years_sub.c.latest_year == EquipmentUsage.year))
+                .outerjoin(EquipmentCatalog, Equipment.mc_code == EquipmentCatalog.mc_code)
+                .outerjoin(EquipmentCategory, EquipmentCatalog.equipment_category_code == EquipmentCategory.code)
+                .filter(Equipment.site_id.in_(site_ids))
+                .group_by(Equipment.site_id)
+                .all()
+            )
+            for site_id, daily_max, total_energy, total_days in agg:
+                avg_val = None
+                try:
+                    if total_days and total_days > 0 and total_energy is not None:
+                        avg_val = float(total_energy) / float(total_days)
+                except Exception:
+                    avg_val = None
+                daily_metrics_by_site[int(site_id)] = {
+                    'site_daily_max_kwh': round(float(daily_max), 3) if daily_max is not None else None,
+                    'site_daily_avg_kwh': round(avg_val, 3) if avg_val is not None else None,
+                }
+    except Exception:
+        daily_metrics_by_site = {}
     bills = UtilityBill.query.filter(UtilityBill.site_id.in_(site_ids), UtilityBill.is_deleted.is_(False)).all()
     chargers = Charger.query.filter(Charger.site_id.in_(site_ids)).all()
     charger_totals = {}
@@ -259,7 +324,7 @@ def aggregate_site_metrics():
         available_capacity_kw = None
         if theoretical_capacity_kw is not None:
             available_capacity_kw = max(theoretical_capacity_kw - last_year_peak_kw, 0)
-        rows.append({
+        row = {
             # identifiers
             "site_id": s.id,
             "id": s.id,
@@ -286,7 +351,15 @@ def aggregate_site_metrics():
             "total_charger_kw": round(charger_totals.get(s.id, 0.0), 3),
             "installed_charger_kw": round(charger_installed_totals.get(s.id, 0.0), 3),
             "vehicle_count": vehicle_counts.get(s.id, 0)
-        })
+        }
+        # Attach precomputed daily metrics if available
+        dm = daily_metrics_by_site.get(s.id)
+        if dm:
+            if dm.get('site_daily_max_kwh') is not None:
+                row['site_daily_max_kwh'] = dm['site_daily_max_kwh']
+            if dm.get('site_daily_avg_kwh') is not None:
+                row['site_daily_avg_kwh'] = dm['site_daily_avg_kwh']
+        rows.append(row)
 
     def sort_key(row):
         val = None
@@ -307,6 +380,10 @@ def aggregate_site_metrics():
             return val.lower()
         elif sort_field == 'vehicle_count':
             val = row.get('vehicle_count')
+        elif sort_field == 'site_daily_max_kwh':
+            val = row.get('site_daily_max_kwh')
+        elif sort_field == 'site_daily_avg_kwh':
+            val = row.get('site_daily_avg_kwh')
         if val is None:
             return -1 if order != 'asc' else float('inf')
         return val

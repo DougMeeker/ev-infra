@@ -10,9 +10,9 @@ const VehicleDetails = () => {
   const [vehicle, setVehicle] = useState(null);
   const [sites, setSites] = useState([]);
   const [catalog, setCatalog] = useState([]);
-  const [editing, setEditing] = useState({ equipment_id: '', site_id: '', mc_code: '', department_id: '', annual_miles: '', downtime_hours: '' });
+    const [editing, setEditing] = useState({ equipment_id: '', site_id: '', mc_code: '', department_id: '', annual_miles: '', driving_hours: '' });
   const [usage, setUsage] = useState([]);
-  const [newUsage, setNewUsage] = useState({ year: String(lastYear), miles: '' });
+  const [newUsage, setNewUsage] = useState({ year: String(lastYear), month: '12', miles: '', driving_hours: '', days_utilized: '' });
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
@@ -34,7 +34,7 @@ const VehicleDetails = () => {
         mc_code: vehRes.data.mc_code ?? '',
         department_id: vehRes.data.department_id ?? '',
         annual_miles: vehRes.data.annual_miles ?? '',
-        downtime_hours: vehRes.data.downtime_hours ?? '',
+        driving_hours: vehRes.data.driving_hours ?? '',
       });
     } catch (e) {
       console.error('Load vehicle failed', e);
@@ -52,7 +52,7 @@ const VehicleDetails = () => {
       mc_code: editing.mc_code || undefined,
       department_id: editing.department_id !== '' ? editing.department_id : null,
       annual_miles: editing.annual_miles !== '' ? Number(editing.annual_miles) : null,
-      downtime_hours: editing.downtime_hours !== '' ? Number(editing.downtime_hours) : null,
+        driving_hours: editing.driving_hours !== '' ? Number(editing.driving_hours) : null,
     };
     try {
       await updateEquipmentDetails(Number(id), payload);
@@ -63,13 +63,16 @@ const VehicleDetails = () => {
   };
 
   const addUsage = async () => {
-    if (!newUsage.year || newUsage.miles === '') { alert('Year and miles required'); return; }
+    if (!newUsage.year || !newUsage.month || newUsage.miles === '') { alert('Year, month, and miles required'); return; }
     const yearNum = Number(newUsage.year);
+      const monthNum = Number(newUsage.month);
     const milesNum = Number(newUsage.miles);
-    if (Number.isNaN(yearNum) || Number.isNaN(milesNum)) { alert('Enter valid numbers'); return; }
+    const hoursNum = newUsage.driving_hours !== '' ? Number(newUsage.driving_hours) : undefined;
+    const daysNum = newUsage.days_utilized !== '' ? Number(newUsage.days_utilized) : undefined;
+      if (Number.isNaN(yearNum) || Number.isNaN(monthNum) || monthNum < 1 || monthNum > 12 || Number.isNaN(milesNum)) { alert('Enter valid numbers'); return; }
     try {
-      await upsertEquipmentUsage(Number(id), { year: yearNum, miles: milesNum });
-      setNewUsage({ year: String(lastYear), miles: '' });
+        await upsertEquipmentUsage(Number(id), { year: yearNum, month: monthNum, miles: milesNum, driving_hours: hoursNum, days_utilized: daysNum });
+        setNewUsage({ year: String(lastYear), month: '12', miles: '', driving_hours: '', days_utilized: '' });
       await load();
     } catch (e) {
       alert('Usage save failed');
@@ -109,7 +112,7 @@ const VehicleDetails = () => {
           </select>
           <input className="input" style={{ width: 140 }} placeholder="Dept ID" value={editing.department_id} onChange={e=>setEditing(prev=>({ ...prev, department_id: e.target.value }))} />
           <input className="input" style={{ width: 140 }} placeholder="Annual Miles" value={editing.annual_miles} onChange={e=>setEditing(prev=>({ ...prev, annual_miles: e.target.value }))} />
-          <input className="input" style={{ width: 140 }} placeholder="Downtime Hrs" value={editing.downtime_hours} onChange={e=>setEditing(prev=>({ ...prev, downtime_hours: e.target.value }))} />
+          <input className="input" style={{ width: 140 }} placeholder="Driving Hrs (annual)" value={editing.driving_hours} onChange={e=>setEditing(prev=>({ ...prev, driving_hours: e.target.value }))} />
           <button className="btn" onClick={saveMeta}>Save</button>
         </div>
       </div>
@@ -120,24 +123,33 @@ const VehicleDetails = () => {
           <thead>
             <tr>
               <th>Year</th>
+              <th>Month</th>
               <th>Miles</th>
+              <th>Driving Hours</th>
+              <th>Days Utilized</th>
             </tr>
           </thead>
           <tbody>
             {usage.map(u => (
               <tr key={u.id}>
                 <td>{u.year}</td>
+                <td>{u.month ?? '—'}</td>
                 <td>{u.miles ?? '—'}</td>
+                <td>{(u.driving_hours != null && !Number.isNaN(u.driving_hours)) ? Number(u.driving_hours).toFixed(1) : '—'}</td>
+                <td>{u.days_utilized ?? '—'}</td>
               </tr>
             ))}
             {usage.length === 0 && (
-              <tr><td colSpan={2} className="table-empty">No usage yet</td></tr>
+              <tr><td colSpan={4} className="table-empty">No usage yet</td></tr>
             )}
           </tbody>
         </table>
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
           <input className="input" style={{ width: 90 }} placeholder="Year" value={newUsage.year} onChange={e=>setNewUsage(prev=>({ ...prev, year: e.target.value }))} />
-          <input className="input" style={{ width: 140 }} placeholder="Miles" value={newUsage.miles} onChange={e=>setNewUsage(prev=>({ ...prev, miles: e.target.value }))} />
+          <input className="input" style={{ width: 70 }} placeholder="Month" value={newUsage.month} onChange={e=>setNewUsage(prev=>({ ...prev, month: e.target.value }))} />
+          <input className="input" style={{ width: 120 }} placeholder="Miles" value={newUsage.miles} onChange={e=>setNewUsage(prev=>({ ...prev, miles: e.target.value }))} />
+          <input className="input" style={{ width: 160 }} placeholder="Driving Hours" value={newUsage.driving_hours} onChange={e=>setNewUsage(prev=>({ ...prev, driving_hours: e.target.value }))} />
+          <input className="input" style={{ width: 140 }} placeholder="Days Utilized" value={newUsage.days_utilized} onChange={e=>setNewUsage(prev=>({ ...prev, days_utilized: e.target.value }))} />
           <button className="btn" onClick={addUsage}>Add/Update Usage</button>
         </div>
       </div>

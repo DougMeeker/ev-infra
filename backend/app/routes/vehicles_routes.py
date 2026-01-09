@@ -119,7 +119,7 @@ def create_vehicle():
         equipment_id=ext_id,
         department_id=(data.get('department_id') or '').strip() or None,
         annual_miles=_parse_float(data.get('annual_miles')),
-        downtime_hours=_parse_float(data.get('downtime_hours')),
+        driving_hours=_parse_float(data.get('driving_hours')),
     )
     db.session.add(e)
     db.session.commit()
@@ -154,8 +154,8 @@ def update_vehicle(vehicle_id):
         e.department_id = (data.get('department_id') or '').strip() or None
     if 'annual_miles' in data:
         e.annual_miles = _parse_float(data.get('annual_miles'))
-    if 'downtime_hours' in data:
-        e.downtime_hours = _parse_float(data.get('downtime_hours'))
+    if 'driving_hours' in data:
+        e.driving_hours = _parse_float(data.get('driving_hours'))
     db.session.commit()
     return e.to_dict(), 200
 
