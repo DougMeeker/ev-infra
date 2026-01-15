@@ -206,3 +206,26 @@ export const importVehicleUtilization = (file) => {
 	formData.append('file', file);
 	return axios.post(`${API_BASE_URL}/fleet/usage/import`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 };
+
+// Files endpoints
+export const listFiles = ({ q = '', siteId = '' } = {}) => {
+	const params = new URLSearchParams();
+	if (q) params.append('q', q);
+	if (siteId) params.append('site_id', String(siteId));
+	return axios.get(`${API_BASE_URL}/files/?${params.toString()}`);
+};
+
+export const uploadFile = ({ file, description = '', siteIds = [] }) => {
+	const formData = new FormData();
+	formData.append('file', file);
+	if (description) formData.append('description', description);
+	if (siteIds && siteIds.length) formData.append('site_ids', siteIds.join(','));
+	return axios.post(`${API_BASE_URL}/files/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+};
+
+export const getSiteFiles = (siteId) => axios.get(`${API_BASE_URL}/files/by-site/${siteId}`);
+export const assignFileSites = (fileId, siteIds) => axios.post(`${API_BASE_URL}/files/${fileId}/sites`, { site_ids: siteIds });
+export const unassignFileSite = (fileId, siteId) => axios.delete(`${API_BASE_URL}/files/${fileId}/sites/${siteId}`);
+export const deleteFile = (fileId) => axios.delete(`${API_BASE_URL}/files/${fileId}`);
+export const updateFile = (fileId, payload) => axios.put(`${API_BASE_URL}/files/${fileId}`, payload);
+export const fileDownloadUrl = (fileId) => `${API_BASE_URL}/files/${fileId}/download`;

@@ -319,8 +319,8 @@ const Home = () => {
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('last_year_peak_kw')}>Peak kW (Last Yr) {sort==='last_year_peak_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('theoretical_capacity_kw')}>Capacity kW {sort==='theoretical_capacity_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('total_charger_kw')}>Total Charger kW {sort==='total_charger_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
-                <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('site_daily_avg_kwh')}>Daily Avg kWh {sort==='site_daily_avg_kwh' ? (order==='desc'?'▼':'▲') : ''}</th>
-                <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('site_daily_max_kwh')}>Daily Max kWh {sort==='site_daily_max_kwh' ? (order==='desc'?'▼':'▲') : ''}</th>
+                <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('site_daily_avg_kwh')}>Vehicle Daily Avg kWh {sort==='site_daily_avg_kwh' ? (order==='desc'?'▼':'▲') : ''}</th>
+                <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('site_daily_max_kwh')}>Vehicle Daily Max kWh {sort==='site_daily_max_kwh' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('vehicle_count')}>Vehicles {sort==='vehicle_count' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th className="table-sortable" style={{textAlign:'right'}} onClick={() => handleSort('installed_charger_kw')}>Installed Charger kW {sort==='installed_charger_kw' ? (order==='desc'?'▼':'▲') : ''}</th>
                 <th style={{textAlign:'center'}}>Info</th>

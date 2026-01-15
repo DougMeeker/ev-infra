@@ -12,6 +12,7 @@ import ChargersManager from "./pages/ChargersManager";
 import VehiclesManager from "./pages/VehiclesManager";
 import VehicleDetails from './pages/VehicleDetails';
 import SitesManager from './pages/SitesManager';
+import FilesPage from './pages/Files';
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
         <Route path="/vehicles" element={<VehiclesManager />} />
         <Route path="/vehicle/:id" element={<VehicleDetails />} />
         <Route path="/sites/manage" element={<SitesManager />} />
+        <Route path="/files" element={<FilesPage />} />
       </Routes>
     </Router>
   );

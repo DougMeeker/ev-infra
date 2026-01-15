@@ -10,6 +10,14 @@ project_sites = db.Table(
     db.UniqueConstraint('project_id', 'site_id', name='uq_project_site')
 )
 
+# Association table for many-to-many relation between sites and files
+site_files = db.Table(
+    'site_files',
+    db.Column('site_id', db.Integer, db.ForeignKey('sites.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('file_id', db.Integer, db.ForeignKey('files.id', ondelete='CASCADE'), primary_key=True),
+    db.UniqueConstraint('site_id', 'file_id', name='uq_site_file')
+)
+
 class Site(db.Model):
     __tablename__ = 'sites'
 
@@ -40,6 +48,8 @@ class Site(db.Model):
     projects = relationship('Project', secondary='project_sites', back_populates='sites')
     # Relationship to per-site project status updates
     project_statuses = relationship('ProjectStatus', back_populates='site', cascade='all, delete-orphan')
+    # Many-to-many relationship to files/documents
+    files = relationship('File', secondary='site_files', back_populates='sites')
 
     def to_dict(self, include_bills: bool = False):
         data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -275,4 +285,28 @@ class Charger(db.Model):
                 data['updated_at'] = data['updated_at'].isoformat()
         except Exception:
             pass
+        return data
+
+
+class File(db.Model):
+    __tablename__ = 'files'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    original_name = db.Column(db.String(255), nullable=False)
+    stored_name = db.Column(db.String(255), nullable=False, unique=True)
+    content_type = db.Column(db.String(128))
+    size_bytes = db.Column(db.Integer)
+    description = db.Column(db.Text)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Optional user field; not implemented yet
+    # uploaded_by = db.Column(db.String(128))
+
+    # Reverse relationship to sites via association
+    sites = relationship('Site', secondary='site_files', back_populates='files')
+
+    def to_dict(self, include_sites: bool = False):
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        if include_sites:
+            data['site_ids'] = [s.id for s in self.sites]
+            data['sites'] = [{'id': s.id, 'name': s.name} for s in self.sites]
         return data

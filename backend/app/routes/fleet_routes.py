@@ -5,6 +5,7 @@ from ..services.utilization_service import import_utilization
 import csv
 import os
 import math
+import sqlalchemy as sa
 
 fleet_bp = Blueprint("fleet", __name__)
 
@@ -311,3 +312,468 @@ def usage_import():
         return {"error": "No file provided (field 'file')"}, 400
     file_storage = request.files['file']
     return import_utilization(file_storage)
+
+
+@fleet_bp.route("/telematics/mismatches", methods=["GET"])
+def telematics_mismatches():
+    """Return equipment/site mismatches based on telematics-inferred home site.
+
+    Query params:
+      - min_confidence: float, default 0.5
+      - limit: int, default 500
+      - refresh: bool/int, if truthy, refresh the materialized view first
+    """
+    # Params
+    try:
+        min_conf = float(request.args.get('min_confidence', 0.5) or 0.5)
+    except Exception:
+        min_conf = 0.5
+    try:
+        limit = int(request.args.get('limit', 500) or 500)
+        if limit <= 0:
+            limit = 500
+    except Exception:
+        limit = 500
+    do_refresh = request.args.get('refresh')
+    should_refresh = False
+    if isinstance(do_refresh, str):
+        should_refresh = do_refresh.lower() in ("1", "true", "yes", "y")
+    elif isinstance(do_refresh, (int, bool)):
+        should_refresh = bool(do_refresh)
+
+    # Optionally refresh the MV (non-concurrent for simplicity and broad compatibility)
+    if should_refresh:
+        try:
+            db.session.execute(sa.text("REFRESH MATERIALIZED VIEW public.fleet_telematics_site_inference"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        sql = sa.text(
+        """
+        SELECT
+          e.equipment_id,
+          e.site_id AS assigned_site_id,
+                    s1.name AS assigned_site_name,
+                    s1.address AS assigned_site_address,
+          i.vehicle_id,
+          i.inferred_site_id,
+                    s2.name AS inferred_site_name,
+                    s2.address AS inferred_site_address,
+          i.near_stops,
+          i.confidence
+        FROM public.fleet_telematics_site_inference i
+        JOIN public.equipment e
+          ON (i.vehicle_id ~ '^[0-9]+' AND e.equipment_id = i.vehicle_id::int)
+        JOIN public.sites s1 ON s1.id = e.site_id
+        LEFT JOIN public.sites s2 ON s2.id = i.inferred_site_id
+        WHERE i.confidence >= :min_conf
+          AND (e.site_id IS DISTINCT FROM i.inferred_site_id)
+        ORDER BY i.confidence DESC
+        LIMIT :lim
+        """
+    )
+    rows = db.session.execute(sql, {"min_conf": min_conf, "lim": limit}).mappings().all()
+    results = [dict(r) for r in rows]
+    # Round confidence for presentation
+    for r in results:
+        try:
+            r["confidence"] = round(float(r.get("confidence")), 3)
+        except Exception:
+            pass
+    return jsonify(results), 200
+
+
+@fleet_bp.route("/telematics/reassign", methods=["POST"])
+def telematics_reassign():
+    """Move high-confidence vehicles to the inferred site.
+
+    Body or query params:
+      - min_confidence: float, default 0.8
+      - max_changes: int, default 200
+      - dry_run: bool, default true (preview only)
+      - refresh: bool, optional (if true, refresh MV before computing)
+
+    Returns summary and (preview or applied) items.
+    """
+    # Parse params from query or JSON body
+    payload = request.get_json(silent=True) or {}
+    def pick(name, default=None):
+        return payload.get(name, request.args.get(name, default))
+    def to_float(v, d):
+        try:
+            return float(v)
+        except Exception:
+            return d
+    def to_int(v, d):
+        try:
+            v = int(v)
+            return v if v > 0 else d
+        except Exception:
+            return d
+    def to_bool(v, d):
+        if v is None:
+            return d
+        if isinstance(v, bool):
+            return v
+        s = str(v).lower()
+        return s in ("1", "true", "yes", "y")
+
+    min_conf = to_float(pick('min_confidence', 0.8), 0.8)
+    max_changes = to_int(pick('max_changes', 200), 200)
+    dry_run = to_bool(pick('dry_run', True), True)
+    refresh = to_bool(pick('refresh', False), False)
+
+    # Optionally refresh MV
+    if refresh:
+        try:
+            db.session.execute(sa.text("REFRESH MATERIALIZED VIEW public.fleet_telematics_site_inference"))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    # Build candidates using MV
+    candidates_sql = sa.text(
+        """
+        WITH candidates AS (
+          SELECT
+            e.id AS equipment_pk,
+            e.equipment_id,
+            e.site_id AS assigned_site_id,
+            s1.name AS assigned_site_name,
+            s1.address AS assigned_site_address,
+            i.inferred_site_id,
+            s2.name AS inferred_site_name,
+            s2.address AS inferred_site_address,
+            i.confidence
+          FROM public.fleet_telematics_site_inference i
+          JOIN public.equipment e
+            ON (i.vehicle_id ~ '^[0-9]+' AND e.equipment_id = i.vehicle_id::int)
+          JOIN public.sites s1 ON s1.id = e.site_id
+          LEFT JOIN public.sites s2 ON s2.id = i.inferred_site_id
+          WHERE i.confidence >= :min_conf
+            AND i.inferred_site_id IS NOT NULL
+            AND (e.site_id IS DISTINCT FROM i.inferred_site_id)
+          ORDER BY i.confidence DESC
+          LIMIT :lim
+        )
+        SELECT * FROM candidates
+        """
+    )
+    c_rows = db.session.execute(candidates_sql, {"min_conf": min_conf, "lim": max_changes}).mappings().all()
+    preview = [dict(r) for r in c_rows]
+    for r in preview:
+        try:
+            r["confidence"] = round(float(r.get("confidence")), 3)
+        except Exception:
+            pass
+
+    if dry_run or not preview:
+        return jsonify({
+            "dry_run": True,
+            "min_confidence": min_conf,
+            "max_changes": max_changes,
+            "count": len(preview),
+            "items": preview
+        }), 200
+
+    # Apply updates via CTE update
+    update_sql = sa.text(
+        """
+        WITH candidates AS (
+          SELECT
+            e.id AS equipment_pk,
+            e.equipment_id,
+            e.site_id AS old_site_id,
+            i.inferred_site_id,
+            i.confidence,
+            i.vehicle_id
+          FROM public.fleet_telematics_site_inference i
+          JOIN public.equipment e
+            ON (i.vehicle_id ~ '^[0-9]+' AND e.equipment_id = i.vehicle_id::int)
+          WHERE i.confidence >= :min_conf
+            AND i.inferred_site_id IS NOT NULL
+            AND (e.site_id IS DISTINCT FROM i.inferred_site_id)
+          ORDER BY i.confidence DESC
+          LIMIT :lim
+        )
+        UPDATE public.equipment e
+        SET site_id = c.inferred_site_id
+        FROM candidates c
+        WHERE e.id = c.equipment_pk
+        RETURNING e.id AS equipment_pk, e.equipment_id, c.vehicle_id, c.old_site_id, e.site_id AS new_site_id, c.confidence
+        """
+    )
+    try:
+        updated = db.session.execute(update_sql, {"min_conf": min_conf, "lim": max_changes}).mappings().all()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Failed to apply updates: {str(e)}"}), 500
+
+    # Insert audit records
+    actor = payload.get('actor') or request.args.get('actor') or 'system'
+    insert_sql = sa.text(
+        """
+        INSERT INTO public.equipment_site_reassign_audit
+          (equipment_id, vehicle_id, old_site_id, new_site_id, confidence, actor)
+        VALUES
+          (:equipment_id, :vehicle_id, :old_site_id, :new_site_id, :confidence, :actor)
+        """
+    )
+    inserted = 0
+    for row in updated:
+        params = {
+            "equipment_id": row.get("equipment_id"),
+            "vehicle_id": row.get("vehicle_id"),
+            "old_site_id": row.get("old_site_id"),
+            "new_site_id": row.get("new_site_id"),
+            "confidence": row.get("confidence"),
+            "actor": actor,
+        }
+        try:
+            db.session.execute(insert_sql, params)
+            inserted += 1
+        except Exception:
+            pass
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return jsonify({
+        "dry_run": False,
+        "min_confidence": min_conf,
+        "max_changes": max_changes,
+        "applied_count": len(updated),
+        "audit_inserted": inserted,
+        "preview_count": len(preview),
+        "applied_items": [dict(r) for r in updated]
+    }), 200
+
+
+@fleet_bp.route("/telematics/reassign/audit", methods=["GET"])
+def telematics_reassign_audit():
+    """List audit history for equipment site reassignments.
+
+    Query params:
+      - start: ISO date/time (inclusive)
+      - end: ISO date/time (inclusive)
+      - actor: filter by actor
+      - equipment_id: int
+      - old_site_id: int
+      - new_site_id: int
+      - limit: int (default 200)
+      - page: int (default 1)
+    """
+    def to_int(v, d):
+        try:
+            vv = int(v)
+            return vv if vv >= 0 else d
+        except Exception:
+            return d
+    limit = to_int(request.args.get("limit"), 200)
+    page = to_int(request.args.get("page"), 1)
+    if limit <= 0:
+        limit = 200
+    if page <= 0:
+        page = 1
+    offset = (page - 1) * limit
+
+    start = request.args.get("start")
+    end = request.args.get("end")
+    actor = request.args.get("actor")
+    equipment_id = request.args.get("equipment_id")
+    old_site_id = request.args.get("old_site_id")
+    new_site_id = request.args.get("new_site_id")
+
+    where = ["1=1"]
+    params = {"lim": limit, "off": offset}
+    if start:
+        where.append("a.performed_at >= :start")
+        params["start"] = start
+    if end:
+        where.append("a.performed_at <= :end")
+        params["end"] = end
+    if actor:
+        where.append("a.actor = :actor")
+        params["actor"] = actor
+    if equipment_id:
+        where.append("a.equipment_id = :equipment_id")
+        params["equipment_id"] = equipment_id
+    if old_site_id:
+        where.append("a.old_site_id = :old_site_id")
+        params["old_site_id"] = old_site_id
+    if new_site_id:
+        where.append("a.new_site_id = :new_site_id")
+        params["new_site_id"] = new_site_id
+
+    sql = sa.text(
+        f"""
+        SELECT
+          a.id,
+          a.equipment_id,
+          a.vehicle_id,
+          a.old_site_id,
+          s1.name AS old_site_name,
+          a.new_site_id,
+          s2.name AS new_site_name,
+          a.confidence,
+          a.actor,
+          a.performed_at
+        FROM public.equipment_site_reassign_audit a
+        LEFT JOIN public.sites s1 ON s1.id = a.old_site_id
+        LEFT JOIN public.sites s2 ON s2.id = a.new_site_id
+        WHERE {' AND '.join(where)}
+        ORDER BY a.performed_at DESC
+        LIMIT :lim OFFSET :off
+        """
+    )
+    rows = db.session.execute(sql, params).mappings().all()
+    items = [dict(r) for r in rows]
+    # Round confidence for presentation
+    for it in items:
+        try:
+            it["confidence"] = round(float(it.get("confidence")), 3)
+        except Exception:
+            pass
+    return jsonify({
+        "limit": limit,
+        "page": page,
+        "count": len(items),
+        "items": items,
+    }), 200
+
+
+@fleet_bp.route("/telematics/mismatches/live", methods=["GET"])
+def telematics_mismatches_live():
+        """Compute mismatches on the fly with tunable lookback and distance.
+
+        Query params:
+            - lookback_days: int, default 180
+            - max_km: float, default 5.0 (snap threshold)
+            - min_confidence: float, default 0.5
+            - limit: int, default 500
+        """
+        # Params
+        def _to_int(v, d):
+                try:
+                        return int(v)
+                except Exception:
+                        return d
+        def _to_float(v, d):
+                try:
+                        return float(v)
+                except Exception:
+                        return d
+        lookback_days = _to_int(request.args.get('lookback_days'), 180)
+        max_km = _to_float(request.args.get('max_km'), 5.0)
+        min_conf = _to_float(request.args.get('min_confidence'), 0.5)
+        limit = _to_int(request.args.get('limit'), 500)
+        if limit <= 0:
+                limit = 500
+
+        sql = sa.text(
+                """
+                WITH recent AS (
+                    SELECT
+                        f.*,
+                        COALESCE(
+                            f.stop_point_lat,
+                            NULLIF(TRIM(SPLIT_PART(f.stop_point_zone_center_latlon, ',', 1)), '')::double precision
+                        ) AS stop_lat,
+                        COALESCE(
+                            f.stop_point_lng,
+                            NULLIF(TRIM(SPLIT_PART(f.stop_point_zone_center_latlon, ',', 2)), '')::double precision
+                        ) AS stop_lng
+                    FROM public.fleet_daily_metrics f
+                    WHERE f.activity_ts >= NOW() - (:lookback_days || ' days')::interval
+                ),
+                filtered AS (
+                    SELECT * FROM recent WHERE stop_lat IS NOT NULL AND stop_lng IS NOT NULL
+                ),
+                nearest_site_per_stop AS (
+                    SELECT
+                        r.vehicle_id,
+                        r.activity_ts::date AS activity_date,
+                        s_near.site_id,
+                        s_near.site_name,
+                        s_near.dist_km
+                    FROM filtered r
+                    CROSS JOIN LATERAL (
+                        SELECT
+                            s.id AS site_id,
+                            s.name AS site_name,
+                            6371 * 2 * ASIN(
+                                SQRT(
+                                    POWER(SIN(RADIANS((s.latitude - r.stop_lat) / 2)), 2)
+                                    + COS(RADIANS(r.stop_lat)) * COS(RADIANS(s.latitude))
+                                    * POWER(SIN(RADIANS((s.longitude - r.stop_lng) / 2)), 2)
+                                )
+                            ) AS dist_km
+                        FROM public.sites s
+                        WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL
+                        ORDER BY dist_km
+                        LIMIT 1
+                    ) AS s_near
+                ),
+                near_snaps AS (
+                    SELECT n.*
+                    FROM nearest_site_per_stop n
+                    WHERE n.dist_km <= :max_km
+                ),
+                site_freq AS (
+                    SELECT
+                        vehicle_id,
+                        site_id,
+                        MIN(site_name) AS site_name,
+                        COUNT(*) AS near_stops,
+                        COUNT(*)::numeric / NULLIF(SUM(COUNT(*)) OVER (PARTITION BY vehicle_id), 0) AS freq
+                    FROM near_snaps
+                    GROUP BY vehicle_id, site_id
+                ),
+                inferred_site AS (
+                    SELECT DISTINCT ON (vehicle_id)
+                        vehicle_id,
+                        site_id AS inferred_site_id,
+                        site_name AS inferred_site_name,
+                        near_stops,
+                        freq AS confidence
+                    FROM site_freq
+                    ORDER BY vehicle_id, near_stops DESC, site_id
+                )
+                SELECT
+                    e.equipment_id,
+                    e.site_id AS assigned_site_id,
+                    s1.name AS assigned_site_name,
+                    s1.address AS assigned_site_address,
+                    i.vehicle_id,
+                    i.inferred_site_id,
+                    s2.name AS inferred_site_name,
+                    s2.address AS inferred_site_address,
+                    i.near_stops,
+                    i.confidence
+                FROM inferred_site i
+                JOIN public.equipment e
+                    ON (i.vehicle_id ~ '^[0-9]+' AND e.equipment_id = i.vehicle_id::int)
+                JOIN public.sites s1 ON s1.id = e.site_id
+                LEFT JOIN public.sites s2 ON s2.id = i.inferred_site_id
+                WHERE i.confidence >= :min_conf
+                    AND (e.site_id IS DISTINCT FROM i.inferred_site_id)
+                ORDER BY i.confidence DESC
+                LIMIT :lim
+                """
+        )
+        rows = db.session.execute(sql, {
+                "lookback_days": lookback_days,
+                "max_km": max_km,
+                "min_conf": min_conf,
+                "lim": limit
+        }).mappings().all()
+        results = [dict(r) for r in rows]
+        for r in results:
+                try:
+                        r["confidence"] = round(float(r.get("confidence")), 3)
+                except Exception:
+                        pass
+        return jsonify(results), 200

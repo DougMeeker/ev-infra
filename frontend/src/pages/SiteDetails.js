@@ -5,6 +5,7 @@ import EquipmentSection from "../components/EquipmentSection";
 import BillsSection from "../components/BillsSection";
 import ProjectsSection from "../components/ProjectsSection";
 import ChargersSection from "../components/ChargersSection";
+import FilesSection from "../components/FilesSection";
 const formatDate = (d) => {
     if (!d) return '';
     try {
@@ -28,6 +29,7 @@ const SiteDetails = () => {
     const [showChargers, setShowChargers] = useState(true);
     const [showEquipment, setShowEquipment] = useState(true);
     const [showBills, setShowBills] = useState(true);
+    const [showFiles, setShowFiles] = useState(true);
 
     useEffect(() => {
         getSite(id)
@@ -211,6 +213,15 @@ const SiteDetails = () => {
             </h3>
             {showBills && (
                 <BillsSection siteId={id} onTotalsChange={setBillsTotalEnergyKwh} />
+            )}
+
+            {/* Files Section */}
+            <hr />
+            <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowFiles(v => !v)}>
+                {showFiles ? '▼' : '▶'} Files
+            </h3>
+            {showFiles && (
+                <FilesSection siteId={id} />
             )}
         </div>
     );

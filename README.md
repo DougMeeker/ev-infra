@@ -27,6 +27,75 @@ flask run
 
 or flask --app run.py run
 
+## File Storage (Local vs MinIO)
+
+Uploads are stored via a storage adapter selectable by environment:
+
+- `local` (default): files saved under the backend `UPLOAD_FOLDER` and downloaded via the API.
+- `s3` (MinIO-compatible): files stored in an S3 bucket (e.g., MinIO); downloads use presigned URLs.
+
+### Switch Providers
+
+Windows PowerShell example (MinIO):
+
+```powershell
+# Backend env
+cd backend
+$env:STORAGE_PROVIDER = "s3"
+$env:S3_ENDPOINT_URL = "http://localhost:9000"        # MinIO endpoint
+$env:S3_BUCKET = "evinfra-uploads"                    # Ensure this bucket exists
+$env:S3_ACCESS_KEY = "<minio-access-key>"
+$env:S3_SECRET_KEY = "<minio-secret-key>"
+$env:S3_REGION_NAME = "us-east-1"
+$env:S3_USE_SSL = "false"                              # set "true" if using HTTPS
+$env:SIGNED_URL_TTL = "3600"                           # seconds
+
+# Install dependency
+pip install boto3
+
+# Run backend
+python run.py
+```
+
+To use local filesystem storage:
+
+```powershell
+cd backend
+$env:STORAGE_PROVIDER = "local"
+$env:UPLOAD_FOLDER = (Resolve-Path "./uploads").Path  # optional custom path
+python run.py
+```
+
+### Config Reference
+
+- `STORAGE_PROVIDER`: `local` | `s3`
+- Local:
+  - `UPLOAD_FOLDER`: directory for saved files
+- S3/MinIO:
+  - `S3_ENDPOINT_URL`, `S3_REGION_NAME`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_USE_SSL`
+  - `SIGNED_URL_TTL`: presigned URL lifetime in seconds
+
+### Production Notes
+
+- MinIO: create the bucket (e.g., `evinfra-uploads`) and a service account with write permissions.
+- No cloud required: MinIO runs on-prem; the adapter uses S3 API.
+- Permissions: with `local` storage, ensure the backend process identity has write access to `UPLOAD_FOLDER`.
+- Backups: with S3/MinIO, use bucket versioning/lifecycle; with local, include `UPLOAD_FOLDER` in backups.
+
+### Frontend Download Links
+
+The UI constructs download URLs against the API base (e.g., `http://localhost:5000/api/files/:id/download`). Avoid clicking raw relative `/api/...` links in the dev server (port 3000), as the SPA router will intercept.
+
+### Migrating Existing Local Uploads to MinIO
+
+1. Set `STORAGE_PROVIDER=s3` and MinIO env vars.
+2. Create the bucket in MinIO.
+3. Upload existing files from `backend/uploads` to the bucket keeping their filenames (keys).
+4. Ensure DB `files.stored_name` values match the object keys (default behavior already uses the stored filename).
+5. Restart backend.
+
+If you want, we can add a simple script to push `backend/uploads` into MinIO automatically and verify records.
+
 ## Utility Bills Feature
 ## Projects, Steps, and Status
 
@@ -483,3 +552,70 @@ Frontend:
 - Go to `Imports` → Fleet Vehicles card.
 - Click "Preview Matches" to review the first 25 suggested matches and confidence.
 - Click "Import Fleet" to create/update equipment records.
+
+## Telematics Site Verification & Reassignment
+
+Use telematics stops to infer each vehicle’s likely home site, compare against `equipment.site_id`, preview mismatches, and optionally reassign high-confidence vehicles. Responses include assigned and inferred site names and addresses.
+
+### Mismatches (Materialized View)
+- Queries `public.fleet_telematics_site_inference` created by migrations.
+- Add `refresh=1` to rebuild the MV before querying.
+
+```powershell
+# Refresh then list top mismatches with confidence >= 0.6
+curl "http://localhost:5000/api/fleet/telematics/mismatches?refresh=1&min_confidence=0.6&limit=100"
+```
+
+Fields (subset): `equipment_id`, `vehicle_id`, `assigned_site_id/name/address`, `inferred_site_id/name/address`, `near_stops`, `confidence`.
+
+### Mismatches (Live, tunable)
+- Computes inference on the fly with tunable window and distance.
+
+```powershell
+# 180-day window, snap within 5 km, confidence >= 0.5
+curl "http://localhost:5000/api/fleet/telematics/mismatches/live?lookback_days=180&max_km=5&min_confidence=0.5&limit=200"
+```
+
+Query params:
+- `lookback_days` (default 180)
+- `max_km` (default 5.0)
+- `min_confidence` (default 0.5)
+- `limit` (default 500)
+
+### Reassign Vehicles (Preview and Apply)
+- Preview candidates (dry run) or apply updates to move `equipment.site_id` to the inferred site for high-confidence rows.
+
+```powershell
+# Preview only (no writes):
+curl -X POST "http://localhost:5000/api/fleet/telematics/reassign?min_confidence=0.85&max_changes=100&dry_run=1"
+
+# Apply changes: refresh MV, reassign with confidence >= 0.9, attribute to actor
+curl -X POST "http://localhost:5000/api/fleet/telematics/reassign?min_confidence=0.9&max_changes=200&dry_run=0&refresh=1&actor=admin_user"
+```
+
+Params:
+- `min_confidence`: minimum confidence to consider (default 0.8)
+- `max_changes`: cap number of updates (default 200)
+- `dry_run`: when true (default), no changes are written
+- `refresh`: when true, `REFRESH MATERIALIZED VIEW` runs before selecting candidates
+- `actor`: optional string for audit trail
+
+Writes audit rows to `equipment_site_reassign_audit` with `equipment_id`, `vehicle_id`, `old_site_id`, `new_site_id`, `confidence`, `actor`, `performed_at`.
+
+### Review Audit History
+
+```powershell
+# Recent 50 changes
+curl "http://localhost:5000/api/fleet/telematics/reassign/audit?limit=50"
+
+# Filter by date range (ISO) and actor
+curl "http://localhost:5000/api/fleet/telematics/reassign/audit?start=2026-01-01T00:00:00Z&end=2026-01-31T23:59:59Z&actor=admin_user&limit=100"
+
+# Filter for a specific equipment
+curl "http://localhost:5000/api/fleet/telematics/reassign/audit?equipment_id=12345&limit=50"
+```
+
+### Notes
+- Telematics join assumes `fleet_daily_metrics.vehicle_id` (numeric) equals `equipment.equipment_id`. If a mapping is needed, adjust the backend join.
+- Site coordinates (`sites.latitude/longitude`) must be present for inference.
+- Live thresholds (`lookback_days`, `max_km`, `min_confidence`) are tunable to match GPS accuracy and site spacing.
