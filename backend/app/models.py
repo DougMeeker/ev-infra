@@ -26,22 +26,14 @@ class Site(db.Model):
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
     department_id = db.Column(db.Text)
-    utility = db.Column(db.String(64))
-    utility_account = db.Column(db.String(64))
-    utility_name = db.Column(db.String(64))
-    meter_number = db.Column(db.String(64))
     address = db.Column(db.String(256))
     city = db.Column(db.String(128))
     contact_name = db.Column(db.String(128))
     contact_phone = db.Column(db.String(64))
     is_deleted = db.Column(db.Boolean, default=False)
-    main_breaker_amps = db.Column(db.Integer)  # Amps rating of main breaker
-    voltage = db.Column(db.Integer)            # Line voltage (e.g., 240, 480)
-    phase_count = db.Column(db.Integer)        # 1 or 3
-    power_factor = db.Column(db.Float, default=0.95)  # Configurable PF used in capacity calcs
 
-    # Relationship to utility bills
-    bills = relationship('UtilityBill', back_populates='site', cascade='all, delete-orphan')
+    # Relationship to services (meters)
+    services = relationship('Service', back_populates='site', cascade='all, delete-orphan')
     # Relationship to equipment
     equipment = relationship('Equipment', back_populates='site', cascade='all, delete-orphan')
     # Many-to-many relationship to overarching projects
@@ -51,22 +43,62 @@ class Site(db.Model):
     # Many-to-many relationship to files/documents
     files = relationship('File', secondary='site_files', back_populates='sites')
 
-    def to_dict(self, include_bills: bool = False):
+    def to_dict(self, include_services: bool = False, include_project_ids: bool = True):
         data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
-        # Optionally include bills (can be large; disabled by default for performance)
-        if include_bills:
-            data['bills'] = [bill.to_dict() for bill in self.bills]
-        # Include project ids for convenience (small payload)
-        if hasattr(self, 'projects'):
+        # Optionally include services
+        if include_services:
+            data['services'] = [service.to_dict() for service in self.services]
+        # Include project ids for convenience (small payload) - but only if explicitly requested or already loaded
+        if include_project_ids and 'projects' in self.__dict__:
             data['project_ids'] = [p.id for p in self.projects]
+        elif include_project_ids:
+            # If not loaded and requested, query it separately to avoid lazy loading during iteration
+            from sqlalchemy import select
+            project_ids = db.session.execute(
+                select(project_sites.c.project_id).where(project_sites.c.site_id == self.id)
+            ).scalars().all()
+            data['project_ids'] = list(project_ids)
         return data
+
+
+class Service(db.Model):
+    __tablename__ = 'services'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    site_id = db.Column(db.Integer, db.ForeignKey('sites.id'), nullable=False, index=True)
+    
+    # Utility information
+    utility = db.Column(db.String(64))
+    utility_account = db.Column(db.String(64))
+    utility_name = db.Column(db.String(64))
+    meter_number = db.Column(db.String(64))
+    
+    # Electrical capacity information
+    main_breaker_amps = db.Column(db.Integer)  # Amps rating of main breaker
+    voltage = db.Column(db.Integer)            # Line voltage (e.g., 240, 480)
+    phase_count = db.Column(db.Integer)        # 1 or 3
+    power_factor = db.Column(db.Float, default=0.95)  # Configurable PF used in capacity calcs
+    
+    # Optional notes for differentiating services
+    notes = db.Column(db.Text)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_deleted = db.Column(db.Boolean, default=False)
+
+    # Relationships
+    site = relationship('Site', back_populates='services')
+    bills = relationship('UtilityBill', back_populates='service', cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
 
 class UtilityBill(db.Model):
     __tablename__ = 'utility_bills'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    site_id = db.Column(db.Integer, db.ForeignKey('sites.id'), nullable=False, index=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('services.id'), nullable=False, index=True)
     year = db.Column(db.Integer, nullable=False)
     month = db.Column(db.Integer, nullable=False)  # 1-12
     energy_usage = db.Column(db.Float)  # kWh for the period
@@ -77,17 +109,17 @@ class UtilityBill(db.Model):
     # Soft delete flag (optional)
     is_deleted = db.Column(db.Boolean, default=False)
 
-    site = relationship('Site', back_populates='bills')
+    service = relationship('Service', back_populates='bills')
 
     __table_args__ = (
-        db.UniqueConstraint('site_id', 'year', 'month', name='uq_site_year_month'),
+        db.UniqueConstraint('service_id', 'year', 'month', name='uq_service_year_month'),
     )
 
     def to_dict(self):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
     def __repr__(self):
-        return f"<UtilityBill site_id={self.site_id} {self.year}-{self.month:02d} usage={self.energy_usage} max_power={self.max_power}>"
+        return f"<UtilityBill service_id={self.service_id} {self.year}-{self.month:02d} usage={self.energy_usage} max_power={self.max_power}>"
 
 
 class EquipmentCatalog(db.Model):

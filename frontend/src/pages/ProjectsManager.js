@@ -3,7 +3,6 @@ import { ratioFrom } from '../utils/statusShading';
 import StatusEditor from '../components/StatusEditor';
 import ProjectsSection from '../components/ProjectsSection';
 import SitesSection from '../components/SitesSection';
-import StepsSection from '../components/StepsSection';
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import {
   getProjects,
@@ -19,6 +18,9 @@ import {
   updateProjectStep,
   deleteProjectStep,
   createProjectSiteStatus,
+  updateProjectSiteStatus,
+  deleteProjectSiteStatus,
+  getProjectSiteStatuses,
   getAggregateMetrics,
 } from '../api';
 
@@ -30,6 +32,7 @@ export default function ProjectsManager() {
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
   const [editProject, setEditProject] = useState({ name: '', description: '' });
+  const [editingProjectId, setEditingProjectId] = useState(null);
   const [assignment, setAssignment] = useState({ siteId: '', siteName: '' });
   const [siteSearch, setSiteSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -44,7 +47,10 @@ export default function ProjectsManager() {
   const [steps, setSteps] = useState([]);
   const [newStep, setNewStep] = useState({ title: '', step_order: '', description: '' });
   const [showSitesSection, setShowSitesSection] = useState(true);
-  const [showStepsSection, setShowStepsSection] = useState(true);
+  const [statusHistory, setStatusHistory] = useState([]);
+  const [editingStatusId, setEditingStatusId] = useState(null);
+  const [editForm, setEditForm] = useState({ current_step: '', status_message: '', status_date: '', estimated_cost: '', actual_cost: '' });
+  const [statusError, setStatusError] = useState(null);
   const gridRef = useRef(null);
   const [gridCols, setGridCols] = useState(3);
   const pageSizeOptions = useMemo(() => {
@@ -52,7 +58,7 @@ export default function ProjectsManager() {
     return base.map(n => Math.max(1, gridCols * n));
   }, [gridCols]);
   const [statusForm, setStatusForm] = useState({ current_step: '', status_message: '', status_date: new Date().toISOString().slice(0,10), estimated_cost: '', actual_cost: '' });
-  const [showStatusEditor, setShowStatusEditor] = useState(false);
+  const [showStatusEditor, setShowStatusEditor] = useState(true);
   const [projectAverages, setProjectAverages] = useState({});
 
   const loadProjects = async () => {
@@ -233,6 +239,29 @@ export default function ProjectsManager() {
     })();
   }, [selectedProjectId, latestStatuses, steps.length, projects]);
 
+  // Load status history when a site is selected
+  useEffect(() => {
+    if (!selectedProjectId || !selectedSiteId) {
+      setStatusHistory([]);
+      return;
+    }
+    (async () => {
+      try {
+        const { data } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
+        // Sort by status_date descending (most recent first)
+        const sorted = (data || []).sort((a, b) => {
+          const dateA = new Date(a.status_date);
+          const dateB = new Date(b.status_date);
+          return dateB - dateA;
+        });
+        setStatusHistory(sorted);
+      } catch (err) {
+        console.error('Error loading status history:', err);
+        setStatusHistory([]);
+      }
+    })();
+  }, [selectedProjectId, selectedSiteId]);
+
   // Create project handler is not currently used by the UI; remove to satisfy lint
 
   const handleDelete = async (id) => {
@@ -343,19 +372,73 @@ export default function ProjectsManager() {
   const submitStatus = async (e) => {
     e.preventDefault();
     if (!selectedProjectId || !selectedSiteId || !statusForm.current_step) return;
-    const payload = {
-      current_step: Number(statusForm.current_step),
-      status_message: statusForm.status_message || undefined,
-      status_date: statusForm.status_date || undefined,
-      estimated_cost: statusForm.estimated_cost ? Number(statusForm.estimated_cost) : undefined,
-      actual_cost: statusForm.actual_cost ? Number(statusForm.actual_cost) : undefined,
-    };
-    await createProjectSiteStatus(selectedProjectId, selectedSiteId, payload);
-    setStatusForm({ current_step: '', status_message: '', status_date: new Date().toISOString().slice(0,10), estimated_cost: '', actual_cost: '' });
-    // Reload latest statuses for shading
-    const { data: latest } = await getLatestProjectStatuses(selectedProjectId);
-    setLatestStatuses(latest || []);
-    // Removed historyRef scroll (no linked element)
+    setStatusError(null); // Clear previous errors
+    try {
+      const payload = {
+        current_step: Number(statusForm.current_step),
+        status_message: statusForm.status_message || undefined,
+        status_date: statusForm.status_date || undefined,
+        estimated_cost: statusForm.estimated_cost ? Number(statusForm.estimated_cost) : undefined,
+        actual_cost: statusForm.actual_cost ? Number(statusForm.actual_cost) : undefined,
+      };
+      await createProjectSiteStatus(selectedProjectId, selectedSiteId, payload);
+      setStatusForm({ current_step: '', status_message: '', status_date: new Date().toISOString().slice(0,10), estimated_cost: '', actual_cost: '' });
+      // Reload latest statuses for shading
+      const { data: latest } = await getLatestProjectStatuses(selectedProjectId);
+      setLatestStatuses(latest || []);
+      // Reload status history for the selected site
+      const { data: history } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
+      const sorted = (history || []).sort((a, b) => new Date(b.status_date) - new Date(a.status_date));
+      setStatusHistory(sorted);
+    } catch (err) {
+      console.error('Error creating status:', err);
+      const errorMsg = err.response?.data?.error || 'Failed to add status. Please try again.';
+      setStatusError(errorMsg);
+    }
+  };
+
+  const handleUpdateStatus = async (statusId, data) => {
+    if (!selectedProjectId || !selectedSiteId) return;
+    setStatusError(null); // Clear previous errors
+    try {
+      const payload = {
+        current_step: Number(data.current_step),
+        status_message: data.status_message || undefined,
+        status_date: data.status_date || undefined,
+        estimated_cost: data.estimated_cost ? Number(data.estimated_cost) : undefined,
+        actual_cost: data.actual_cost ? Number(data.actual_cost) : undefined,
+      };
+      await updateProjectSiteStatus(selectedProjectId, selectedSiteId, statusId, payload);
+      // Reload status history
+      const { data: history } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
+      const sorted = (history || []).sort((a, b) => new Date(b.status_date) - new Date(a.status_date));
+      setStatusHistory(sorted);
+      // Reload latest statuses for shading
+      const { data: latest } = await getLatestProjectStatuses(selectedProjectId);
+      setLatestStatuses(latest || []);
+      setEditingStatusId(null);
+    } catch (err) {
+      console.error('Error updating status:', err);
+      const errorMsg = err.response?.data?.error || 'Failed to update status. Please try again.';
+      setStatusError(errorMsg);
+    }
+  };
+
+  const handleDeleteStatus = async (statusId) => {
+    if (!selectedProjectId || !selectedSiteId) return;
+    try {
+      await deleteProjectSiteStatus(selectedProjectId, selectedSiteId, statusId);
+      // Reload status history
+      const { data: history } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
+      const sorted = (history || []).sort((a, b) => new Date(b.status_date) - new Date(a.status_date));
+      setStatusHistory(sorted);
+      // Reload latest statuses for shading
+      const { data: latest } = await getLatestProjectStatuses(selectedProjectId);
+      setLatestStatuses(latest || []);
+    } catch (err) {
+      console.error('Error deleting status:', err);
+      alert('Failed to delete status');
+    }
   };
 
   const handleRemoveSite = async (siteId) => {
@@ -440,18 +523,14 @@ export default function ProjectsManager() {
           await updateProject(selectedProjectId, data);
           await loadProjects();
         }}
-      />
-      
-      <StatusEditor
+        editingProjectId={editingProjectId}
+        setEditingProjectId={setEditingProjectId}
         steps={steps}
-        statusForm={statusForm}
-        setStatusForm={setStatusForm}
-        showStatusEditor={showStatusEditor}
-        setShowStatusEditor={setShowStatusEditor}
-        selectedProjectId={selectedProjectId}
-        selectedSiteId={selectedSiteId}
-        selectedSiteName={projectSites.find(s => String(s.id) === String(selectedSiteId))?.name}
-        onSubmitStatus={submitStatus}
+        newStep={newStep}
+        setNewStep={setNewStep}
+        handleCreateStep={handleCreateStep}
+        handleUpdateStep={handleUpdateStep}
+        handleDeleteStep={handleDeleteStep}
       />
       
       <SitesSection
@@ -490,16 +569,25 @@ export default function ProjectsManager() {
         setShowSitesSection={setShowSitesSection}
       />
 
-      <StepsSection
-        selectedProjectId={selectedProjectId}
+      <StatusEditor
         steps={steps}
-        showStepsSection={showStepsSection}
-        setShowStepsSection={setShowStepsSection}
-        handleUpdateStep={handleUpdateStep}
-        handleDeleteStep={handleDeleteStep}
-        newStep={newStep}
-        setNewStep={setNewStep}
-        handleCreateStep={handleCreateStep}
+        statusForm={statusForm}
+        setStatusForm={setStatusForm}
+        showStatusEditor={showStatusEditor}
+        setShowStatusEditor={setShowStatusEditor}
+        selectedProjectId={selectedProjectId}
+        selectedSiteId={selectedSiteId}
+        selectedSiteName={projectSites.find(s => String(s.id) === String(selectedSiteId))?.name}
+        onSubmitStatus={submitStatus}
+        statusHistory={statusHistory}
+        editingStatusId={editingStatusId}
+        setEditingStatusId={setEditingStatusId}
+        editForm={editForm}
+        setEditForm={setEditForm}
+        onUpdateStatus={handleUpdateStatus}
+        onDeleteStatus={handleDeleteStatus}
+        error={statusError}
+        setError={setStatusError}
       />
     </div>
   );

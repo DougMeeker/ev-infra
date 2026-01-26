@@ -13,19 +13,19 @@ const VehicleDetails = () => {
     const [editing, setEditing] = useState({ equipment_id: '', site_id: '', mc_code: '', department_id: '', annual_miles: '', driving_hours: '' });
   const [usage, setUsage] = useState([]);
   const [newUsage, setNewUsage] = useState({ year: String(lastYear), month: '12', miles: '', driving_hours: '', days_utilized: '' });
-  const [loading, setLoading] = useState(false);
+  const [loadingUsage, setLoadingUsage] = useState(false);
+  const [siteFilter, setSiteFilter] = useState('');
+  const [showSiteDropdown, setShowSiteDropdown] = useState(false);
 
   const load = async () => {
-    setLoading(true);
     try {
-      const [vehRes, usageRes, sitesRes, catRes] = await Promise.all([
+      // Load metadata and reference data immediately
+      const [vehRes, sitesRes, catRes] = await Promise.all([
         getEquipmentDetails(id),
-        getEquipmentUsage(id),
         getSites(),
         getCatalog(),
       ]);
       setVehicle(vehRes.data);
-      setUsage(usageRes.data || []);
       setSites(sitesRes.data || []);
       setCatalog(catRes.data || []);
       setEditing({
@@ -36,10 +36,19 @@ const VehicleDetails = () => {
         annual_miles: vehRes.data.annual_miles ?? '',
         driving_hours: vehRes.data.driving_hours ?? '',
       });
+      
+      // Load usage history separately
+      setLoadingUsage(true);
+      try {
+        const usageRes = await getEquipmentUsage(id);
+        setUsage(usageRes.data || []);
+      } catch (e) {
+        console.error('Load usage failed', e);
+      } finally {
+        setLoadingUsage(false);
+      }
     } catch (e) {
       console.error('Load vehicle failed', e);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -91,6 +100,18 @@ const VehicleDetails = () => {
 
   if (!vehicle) return <div className="container"><p>Loading...</p></div>;
 
+  // Sort sites alphabetically by name
+  const sortedSites = [...sites].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  
+  // Filter sites based on search
+  const filteredSites = sortedSites.filter(s => 
+    (s.name || '').toLowerCase().includes(siteFilter.toLowerCase()) ||
+    String(s.id).includes(siteFilter)
+  );
+  
+  const selectedSite = sites.find(s => s.id === Number(editing.site_id));
+  const selectedSiteName = selectedSite ? selectedSite.name : '';
+
   return (
     <div className="container" style={{ paddingTop: 24 }}>
       <h2 className="page-header">Vehicle Details</h2>
@@ -102,23 +123,108 @@ const VehicleDetails = () => {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h4 style={{ marginTop: 0 }}>Metadata</h4>
-        <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
-          <input className="input" style={{ width: 200 }} placeholder="Identifier" value={editing.equipment_id} onChange={e=>setEditing(prev=>({ ...prev, equipment_id: e.target.value }))} />
-          <select className="input" value={editing.site_id} onChange={e=>setEditing(prev=>({ ...prev, site_id: e.target.value }))}>
-            {sites.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
-          </select>
-          <select className="input" value={editing.mc_code} onChange={e=>setEditing(prev=>({ ...prev, mc_code: e.target.value }))}>
-            {catalog.map(c => (<option key={c.mc_code} value={c.mc_code}>{c.mc_code} - {c.description || ''}</option>))}
-          </select>
-          <input className="input" style={{ width: 140 }} placeholder="Dept ID" value={editing.department_id} onChange={e=>setEditing(prev=>({ ...prev, department_id: e.target.value }))} />
-          <input className="input" style={{ width: 140 }} placeholder="Annual Miles" value={editing.annual_miles} onChange={e=>setEditing(prev=>({ ...prev, annual_miles: e.target.value }))} />
-          <input className="input" style={{ width: 140 }} placeholder="Driving Hrs (annual)" value={editing.driving_hours} onChange={e=>setEditing(prev=>({ ...prev, driving_hours: e.target.value }))} />
-          <button className="btn" onClick={saveMeta}>Save</button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+          <div className="form-group">
+            <label>Equipment ID</label>
+            <input className="input" placeholder="Identifier" value={editing.equipment_id} onChange={e=>setEditing(prev=>({ ...prev, equipment_id: e.target.value }))} />
+          </div>
+          
+          {/* Searchable Site Dropdown */}
+          <div className="form-group">
+            <label>Site Assignment</label>
+            <div style={{ position: 'relative' }}>
+            <input 
+              className="input" 
+              placeholder="Search and select site..." 
+              value={showSiteDropdown ? siteFilter : selectedSiteName}
+              onChange={e => {
+                setSiteFilter(e.target.value);
+                setShowSiteDropdown(true);
+              }}
+              onFocus={() => {
+                setSiteFilter('');
+                setShowSiteDropdown(true);
+              }}
+              onBlur={() => setTimeout(() => setShowSiteDropdown(false), 200)}
+            />
+            {showSiteDropdown && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                maxHeight: 300,
+                overflowY: 'auto',
+                backgroundColor: 'white',
+                border: '1px solid #ddd',
+                borderRadius: 4,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                zIndex: 1000
+              }}>
+                {filteredSites.length === 0 ? (
+                  <div style={{ padding: '8px 12px', color: '#999' }}>No sites found</div>
+                ) : (
+                  filteredSites.map(s => (
+                    <div
+                      key={s.id}
+                      onClick={() => {
+                        setEditing(prev => ({ ...prev, site_id: s.id }));
+                        setSiteFilter('');
+                        setShowSiteDropdown(false);
+                      }}
+                      style={{
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        backgroundColor: Number(editing.site_id) === s.id ? '#e3f2fd' : 'white',
+                        borderBottom: '1px solid #f0f0f0'
+                      }}
+                      onMouseEnter={e => e.target.style.backgroundColor = '#f5f5f5'}
+                      onMouseLeave={e => e.target.style.backgroundColor = Number(editing.site_id) === s.id ? '#e3f2fd' : 'white'}
+                    >
+                      {s.name}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            </div>
+          </div>
+          
+          <div className="form-group">
+            <label>MC Code</label>
+            <select className="input" value={editing.mc_code} onChange={e=>setEditing(prev=>({ ...prev, mc_code: e.target.value }))}>
+              {catalog.map(c => (<option key={c.mc_code} value={c.mc_code}>{c.mc_code} - {c.description || ''}</option>))}
+            </select>
+          </div>
+          
+          <div className="form-group">
+            <label>Department ID</label>
+            <input className="input" placeholder="Dept ID" value={editing.department_id} onChange={e=>setEditing(prev=>({ ...prev, department_id: e.target.value }))} />
+          </div>
+          
+          <div className="form-group">
+            <label>Annual Miles</label>
+            <input className="input" type="number" placeholder="Annual Miles" value={editing.annual_miles} onChange={e=>setEditing(prev=>({ ...prev, annual_miles: e.target.value }))} />
+          </div>
+          
+          <div className="form-group">
+            <label>Annual Driving Hours</label>
+            <input className="input" type="number" placeholder="Driving Hours" value={editing.driving_hours} onChange={e=>setEditing(prev=>({ ...prev, driving_hours: e.target.value }))} />
+          </div>
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <button className="btn" onClick={saveMeta}>Save Metadata</button>
         </div>
       </div>
 
       <div className="card">
         <h4 style={{ marginTop: 0 }}>Usage History</h4>
+        {loadingUsage ? (
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            <p>Loading usage history...</p>
+          </div>
+        ) : (
+        <>
         <table className="table">
           <thead>
             <tr>
@@ -151,8 +257,8 @@ const VehicleDetails = () => {
           <input className="input" style={{ width: 160 }} placeholder="Driving Hours" value={newUsage.driving_hours} onChange={e=>setNewUsage(prev=>({ ...prev, driving_hours: e.target.value }))} />
           <input className="input" style={{ width: 140 }} placeholder="Days Utilized" value={newUsage.days_utilized} onChange={e=>setNewUsage(prev=>({ ...prev, days_utilized: e.target.value }))} />
           <button className="btn" onClick={addUsage}>Add/Update Usage</button>
-        </div>
-      </div>
+        </div>        </>
+        )}      </div>
     </div>
   );
 };

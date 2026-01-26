@@ -3,9 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { updateSite, deleteSite, getSiteMetrics, getSite } from "../api";
 import EquipmentSection from "../components/EquipmentSection";
 import BillsSection from "../components/BillsSection";
-import ProjectsSection from "../components/ProjectsSection";
+import SiteProjectsSection from "../components/SiteProjectsSection";
 import ChargersSection from "../components/ChargersSection";
 import FilesSection from "../components/FilesSection";
+import ServicesSection from "../components/ServicesSection";
 const formatDate = (d) => {
     if (!d) return '';
     try {
@@ -30,6 +31,7 @@ const SiteDetails = () => {
     const [showEquipment, setShowEquipment] = useState(true);
     const [showBills, setShowBills] = useState(true);
     const [showFiles, setShowFiles] = useState(true);
+    const [showServices, setShowServices] = useState(true);
 
     useEffect(() => {
         getSite(id)
@@ -89,28 +91,10 @@ const SiteDetails = () => {
                             </div>
                         </div>
                         <div className="form-section">
-                            <h4 className="form-section-title">Utility</h4>
-                            <div className="form-grid">
-                                <div className="form-group"><label>Utility</label><input className="input" name="utility" value={formData.utility || ""} onChange={handleChange} /></div>
-                                <div className="form-group"><label>Account Name</label><input className="input" name="utility_name" value={formData.utility_name || ""} onChange={handleChange} /></div>
-                                <div className="form-group"><label>Account #</label><input className="input" name="utility_account" value={formData.utility_account || ""} onChange={handleChange} /></div>
-                                <div className="form-group"><label>Meter #</label><input className="input" name="meter_number" value={formData.meter_number || ""} onChange={handleChange} /></div>
-                            </div>
-                        </div>
-                        <div className="form-section">
                             <h4 className="form-section-title">Contact</h4>
                             <div className="form-grid">
                                 <div className="form-group"><label>Contact Name</label><input className="input" name="contact_name" value={formData.contact_name || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>Contact Phone</label><input className="input" name="contact_phone" value={formData.contact_phone || ""} onChange={handleChange} /></div>
-                            </div>
-                        </div>
-                        <div className="form-section">
-                            <h4 className="form-section-title">Electrical Capacity</h4>
-                            <div className="form-grid">
-                                <div className="form-group"><label>Main Breaker Amps</label><input className="input" name="main_breaker_amps" value={formData.main_breaker_amps || ""} onChange={handleChange} /></div>
-                                <div className="form-group"><label>Voltage</label><input className="input" name="voltage" value={formData.voltage || ""} onChange={handleChange} /></div>
-                                <div className="form-group"><label>Phase Count</label><input className="input" name="phase_count" value={formData.phase_count || ""} onChange={handleChange} /></div>
-                                <div className="form-group"><label>Power Factor</label><input className="input" name="power_factor" value={formData.power_factor || ""} onChange={handleChange} /></div>
                             </div>
                         </div>
                     </div>
@@ -134,28 +118,10 @@ const SiteDetails = () => {
                             </div>
                         </div>
                         <div className="details-section">
-                            <h4>Utility</h4>
-                            <div className="detail-pairs">
-                                <div><span>Utility:</span><strong>{site.utility || 'N/A'}</strong></div>
-                                <div><span>Account Name:</span><strong>{site.utility_name || 'N/A'}</strong></div>
-                                <div><span>Account #:</span><strong>{site.utility_account || 'N/A'}</strong></div>
-                                <div><span>Meter #:</span><strong>{site.meter_number || 'N/A'}</strong></div>
-                            </div>
-                        </div>
-                        <div className="details-section">
                             <h4>Contact</h4>
                             <div className="detail-pairs">
                                 <div><span>Name:</span><strong>{site.contact_name || 'N/A'}</strong></div>
                                 <div><span>Phone:</span><strong>{site.contact_phone || 'N/A'}</strong></div>
-                            </div>
-                        </div>
-                        <div className="details-section">
-                            <h4>Electrical Capacity</h4>
-                            <div className="detail-pairs">
-                                <div><span>Main Breaker Amps:</span><strong>{site.main_breaker_amps || 'N/A'}</strong></div>
-                                <div><span>Voltage:</span><strong>{site.voltage || 'N/A'}</strong></div>
-                                <div><span>Phase Count:</span><strong>{site.phase_count || 'N/A'}</strong></div>
-                                <div><span>Power Factor:</span><strong>{site.power_factor || '0.95'}</strong></div>
                             </div>
                         </div>
                     </div>
@@ -169,7 +135,7 @@ const SiteDetails = () => {
                     )}
                     {!metricsLoading && metrics && (
                         <div className="metrics-block">
-                            <h4>Capacity Metrics</h4>
+                            <h4>Capacity Metrics (All Services Combined)</h4>
                             <p><strong>Last Year Peak (kW):</strong> {metrics.last_year_peak_kw}</p>
                             <p><strong>Theoretical Capacity (kW):</strong> {metrics.theoretical_capacity_kw ?? 'N/A'}</p>
                             <p><strong>Available Capacity (kW):</strong> {metrics.available_capacity_kw ?? 'N/A'}</p>
@@ -183,12 +149,19 @@ const SiteDetails = () => {
             )}
             <button className="btn btn-danger" onClick={handleDelete}>Delete Site</button>
 
+            {/* Services/Meters Section */}
+            <hr />
+            <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowServices(v => !v)}>
+                {showServices ? '▼' : '▶'} Services / Meters
+            </h3>
+            {showServices && (<ServicesSection siteId={id} />)}
+
             {/* Projects Section */}
             <hr />
             <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowProjects(v => !v)}>
                 {showProjects ? '▼' : '▶'} Projects
             </h3>
-            {showProjects && (<ProjectsSection siteId={id} />)}
+            {showProjects && (<SiteProjectsSection siteId={id} />)}
 
             {/* Chargers Section */}
             <hr />

@@ -139,6 +139,12 @@ def update_equipment(equipment_id, data):
             eq.equipment_id = int(val) if val is not None and str(val).strip() != '' else None
         except Exception:
             pass
+    if 'site_id' in data:
+        try:
+            val = data.get('site_id')
+            eq.site_id = int(val) if val is not None else None
+        except (TypeError, ValueError):
+            pass
     if 'department_id' in data:
         eq.department_id = data['department_id']
     if 'annual_miles' in data:

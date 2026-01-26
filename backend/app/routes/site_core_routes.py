@@ -9,27 +9,39 @@ from ..models import project_sites
 
 @site_bp.route("/", methods=["GET"])
 def get_sites():
+    from sqlalchemy import func
+    
+    # Get all non-deleted sites
     sites = Site.query.filter_by(is_deleted=False).all()
     site_ids = [s.id for s in sites]
-    chargers = Charger.query.filter(Charger.site_id.in_(site_ids)).all()
-    totals = {}
-    for c in chargers:
-        kw = c.kw if c.kw is not None else 0.0
-        totals[c.site_id] = (totals.get(c.site_id, 0.0) + (kw or 0.0))
-    # Vehicle counts by site
+    
+    # Aggregate charger kW by site in a single query
+    charger_aggregates = db.session.query(
+        Charger.site_id,
+        func.sum(Charger.kw).label('total_kw')
+    ).filter(
+        Charger.site_id.in_(site_ids)
+    ).group_by(Charger.site_id).all()
+    
+    charger_totals = {site_id: float(total_kw or 0.0) for site_id, total_kw in charger_aggregates}
+    
+    # Get vehicle counts by site in a single query
     vehicle_counts = {}
     try:
-        from sqlalchemy import func
-        vc_rows = db.session.query(Equipment.site_id, func.count(Equipment.id)).group_by(Equipment.site_id).all()
+        vc_rows = db.session.query(
+            Equipment.site_id,
+            func.count(Equipment.id)
+        ).group_by(Equipment.site_id).all()
         vehicle_counts = {int(site_id): int(cnt) for site_id, cnt in vc_rows if site_id is not None}
     except Exception:
         pass
 
+    # Build response
     rows = []
     for s in sites:
-        d = s.to_dict(include_bills=False)
-        total_kw = totals.get(s.id)
-        d['total_charger_kw'] = round(total_kw, 3) if total_kw is not None else 0.0
+        d = s.to_dict(include_services=False, include_project_ids=False)
+        d['total_charger_kw'] = round(charger_totals.get(s.id, 0.0), 3)
+        d['vehicle_count'] = vehicle_counts.get(s.id, 0)
         rows.append(d)
     return jsonify(rows)
 
@@ -39,8 +51,55 @@ def get_site(site_id):
     site = Site.query.get(site_id)
     if not site or site.is_deleted:
         return {"error": "Site not found"}, 404
-    # Return lean site payload (bills fetched via dedicated endpoint)
-    return site.to_dict(include_bills=False)
+    # Return lean site payload (services fetched via dedicated endpoint if needed)
+    return site.to_dict(include_services=False)
+
+
+@site_bp.route("/<int:site_id>/projects", methods=["GET"])
+def get_site_projects(site_id):
+    """Get all projects associated with this site, including latest status."""
+    from ..models import Project, ProjectStatus
+    from sqlalchemy import func
+    
+    site = Site.query.get(site_id)
+    if not site or site.is_deleted:
+        return {"error": "Site not found"}, 404
+    
+    # Get all projects for this site
+    projects = site.projects
+    
+    result = []
+    for project in projects:
+        if project.is_deleted:
+            continue
+            
+        project_data = project.to_dict()
+        
+        # Get the latest status for this project at this site
+        latest_status = ProjectStatus.query.filter_by(
+            project_id=project.id,
+            site_id=site_id
+        ).order_by(ProjectStatus.status_date.desc()).first()
+        
+        if latest_status:
+            project_data['current_step'] = latest_status.current_step
+            project_data['status_message'] = latest_status.status_message
+            project_data['status_date'] = latest_status.status_date.isoformat() if latest_status.status_date else None
+            # Calculate progress percentage
+            steps_count = len(project.steps) if project.steps else 0
+            if steps_count > 0:
+                project_data['progress_percent'] = round((latest_status.current_step / steps_count) * 100, 1)
+            else:
+                project_data['progress_percent'] = 0
+        else:
+            project_data['current_step'] = 0
+            project_data['status_message'] = None
+            project_data['status_date'] = None
+            project_data['progress_percent'] = 0
+        
+        result.append(project_data)
+    
+    return result, 200
 
 
 @site_bp.route("/<int:site_id>/metrics", methods=["GET"])
@@ -49,53 +108,95 @@ def get_site_metrics(site_id):
     if not site or site.is_deleted:
         return {"error": "Site not found"}, 404
 
+    # Get all services for this site
+    services = [s for s in site.services if not s.is_deleted]
+    
+    if not services:
+        return jsonify({
+            "site_id": site_id,
+            "last_year_peak_kw": 0.0,
+            "theoretical_capacity_kw": None,
+            "available_capacity_kw": None,
+            "power_factor": 0.95,
+            "services": []
+        }), 200
+
     cutoff = datetime.utcnow() - timedelta(days=365)
-    bills = (
-        UtilityBill.query
-        .filter_by(site_id=site_id, is_deleted=False)
-        .all()
-    )
-    # Filter to last ~year and compute peak kW
-    last_year_peak_kw = 0.0
-    for b in bills:
-        try:
-            bill_dt = datetime(b.year, b.month, 1)
-        except ValueError:
-            continue
-        if bill_dt < cutoff:
-            continue
-        if b.max_power is not None:
+    
+    # Calculate metrics for each service and aggregate
+    total_theoretical_capacity_kw = 0.0
+    total_last_year_peak_kw = 0.0
+    service_metrics = []
+    has_capacity_data = False
+    
+    for service in services:
+        # Get bills for this service
+        bills = (
+            UtilityBill.query
+            .filter_by(service_id=service.id, is_deleted=False)
+            .all()
+        )
+        
+        # Calculate peak for this service
+        service_peak_kw = 0.0
+        for b in bills:
             try:
-                val = float(b.max_power)
-            except (TypeError, ValueError):
-                val = None
-            if val is not None:
-                last_year_peak_kw = max(last_year_peak_kw, val)
-
-    # Capacity calcs
-    pf = site.power_factor if (site.power_factor is not None) else 0.95
-    theoretical_capacity_kw = None
-    if site.main_breaker_amps and site.voltage and site.phase_count:
-        try:
-            amps = float(site.main_breaker_amps)
-            volts = float(site.voltage)
-            if int(site.phase_count) == 3:
-                theoretical_capacity_kw = amps * volts * math.sqrt(3) * pf / 1000.0
-            else:
-                theoretical_capacity_kw = amps * volts * pf / 1000.0
-        except Exception:
-            theoretical_capacity_kw = None
-
+                bill_dt = datetime(b.year, b.month, 1)
+            except ValueError:
+                continue
+            if bill_dt < cutoff:
+                continue
+            if b.max_power is not None:
+                try:
+                    val = float(b.max_power)
+                except (TypeError, ValueError):
+                    val = None
+                if val is not None:
+                    service_peak_kw = max(service_peak_kw, val)
+        
+        total_last_year_peak_kw += service_peak_kw
+        
+        # Calculate capacity for this service
+        pf = service.power_factor if (service.power_factor is not None) else 0.95
+        service_capacity_kw = None
+        if service.main_breaker_amps and service.voltage and service.phase_count:
+            try:
+                amps = float(service.main_breaker_amps)
+                volts = float(service.voltage)
+                if int(service.phase_count) == 3:
+                    service_capacity_kw = amps * volts * math.sqrt(3) * pf / 1000.0
+                else:
+                    service_capacity_kw = amps * volts * pf / 1000.0
+                has_capacity_data = True
+                total_theoretical_capacity_kw += service_capacity_kw
+            except Exception:
+                service_capacity_kw = None
+        
+        service_metrics.append({
+            "service_id": service.id,
+            "meter_number": service.meter_number,
+            "utility": service.utility,
+            "peak_kw": round(service_peak_kw, 3),
+            "capacity_kw": round(service_capacity_kw, 3) if service_capacity_kw is not None else None,
+            "available_kw": round(service_capacity_kw - service_peak_kw, 3) if service_capacity_kw is not None else None,
+        })
+    
+    # Calculate aggregate available capacity
     available_capacity_kw = None
-    if theoretical_capacity_kw is not None:
-        available_capacity_kw = max(theoretical_capacity_kw - last_year_peak_kw, 0.0)
+    if has_capacity_data:
+        available_capacity_kw = max(total_theoretical_capacity_kw - total_last_year_peak_kw, 0.0)
+
+    # Get vehicle/equipment count for this site
+    vehicle_count = Equipment.query.filter_by(site_id=site_id).count()
 
     result = {
         "site_id": site_id,
-        "last_year_peak_kw": round(last_year_peak_kw, 3),
-        "theoretical_capacity_kw": round(theoretical_capacity_kw, 3) if theoretical_capacity_kw is not None else None,
+        "last_year_peak_kw": round(total_last_year_peak_kw, 3),
+        "theoretical_capacity_kw": round(total_theoretical_capacity_kw, 3) if has_capacity_data else None,
         "available_capacity_kw": round(available_capacity_kw, 3) if available_capacity_kw is not None else None,
-        "power_factor": pf,
+        "power_factor": 0.95,  # Average, could be calculated from services
+        "vehicle_count": vehicle_count,
+        "services": service_metrics
     }
     return jsonify(result), 200
 
@@ -144,15 +245,9 @@ def create_site():
         longitude=data.get('longitude'),
         address=data.get('address'),
         city=data.get('city'),
-        utility=data.get('utility'),
-        meter_number=data.get('meter_number'),
         contact_name=data.get('contact_name'),
         contact_phone=data.get('contact_phone'),
         department_id=data.get('department_id'),
-        voltage=data.get('voltage'),
-        phase_count=data.get('phase_count'),
-        main_breaker_amps=data.get('main_breaker_amps'),
-        power_factor=data.get('power_factor'),
     )
     db.session.add(site)
     try:
@@ -176,6 +271,65 @@ def delete_site(site_id):
         db.session.rollback()
         return {"error": f"Failed to delete site: {e}"}, 500
     return {"message": "site deleted", "site_id": site_id}, 200
+
+
+@site_bp.route("/map-data", methods=["GET"])
+def get_map_data():
+    """
+    Ultra-lightweight endpoint for map markers - returns only id, name, lat/lon.
+    Add ?include_capacity=1 to get basic capacity metrics for marker coloring.
+    Popup details are loaded on-demand when marker is clicked.
+    """
+    project_id_param = request.args.get('project_id')
+    include_capacity = request.args.get('include_capacity') == '1'
+    
+    site_query = Site.query.filter_by(is_deleted=False)
+    
+    # Optional filter: restrict to sites in a specific project
+    try:
+        project_id = int(project_id_param) if project_id_param is not None else None
+    except (TypeError, ValueError):
+        project_id = None
+    
+    if project_id:
+        site_query = site_query.join(project_sites, Site.id == project_sites.c.site_id)\
+                               .filter(project_sites.c.project_id == project_id)
+    
+    sites = site_query.all()
+    
+    result = []
+    for site in sites:
+        data = {
+            'id': site.id,
+            'site_id': site.id,
+            'name': site.name,
+            'latitude': site.latitude,
+            'longitude': site.longitude,
+        }
+        
+        # Optionally include just capacity for marker coloring (faster than full metrics)
+        if include_capacity:
+            total_capacity_kw = 0
+            for service in site.services:
+                if service.is_deleted:
+                    continue
+                pf = service.power_factor if (service.power_factor is not None) else 0.95
+                if service.main_breaker_amps and service.voltage and service.phase_count:
+                    try:
+                        import math
+                        amps = float(service.main_breaker_amps)
+                        volts = float(service.voltage)
+                        if int(service.phase_count) == 3:
+                            total_capacity_kw += amps * volts * math.sqrt(3) * pf / 1000.0
+                        else:
+                            total_capacity_kw += amps * volts * pf / 1000.0
+                    except Exception:
+                        pass
+            data['available_capacity_kw'] = round(total_capacity_kw, 3) if total_capacity_kw > 0 else None
+        
+        result.append(data)
+    
+    return jsonify(result)
 
 
 @site_bp.route("/metrics/aggregate", methods=["GET"])
@@ -289,7 +443,15 @@ def aggregate_site_metrics():
                 }
     except Exception:
         daily_metrics_by_site = {}
-    bills = UtilityBill.query.filter(UtilityBill.site_id.in_(site_ids), UtilityBill.is_deleted.is_(False)).all()
+    
+    # Get all services for the sites
+    from app.models import Service
+    services = Service.query.filter(Service.site_id.in_(site_ids), Service.is_deleted.is_(False)).all()
+    service_ids = [s.id for s in services]
+    service_to_site = {s.id: s.site_id for s in services}
+    
+    # Get bills for all services
+    bills = UtilityBill.query.filter(UtilityBill.service_id.in_(service_ids), UtilityBill.is_deleted.is_(False)).all()
     chargers = Charger.query.filter(Charger.site_id.in_(site_ids)).all()
     charger_totals = {}
     charger_installed_totals = {}
@@ -309,21 +471,49 @@ def aggregate_site_metrics():
             continue
         if bill_dt < cutoff:
             continue
-        bills_by_site.setdefault(b.site_id, []).append(b)
+        site_id = service_to_site.get(b.service_id)
+        if site_id:
+            bills_by_site.setdefault(site_id, []).append(b)
+
+    # Build services by site for capacity calculations
+    services_by_site = {}
+    for service in services:
+        services_by_site.setdefault(service.site_id, []).append(service)
 
     rows = []
     for s in sites:
         last_year_peak_kw = max([b.max_power for b in bills_by_site.get(s.id, []) if b.max_power is not None], default=0)
+        
+        # Calculate aggregate capacity from all services at this site
         theoretical_capacity_kw = None
-        pf = s.power_factor or 0.95
-        if s.main_breaker_amps and s.voltage and s.phase_count:
-            if s.phase_count == 3:
-                theoretical_capacity_kw = s.main_breaker_amps * s.voltage * math.sqrt(3) * pf / 1000.0
-            else:
-                theoretical_capacity_kw = s.main_breaker_amps * s.voltage * pf / 1000.0
+        site_services = services_by_site.get(s.id, [])
+        if site_services:
+            total_capacity = 0.0
+            has_capacity = False
+            for service in site_services:
+                pf = service.power_factor if (service.power_factor is not None) else 0.95
+                if service.main_breaker_amps and service.voltage and service.phase_count:
+                    try:
+                        amps = float(service.main_breaker_amps)
+                        volts = float(service.voltage)
+                        if int(service.phase_count) == 3:
+                            capacity = amps * volts * math.sqrt(3) * pf / 1000.0
+                        else:
+                            capacity = amps * volts * pf / 1000.0
+                        total_capacity += capacity
+                        has_capacity = True
+                    except Exception:
+                        pass
+            if has_capacity:
+                theoretical_capacity_kw = total_capacity
+        
         available_capacity_kw = None
         if theoretical_capacity_kw is not None:
             available_capacity_kw = max(theoretical_capacity_kw - last_year_peak_kw, 0)
+        
+        # Get primary service info for legacy fields (take first service if multiple exist)
+        primary_service = site_services[0] if site_services else None
+        
         row = {
             # identifiers
             "site_id": s.id,
@@ -336,17 +526,17 @@ def aggregate_site_metrics():
             "city": s.city,
             "contact_name": s.contact_name,
             "contact_phone": s.contact_phone,
-            # utility basics used in UI
-            "utility": s.utility,
-            "meter_number": s.meter_number,
-            # capacity fields
+            # utility basics used in UI (from primary service)
+            "utility": primary_service.utility if primary_service else None,
+            "meter_number": primary_service.meter_number if primary_service else None,
+            # capacity fields (aggregated across all services)
             "last_year_peak_kw": round(last_year_peak_kw, 3),
             "theoretical_capacity_kw": round(theoretical_capacity_kw, 3) if theoretical_capacity_kw is not None else None,
             "available_capacity_kw": round(available_capacity_kw, 3) if available_capacity_kw is not None else None,
-            "voltage": s.voltage,
-            "phase_count": s.phase_count,
-            "main_breaker_amps": s.main_breaker_amps,
-            "power_factor": pf,
+            "voltage": primary_service.voltage if primary_service else None,
+            "phase_count": primary_service.phase_count if primary_service else None,
+            "main_breaker_amps": primary_service.main_breaker_amps if primary_service else None,
+            "power_factor": primary_service.power_factor if primary_service else 0.95,
             # charger aggregates & vehicles
             "total_charger_kw": round(charger_totals.get(s.id, 0.0), 3),
             "installed_charger_kw": round(charger_installed_totals.get(s.id, 0.0), 3),

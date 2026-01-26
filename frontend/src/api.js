@@ -55,12 +55,20 @@ export const getSite = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}`);
 
 // Utility bill endpoints
 export const getBills = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}/bills`);
-export const createBill = (siteId, bill) => axios.post(`${API_BASE_URL}/sites/${siteId}/bills`, bill);
+export const getBillsByService = (serviceId) => axios.get(`${API_BASE_URL}/sites/services/${serviceId}/bills`);
+export const createBill = (serviceId, bill) => axios.post(`${API_BASE_URL}/sites/services/${serviceId}/bills`, bill);
 export const updateBill = (billId, bill) => axios.put(`${API_BASE_URL}/sites/bills/${billId}`, bill);
 export const deleteBill = (billId) => axios.delete(`${API_BASE_URL}/sites/bills/${billId}`);
 
-// Site metrics
+// Service (meter) endpoints
+export const getServices = (siteId) => axios.get(`${API_BASE_URL}/services/site/${siteId}`);
+export const getService = (serviceId) => axios.get(`${API_BASE_URL}/services/${serviceId}`);
+export const createService = (siteId, service) => axios.post(`${API_BASE_URL}/services/site/${siteId}`, service);
+export const updateService = (serviceId, service) => axios.put(`${API_BASE_URL}/services/${serviceId}`, service);
+export const deleteService = (serviceId) => axios.delete(`${API_BASE_URL}/services/${serviceId}`);
+export const getServiceCapacity = (serviceId) => axios.get(`${API_BASE_URL}/services/${serviceId}/capacity`);
 export const getSiteMetrics = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}/metrics`);
+export const getSiteProjects = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}/projects`);
 
 // Aggregate metrics with pagination
 export const getAggregateMetrics = ({ page = 1, perPage = 25, order = 'desc', sort = 'available_capacity_kw', search = '', projectId = '', limit } = {}) => {
@@ -76,6 +84,14 @@ export const getAggregateMetrics = ({ page = 1, perPage = 25, order = 'desc', so
 	if (search) params.append('search', search);
 	if (projectId) params.append('project_id', String(projectId));
 	return axios.get(`${API_BASE_URL}/sites/metrics/aggregate?${params.toString()}`);
+};
+
+// Get lightweight data for all sites for map display
+export const getSitesForMap = (projectId = null, includeCapacity = false) => {
+	const params = new URLSearchParams();
+	if (projectId) params.append('project_id', String(projectId));
+	if (includeCapacity) params.append('include_capacity', '1');
+	return axios.get(`${API_BASE_URL}/sites/map-data?${params.toString()}`);
 };
 
 // Equipment endpoints
@@ -165,10 +181,13 @@ export const getProjectSites = (projectId, { q = '', page = 1, page_size = 25 } 
 };
 export const addSiteToProject = (projectId, siteId) => axios.post(`${API_BASE_URL}/projects/${projectId}/sites`, { site_id: siteId });
 export const removeSiteFromProject = (projectId, siteId) => axios.delete(`${API_BASE_URL}/projects/${projectId}/sites/${siteId}`);
+export const reassignProjectSite = (projectId, oldSiteId, newSiteId) => axios.post(`${API_BASE_URL}/projects/${projectId}/sites/${oldSiteId}/reassign/${newSiteId}`);
 
 // Project status endpoints
 export const getProjectSiteStatuses = (projectId, siteId) => axios.get(`${API_BASE_URL}/projects/${projectId}/sites/${siteId}/status`);
 export const createProjectSiteStatus = (projectId, siteId, payload) => axios.post(`${API_BASE_URL}/projects/${projectId}/sites/${siteId}/status`, payload);
+export const updateProjectSiteStatus = (projectId, siteId, statusId, payload) => axios.put(`${API_BASE_URL}/projects/${projectId}/sites/${siteId}/status/${statusId}`, payload);
+export const deleteProjectSiteStatus = (projectId, siteId, statusId) => axios.delete(`${API_BASE_URL}/projects/${projectId}/sites/${siteId}/status/${statusId}`);
 export const getLatestProjectStatuses = (projectId) => axios.get(`${API_BASE_URL}/projects/${projectId}/status/latest`);
 
 // Project steps endpoints

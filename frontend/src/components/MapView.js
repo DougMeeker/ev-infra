@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from "react-leaflet";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
-import { createSite } from "../api";
+import { createSite, getSite, getSiteMetrics } from "../api";
 import { ratioFrom, getStatusShade } from "../utils/statusShading";
 import StatusLegend from "./StatusLegend";
 
@@ -44,9 +44,47 @@ const FocusHelper = ({ focusSite, onClearFocus }) => {
 const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, selectedProjectId, latestStatuses = [], project, colorMode = 'capacity' }) => {
   const center = [37.5, -120];
   const [newMarker, setNewMarker] = useState(null);
+  const [popupDetails, setPopupDetails] = useState({}); // Cache for site details: { siteId: data }
+  const [loadingPopup, setLoadingPopup] = useState(null); // Track which site is loading
   const list = Array.isArray(sites) ? sites : [];
   const focusSite = focusSiteId ? list.find(s => s.id === focusSiteId) : null;
   const navigate = useNavigate();
+
+  // Load site details when popup opens
+  const loadSiteDetails = async (siteId) => {
+    if (popupDetails[siteId]) return; // Already loaded
+    
+    setLoadingPopup(siteId);
+    try {
+      // Fetch both site info and metrics in parallel
+      const [siteRes, metricsRes] = await Promise.all([
+        getSite(siteId),
+        getSiteMetrics(siteId)
+      ]);
+      
+      const siteData = siteRes.data;
+      const metricsData = metricsRes.data;
+      
+      // Merge site info with metrics
+      const mergedData = {
+        ...siteData,
+        available_capacity_kw: metricsData.available_capacity_kw,
+        theoretical_capacity_kw: metricsData.theoretical_capacity_kw,
+        last_year_peak_kw: metricsData.last_year_peak_kw,
+        // Get utility and meter from first service if available
+        utility: metricsData.services?.[0]?.utility || null,
+        meter_number: metricsData.services?.[0]?.meter_number || null,
+        // Vehicle count from metrics
+        vehicle_count: metricsData.vehicle_count || 0
+      };
+      
+      setPopupDetails(prev => ({ ...prev, [siteId]: mergedData }));
+    } catch (err) {
+      console.error('Error loading site details:', err);
+    } finally {
+      setLoadingPopup(null);
+    }
+  };
 
   const handleMapClick = async (latlng) => {
     const name = prompt("Enter site name:");
@@ -76,27 +114,17 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
   // Helper to build an icon on-demand (retains leaflet base class; adds diagnostics)
   const buildIconForSite = (site) => {
     try {
-      let bg = '#64748b';
-      let cls = 'cap-unknown';
-      if (colorMode === 'capacity') {
-        const cap = site.available_capacity_kw;
-        cls = typeof cap === 'number'
-          ? (cap < 200 ? 'cap-low' : cap < 800 ? 'cap-mid' : 'cap-high')
-          : 'cap-unknown';
-        const capacityColors = {
-          'cap-low': '#dc2626',
-          'cap-mid': '#ca8a04',
-          'cap-high': '#16a34a',
-          'cap-unknown': '#64748b'
-        };
-        bg = capacityColors[cls] || '#64748b';
-      } else if (colorMode === 'status') {
+      let bg = '#F16A22'; // Caltrans Orange
+      let cls = 'neutral';
+      
+      if (colorMode === 'status' && selectedProjectId) {
         const status = (latestStatuses || []).find(ls => String(ls.site_id) === String(site.id));
         const stepsCount = project && typeof project.steps_count === 'number' ? project.steps_count : undefined;
         const ratio = ratioFrom(status?.current_step, stepsCount);
         if (ratio === null) { bg = '#94a3b8'; cls = 'status-none'; }
         else { bg = getStatusShade(ratio).bg; cls = 'status-shade'; }
       }
+      
       return L.divIcon({
         className: `leaflet-div-icon marker-mode-${colorMode} ${cls}`,
         html: `<span class="marker-outer" style="display:block;width:100%;height:100%;border-radius:50%;"><span style="background:${bg};display:block;width:100%;height:100%;border-radius:50%;"></span></span>`,
@@ -126,7 +154,8 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
       {list.filter(s => s.latitude !== null && s.latitude !== undefined && s.longitude !== null && s.longitude !== undefined)
             .filter(s => !selectedProjectId || projectSiteIdSet.has(s.id))
             .map(site => {
-        const cap = site.available_capacity_kw;
+        const details = popupDetails[site.id]; // May be undefined initially
+        const cap = details?.available_capacity_kw;
         const capClass = typeof cap === 'number'
           ? (cap < 200 ? 'cap-low' : cap < 800 ? 'cap-mid' : 'cap-high')
           : 'cap-unknown';
@@ -144,39 +173,51 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
           color: '#0f172a'
         };
         const badgeText = ratio === null ? 'No Status' : `Step ${status?.current_step}`;
+        
         return (
           <Marker
             key={site.id}
             position={[site.latitude, site.longitude]}
-            icon={buildIconForSite(site)}
+            icon={buildIconForSite(details || site)}
+            eventHandlers={{
+              popupopen: () => loadSiteDetails(site.id)
+            }}
           >
-            <Popup className={colorMode === 'capacity' ? capClass : 'status-shade'}>
+            <Popup className={colorMode === 'status' ? 'status-shade' : 'neutral'}>
               <div className="popup-site">
                 <div className="popup-header">
                   <strong>{site.name}</strong>
                 </div>
-                <div className="popup-body">
-                  <div><span className="popup-label">Available kW:</span> {cap ?? '—'}</div>
-                  <div><span className="popup-label">Peak kW (Yr):</span> {site.last_year_peak_kw ?? '—'}</div>
-                  <div><span className="popup-label">Capacity kW:</span> {site.theoretical_capacity_kw ?? '—'}</div>
-                  <div><span className="popup-label">Utility:</span> {site.utility || '—'}</div>
-                  <div><span className="popup-label">Vehicles:</span> {site.vehicle_count ?? 0}</div>
-                  <div><span className="popup-label">Meter #:</span> {site.meter_number || '—'}</div>
-                  <div><span className="popup-label">Contact:</span> {site.contact_name ? `${site.contact_name}${site.contact_phone ? ' ('+site.contact_phone+')' : ''}` : '—'}</div>
-                  <div><span className="popup-label">Location:</span> {site.address ? `${site.address}${site.city ? ', '+site.city : ''}` : (site.city || '—')}</div>
-                  {selectedProjectId && (
+                {loadingPopup === site.id ? (
+                  <div className="popup-body">Loading details...</div>
+                ) : details ? (
+                  <div className="popup-body">
+                    <div><span className="popup-label">Available kW:</span> {details.available_capacity_kw ?? '—'}</div>
+                    <div><span className="popup-label">Peak kW (Yr):</span> {details.last_year_peak_kw ?? '—'}</div>
+                    <div><span className="popup-label">Capacity kW:</span> {details.theoretical_capacity_kw ?? '—'}</div>
+                    <div><span className="popup-label">Utility:</span> {details.utility || '—'}</div>
+                    <div><span className="popup-label">Vehicles:</span> {details.vehicle_count ?? 0}</div>
+                    <div><span className="popup-label">Meter #:</span> {details.meter_number || '—'}</div>
+                    <div><span className="popup-label">Contact:</span> {details.contact_name ? `${details.contact_name}${details.contact_phone ? ' ('+details.contact_phone+')' : ''}` : '—'}</div>
+                    <div><span className="popup-label">Location:</span> {details.address ? `${details.address}${details.city ? ', '+details.city : ''}` : (details.city || '—')}</div>
+                    {selectedProjectId && (
+                      <div style={{ marginTop:6 }}>
+                        <button className="btn btn-link" style={{ padding:0 }} onClick={() => navigate(`/projects/${selectedProjectId}/status/${site.id}`)}>
+                          <span style={badgeStyle} title={status && status.status_date ? `As of ${new Date(status.status_date).toLocaleDateString()}` : ''}>{badgeText}</span>
+                        </button>
+                      </div>
+                    )}
                     <div style={{ marginTop:6 }}>
-                      <button className="btn btn-link" style={{ padding:0 }} onClick={() => navigate(`/projects/${selectedProjectId}/status/${site.id}`)}>
-                        <span style={badgeStyle} title={status && status.status_date ? `As of ${new Date(status.status_date).toLocaleDateString()}` : ''}>{badgeText}</span>
+                      <button className="btn btn-link" style={{ padding:0 }} onClick={() => navigate(`/site/${site.id}`)}>
+                        View Site Details
                       </button>
                     </div>
-                  )}
-                  <div style={{ marginTop:6 }}>
-                    <button className="btn btn-link" style={{ padding:0 }} onClick={() => navigate(`/site/${site.id}`)}>
-                      View Site Details
-                    </button>
                   </div>
-                </div>
+                ) : (
+                  <div className="popup-body">
+                    <button className="btn btn-secondary" onClick={() => loadSiteDetails(site.id)}>Load Details</button>
+                  </div>
+                )}
               </div>
             </Popup>
           </Marker>

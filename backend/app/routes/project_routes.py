@@ -134,6 +134,70 @@ def remove_site_from_project(project_id, site_id):
         db.session.commit()
     return jsonify({'status': 'ok'})
 
+@project_bp.route('/<int:project_id>/sites/<int:old_site_id>/reassign/<int:new_site_id>', methods=['POST'])
+def reassign_project_site(project_id, old_site_id, new_site_id):
+    """
+    Reassign a project from one site to another, preserving status history.
+    Copies all status records from old_site to new_site, then removes old_site association.
+    """
+    project = _get_project_or_404(project_id)
+    old_site = Site.query.get_or_404(old_site_id)
+    new_site = Site.query.get_or_404(new_site_id)
+    
+    # Verify old site is currently associated
+    if old_site not in project.sites:
+        return jsonify({'error': 'Project is not associated with the old site'}), 400
+    
+    # Add new site if not already associated
+    if new_site not in project.sites:
+        project.sites.append(new_site)
+        db.session.flush()
+    
+    # Copy all status records from old site to new site
+    old_statuses = ProjectStatus.query.filter_by(
+        project_id=project_id,
+        site_id=old_site_id
+    ).all()
+    
+    copied_count = 0
+    skipped_count = 0
+    
+    for old_status in old_statuses:
+        # Check if status already exists for new site on this date
+        existing = ProjectStatus.query.filter_by(
+            project_id=project_id,
+            site_id=new_site_id,
+            status_date=old_status.status_date
+        ).first()
+        
+        if not existing:
+            # Create copy with new site_id
+            new_status = ProjectStatus(
+                project_id=project_id,
+                site_id=new_site_id,
+                current_step=old_status.current_step,
+                status_message=old_status.status_message,
+                status_date=old_status.status_date,
+                estimated_cost=old_status.estimated_cost,
+                actual_cost=old_status.actual_cost
+            )
+            db.session.add(new_status)
+            copied_count += 1
+        else:
+            skipped_count += 1
+    
+    # Remove old site association
+    project.sites.remove(old_site)
+    
+    db.session.commit()
+    
+    return jsonify({
+        'status': 'ok',
+        'statuses_copied': copied_count,
+        'statuses_skipped': skipped_count,
+        'message': f'Project reassigned from site {old_site_id} to site {new_site_id}'
+    })
+
 # Status routes
 @project_bp.route('/<int:project_id>/sites/<int:site_id>/status', methods=['GET'])
 def list_statuses(project_id, site_id):
@@ -181,8 +245,80 @@ def create_status(project_id, site_id):
     if actual_cost is not None:
         status.actual_cost = float(actual_cost)
     db.session.add(status)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        # Check for unique constraint violation
+        error_msg = str(e)
+        if 'uq_project_site_statusdate' in error_msg or 'UniqueViolation' in error_msg:
+            return jsonify({
+                'error': 'A status entry already exists for this date. Please choose a different date or time.'
+            }), 409
+        return jsonify({'error': 'Failed to create status: ' + str(e)}), 500
     return jsonify(status.to_dict()), 201
+
+
+@project_bp.route('/<int:project_id>/sites/<int:site_id>/status/<int:status_id>', methods=['PUT'])
+def update_status(project_id, site_id, status_id):
+    """Update a project status entry."""
+    _get_project_or_404(project_id)
+    Site.query.get_or_404(site_id)
+    status = ProjectStatus.query.get_or_404(status_id)
+    
+    # Verify the status belongs to this project and site
+    if status.project_id != project_id or status.site_id != site_id:
+        return jsonify({'error': 'Status not found for this project/site'}), 404
+    
+    data = request.get_json() or {}
+    
+    if 'current_step' in data:
+        status.current_step = int(data['current_step'])
+    if 'status_message' in data:
+        status.status_message = data['status_message']
+    if 'status_date' in data:
+        status_date = data['status_date']
+        try:
+            if len(status_date) == 10:
+                status.status_date = datetime.strptime(status_date, "%Y-%m-%d")
+            else:
+                status.status_date = datetime.fromisoformat(status_date)
+        except Exception:
+            return jsonify({'error': 'invalid status_date format'}), 400
+    if 'estimated_cost' in data:
+        status.estimated_cost = float(data['estimated_cost']) if data['estimated_cost'] else None
+    if 'actual_cost' in data:
+        status.actual_cost = float(data['actual_cost']) if data['actual_cost'] else None
+    
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        # Check for unique constraint violation
+        error_msg = str(e)
+        if 'uq_project_site_statusdate' in error_msg or 'UniqueViolation' in error_msg:
+            return jsonify({
+                'error': 'A status entry already exists for this date. Please choose a different date or time.'
+            }), 409
+        return jsonify({'error': 'Failed to update status: ' + str(e)}), 500
+    
+    return jsonify(status.to_dict()), 200
+
+
+@project_bp.route('/<int:project_id>/sites/<int:site_id>/status/<int:status_id>', methods=['DELETE'])
+def delete_status(project_id, site_id, status_id):
+    """Delete a project status entry."""
+    _get_project_or_404(project_id)
+    Site.query.get_or_404(site_id)
+    status = ProjectStatus.query.get_or_404(status_id)
+    
+    # Verify the status belongs to this project and site
+    if status.project_id != project_id or status.site_id != site_id:
+        return jsonify({'error': 'Status not found for this project/site'}), 404
+    
+    db.session.delete(status)
+    db.session.commit()
+    return jsonify({'status': 'deleted'}), 200
 
 
 @project_bp.route('/<int:project_id>/status/latest', methods=['GET'])

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { getAggregateMetrics, getProjects, getLatestProjectStatuses, getSite } from "../api";
+import { getAggregateMetrics, getProjects, getLatestProjectStatuses, getSitesForMap } from "../api";
 import { Link, useSearchParams } from "react-router-dom";
 import MapView from "../components/MapView";
 import StatusLegend from "../components/StatusLegend";
@@ -24,21 +24,7 @@ const Home = () => {
   const [initialized, setInitialized] = useState(false);
   const [latestStatuses, setLatestStatuses] = useState([]);
   const [loadingLatest, setLoadingLatest] = useState(false);
-  const [markerColorMode, setMarkerColorMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = window.localStorage.getItem('markerColorMode');
-      if (saved === 'capacity' || saved === 'status') return saved;
-    }
-    return 'capacity';
-  }); // 'capacity' | 'status'
-  useEffect(() => {
-    try { window.localStorage.setItem('markerColorMode', markerColorMode); } catch(e) { /* ignore */ }
-  }, [markerColorMode]);
-
-  // Reset focused site whenever page or search changes
-  useEffect(() => {
-    setFocusSiteId(null);
-  }, [page, search]);
+  const [markerColorMode, setMarkerColorMode] = useState('neutral'); // 'neutral' | 'status'
 
   useEffect(() => {
     getProjects()
@@ -134,13 +120,6 @@ const Home = () => {
     setPage(1);
   }, [selectedProjectId]);
 
-  // If project is cleared while in status color mode, revert to capacity
-  useEffect(() => {
-    if (!selectedProjectId && markerColorMode === 'status') {
-      setMarkerColorMode('capacity');
-    }
-  }, [selectedProjectId, markerColorMode]);
-
   const nextPage = () => {
     if (perPage === 'all') return;
     if (meta && page >= Math.ceil(meta.total / perPage)) return;
@@ -173,36 +152,24 @@ const Home = () => {
     setPage(1);
   };
 
-  // For map markers, use metrics rows directly and normalize id
+  // For map markers, load ALL sites separately (lightweight endpoint)
   const [sitesForMap, setSitesForMap] = useState([]);
+  const [loadingMapSites, setLoadingMapSites] = useState(false);
 
-  // Build map sites and lazily fill missing coords by fetching single site details
+  // Load map sites separately - always fetch ALL sites for complete map overview
   useEffect(() => {
-    const base = metrics.map(row => ({ ...row, id: row.site_id }));
-    if (base.length === 0) { setSitesForMap([]); return; }
-    const missing = base.filter(r => !(r.latitude != null && r.longitude != null));
-    if (missing.length === 0) { setSitesForMap(base); return; }
-    Promise.all(missing.map(r => (
-      getSite(r.site_id)
-        .then(res => {
-          const d = res.data || {};
-          return {
-            ...r,
-            latitude: d.latitude ?? r.latitude,
-            longitude: d.longitude ?? r.longitude,
-            address: d.address ?? r.address,
-            city: d.city ?? r.city
-          };
-        })
-        .catch(() => r)
-    )))
-      .then(filled => {
-        const filledById = new Map(filled.map(f => [f.site_id, f]));
-        const final = base.map(r => filledById.get(r.site_id) ?? r);
-        setSitesForMap(final);
+    setLoadingMapSites(true);
+    // Never include capacity data - markers will use neutral color unless status mode is active
+    getSitesForMap(selectedProjectId || null, false)
+      .then(res => {
+        setSitesForMap(res.data || []);
       })
-      .catch(() => setSitesForMap(base));
-  }, [metrics]);
+      .catch(err => {
+        console.error('Error fetching map sites:', err);
+        setSitesForMap([]);
+      })
+      .finally(() => setLoadingMapSites(false));
+  }, [selectedProjectId]); // Only reload when project filter changes
 
   // Table rows are the metrics rows (already include needed fields)
   const metricsWithSite = useMemo(() => {
@@ -243,11 +210,15 @@ const Home = () => {
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             {selectedProjectId && (loadingLatest ? <span style={{ fontSize:'0.85em', color:'var(--muted)' }}>Loading status…</span> : <span style={{ fontSize:'0.85em', color:'var(--muted)' }}>Status ready</span>)}
-            <label style={{ fontSize:'0.9em', marginLeft:'12px' }}>Marker Color:</label>
-            <select className="input" value={markerColorMode} onChange={(e) => setMarkerColorMode(e.target.value)}>
-              <option value="capacity">Capacity</option>
-              {selectedProjectId && <option value="status">Status</option>}
-            </select>
+            {selectedProjectId && (
+              <>
+                <label style={{ fontSize:'0.9em', marginLeft:'12px' }}>Marker Color:</label>
+                <select className="input" value={markerColorMode} onChange={(e) => setMarkerColorMode(e.target.value)}>
+                  <option value="neutral">Neutral</option>
+                  <option value="status">Status</option>
+                </select>
+              </>
+            )}
           </div>
         </div>
         <MarkerLegend mode={markerColorMode} hasProject={!!selectedProjectId} />
@@ -406,23 +377,20 @@ function MarkerLegend({ mode, hasProject }) {
   const pill = (bg, border, text) => (
     <span style={{ background:bg, border:`1px solid ${border}`, padding:'2px 6px', borderRadius:999 }}>{text}</span>
   );
-  if (mode === 'capacity') {
+  
+  if (mode === 'status' && hasProject) {
     return (
       <div style={wrapStyle}>
-        {pill('#dc2626','#dc2626','Low Cap (<200 kW)')}
-        {pill('#ca8a04','#ca8a04','Mid Cap (200-799 kW)')}
-        {pill('#16a34a','#16a34a','High Cap (≥800 kW)')}
-        {pill('#64748b','#64748b','Unknown')}
+        <StatusLegend />
       </div>
     );
   }
-  // status mode
+  
+  // Neutral mode
   return (
     <div style={wrapStyle}>
-      {!hasProject && <span style={{ color:'var(--muted)' }}>Select a project for status colors.</span>}
-      {hasProject && (
-        <StatusLegend />
-      )}
+      {pill('#F16A22','#F16A22','All Sites')}
+      {hasProject && <span style={{ color:'var(--muted)', marginLeft:'6px' }}>Select "Status" color mode to see project progress</span>}
     </div>
   );
 }

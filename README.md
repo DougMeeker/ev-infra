@@ -1,3 +1,66 @@
+# EV Infrastructure Management Application
+
+A full-stack application for managing California's EV charging infrastructure, including sites, utility services, equipment, vehicles, and infrastructure projects.
+
+## Quick Start
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm start
+```
+
+### Backend
+```bash
+cd backend
+pip install -r requirements.txt
+
+# Windows PowerShell
+$env:FLASK_APP = "run.py"
+flask run
+
+# Linux/Mac
+export FLASK_APP=run.py
+flask run
+```
+
+## Recent Features (January 2026)
+
+### Service Management
+- **Notes Field**: Added notes text field to Services/Meters to differentiate multiple services at a site
+- Services now properly separated from Site model with dedicated utility, meter, and electrical capacity fields
+
+### Project Management Enhancements
+- **Project-Site Reassignment**: Reassign projects between sites while preserving complete status history
+  - Accessible via "Reassign to Different Site" button in Site Details → Projects section
+  - Searchable site selector with live filtering
+  - All status records copied to new site automatically
+- **Inline Status Editing**: Edit and delete status updates directly in the status history
+  - Yellow background indicates edit mode
+  - Duplicate status date validation with user-friendly error messages
+- **Status History Display**: Full chronological list of all status updates per project/site
+- **Inline Project Editing**: Edit button on each project card; edit mode includes steps editor
+
+### Map & Performance Optimizations
+- **Ultra-Fast Map Loading**: Separated map data endpoint (`/api/sites/map-data`) returns only coordinates
+  - Loads all sites instantly without calculating capacity metrics
+  - Popup details loaded on-demand when clicking markers
+  - Results cached per site for fast subsequent access
+- **Marker Color Modes**:
+  - **Neutral** (default): All sites shown in Caltrans Orange (#F16A22)
+  - **Status**: Color-coded by project progress (when project selected)
+- **Focus Feature**: "View on Map" from site details always works, even if site not in current paginated results
+- **Independent Data Loading**: Map shows ALL sites; table remains paginated for performance
+
+### User Experience
+- Error messages displayed in dismissible banners for constraint violations
+- Confirmation dialogs for destructive actions
+- Loading states for asynchronous operations
+- Responsive layouts with proper mobile support
+
+## Frontend Development
+
 Created frontend ev-infra-app\frontend
 Inside that directory, you can run several commands:
 
@@ -111,53 +174,108 @@ Projects manage many Sites. Each project can define ordered steps; sites report 
 
 ### API Endpoints
 
-- Projects:
-  - `GET /api/projects` — list projects
-  - `POST /api/projects` — create project `{ name, description }`
-  - `GET /api/projects/:id` — get project (includes `site_ids` and `steps_count`)
-  - `PUT /api/projects/:id` — update `{ name?, description? }`
-  - `DELETE /api/projects/:id`
+#### Sites
+- `GET /api/sites` — list all sites with vehicle counts and charger totals
+- `GET /api/sites/:id` — get single site details
+- `GET /api/sites/:id/metrics` — get calculated capacity metrics and vehicle count for a site
+- `GET /api/sites/:id/projects` — get projects associated with site (includes progress and latest status)
+- `GET /api/sites/map-data?project_id=&include_capacity=` — lightweight endpoint for map markers
+  - Returns only id, name, latitude, longitude by default
+  - Add `include_capacity=1` for basic capacity calculation (no bills/vehicles)
+- `GET /api/sites/metrics/aggregate` — paginated site metrics with capacity calculations
+- `POST /api/sites` — create site
+- `PUT /api/sites/:id` — update site
+- `DELETE /api/sites/:id` — soft delete site
 
-- Project sites (with pagination and search):
-  - `GET /api/projects/:id/sites?q=&page=1&page_size=25`
-    - Returns `{ items: [Site], page, page_size, total }`
-  - `POST /api/projects/:id/sites` — add site `{ site_id }`
-  - `DELETE /api/projects/:id/sites/:site_id`
+#### Projects
+- `GET /api/projects` — list projects
+- `POST /api/projects` — create project `{ name, description }`
+- `GET /api/projects/:id` — get project (includes `site_ids` and `steps_count`)
+- `PUT /api/projects/:id` — update `{ name?, description? }`
+- `DELETE /api/projects/:id`
 
-- Project steps:
-  - `GET /api/projects/:id/steps` — list ordered steps
-  - `POST /api/projects/:id/steps` — create step `{ title, description?, step_order? }`
-    - `step_order` default = next integer after current max
-  - `PUT /api/projects/:id/steps/:step_id` — update fields
-  - `DELETE /api/projects/:id/steps/:step_id`
-  - Note: `due_date` is not part of `project_steps`; due dates vary per site and should be captured in status updates.
+#### Project Sites (with pagination and search)
+- `GET /api/projects/:id/sites?q=&page=1&page_size=25`
+  - Returns `{ items: [Site], page, page_size, total }`
+- `POST /api/projects/:id/sites` — add site `{ site_id }`
+- `DELETE /api/projects/:id/sites/:site_id` — remove site from project
+- `POST /api/projects/:id/sites/:old_site_id/reassign/:new_site_id` — **NEW**: reassign project to different site
+  - Copies all status records from old site to new site
+  - Removes old site association
+  - Returns `{ status, statuses_copied, statuses_skipped, message }`
 
-- Project status:
-  - `GET /api/projects/:id/sites/:site_id/status` — list per-site status entries (newest first)
-  - `POST /api/projects/:id/sites/:site_id/status` — create status `{ current_step, status_message?, status_date?, estimated_cost?, actual_cost? }`
-  - `GET /api/projects/:id/status/latest` — latest status per site in project (including sites without status)
+#### Project Steps
+- `GET /api/projects/:id/steps` — list ordered steps
+- `POST /api/projects/:id/steps` — create step `{ title, description?, step_order? }`
+  - `step_order` default = next integer after current max
+- `PUT /api/projects/:id/steps/:step_id` — update fields
+- `DELETE /api/projects/:id/steps/:step_id`
 
-### Frontend
+#### Project Status
+- `GET /api/projects/:id/sites/:site_id/status` — list per-site status entries (newest first)
+- `POST /api/projects/:id/sites/:site_id/status` — create status `{ current_step, status_message?, status_date?, estimated_cost?, actual_cost? }`
+- `PUT /api/projects/:id/sites/:site_id/status/:status_id` — **NEW**: update existing status
+- `DELETE /api/projects/:id/sites/:site_id/status/:status_id` — **NEW**: delete status entry
+- `GET /api/projects/:id/status/latest` — latest status per site in project (including sites without status)
 
-- Projects Manager (`/projects`):
-  - Create projects (name + optional description)
-  - Assign sites with search and pagination
-  - Steps editor: inline edit, optimistic add/update/delete, and simple up/down reordering that swaps `step_order` values
-  - Badges indicate per-site status: Complete / In Progress / No Status, computed against steps count
+#### Services (Utility Meters)
+- `GET /api/sites/:site_id/services` — list services for site
+- `POST /api/sites/:site_id/services` — create service with utility info and electrical specs
+- `PUT /api/services/:id` — update service (includes `notes` field)
+- `DELETE /api/services/:id` — soft delete service
 
-- Home page:
-  - Project selector applies latest statuses to table and map
-  - Marker color mode: Capacity or Status; Status requires a selected project
+### Frontend Features
+
+#### Home Page (`/`)
+- **Map View**:
+  - Displays ALL sites instantly (not limited by table pagination)
+  - Marker colors: Neutral (Caltrans Orange) or Status-based (when project selected)
+  - Click markers to load site details on-demand
+  - Focus feature: "View on Map" from site details always works
+  - Can add new sites by clicking map (when enabled)
+- **Table View**:
+  - Paginated site metrics (10/25/50/100 per page or All)
+  - Sortable columns: capacity, peak kW, vehicle count, etc.
+  - Search by site name
+  - Filter by project
+  - Shows missing data indicators
+- **Project Selector**: Filter sites by project and view status badges
+
+#### Projects Manager (`/projects`)
+- Create/edit projects with inline editing (click Edit button)
+- **Steps Editor**: Integrated in project edit form
+  - Add/edit/delete steps
+  - Reorder with up/down buttons
+- **Sites Assignment**: 
+  - Search and paginate available sites
+  - Add/remove sites from project
+- **Status History**: 
+  - Sorted chronological display
+  - Inline edit/delete for each status entry
+  - Date validation prevents duplicates
+  - Error messages displayed in dismissible banners
+
+#### Site Details (`/site/:id`)
+- **Projects Section**: 
+  - Shows all associated projects with progress bars
+  - Latest status message and date
+  - "View Details" button links to project manager
+  - "Reassign to Different Site" button with searchable site selector
+  - "Remove from Site" button
+- **Services/Meters**: Add/edit utility services with notes field
+- **Utility Bills**: Monthly peak demand tracking per service
+- **Equipment**: Vehicle and charger assignment
+- **Files**: Document management with upload/download
 
 #### Project Status UI
-
 - Page: `/projects/:projectId` (also `/project/:projectId`)
-- Deep-link to a specific site: `/project/:projectId/site/:siteId`
+- Deep-link to specific site: `/project/:projectId/site/:siteId`
 - Features:
-  - Choose step via buttons (no dropdowns)
-  - Add status with optional message and costs
-  - View latest status per site in a responsive grid
-  - Click a site box to select and scroll to its history
+  - Choose step via buttons
+  - Add status with message, date, and cost estimates
+  - View latest status per site in responsive grid
+  - Click site box to view full status history
+  - Inline edit/delete status entries
 
 ### Migrations
 
