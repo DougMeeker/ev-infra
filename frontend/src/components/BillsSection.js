@@ -70,7 +70,8 @@ export default function BillsSection({ siteId, onTotalsChange }) {
       setNewBill({ service_id: newBill.service_id, year: '', month: '', energy_usage: '', max_power: '' });
     } catch (err) {
       console.error('Error creating bill:', err);
-      alert('Failed to create bill');
+      const errorMsg = err.response?.data?.error || err.message || 'Failed to create bill';
+      alert(`Failed to create bill: ${errorMsg}`);
     }
   };
 

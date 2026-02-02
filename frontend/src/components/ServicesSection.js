@@ -29,7 +29,7 @@ const ServicesSection = ({ siteId }) => {
             main_breaker_amps: '',
             voltage: '',
             phase_count: '',
-            power_factor: '0.95',
+            power_factor: '1',
             notes: ''
         });
     };
@@ -44,7 +44,7 @@ const ServicesSection = ({ siteId }) => {
             main_breaker_amps: service.main_breaker_amps || '',
             voltage: service.voltage || '',
             phase_count: service.phase_count || '',
-            power_factor: service.power_factor || '0.95',
+            power_factor: service.power_factor || '1',
             notes: service.notes || ''
         });
     };
@@ -59,7 +59,7 @@ const ServicesSection = ({ siteId }) => {
             main_breaker_amps: formData.main_breaker_amps ? parseInt(formData.main_breaker_amps) : null,
             voltage: formData.voltage ? parseInt(formData.voltage) : null,
             phase_count: formData.phase_count ? parseInt(formData.phase_count) : null,
-            power_factor: formData.power_factor ? parseFloat(formData.power_factor) : 0.95
+            power_factor: formData.power_factor ? parseFloat(formData.power_factor) : 1
         };
 
         if (editing === 'new') {
@@ -99,7 +99,7 @@ const ServicesSection = ({ siteId }) => {
         if (!service.main_breaker_amps || !service.voltage || !service.phase_count) return null;
         const amps = service.main_breaker_amps;
         const volts = service.voltage;
-        const pf = service.power_factor || 0.95;
+        const pf = service.power_factor || 1;
         const phases = service.phase_count;
         
         if (phases === 3) {
@@ -207,9 +207,9 @@ const ServicesSection = ({ siteId }) => {
                                 <div><span>Main Breaker Amps:</span><strong>{service.main_breaker_amps || 'N/A'}</strong></div>
                                 <div><span>Voltage:</span><strong>{service.voltage || 'N/A'}</strong></div>
                                 <div><span>Phase Count:</span><strong>{service.phase_count || 'N/A'}</strong></div>
-                                <div><span>Power Factor:</span><strong>{service.power_factor || '0.95'}</strong></div>
+                                <div><span>Power Factor:</span><strong>{service.power_factor || '1'}</strong></div>
                                 {calculateCapacity(service) && (
-                                    <div><span>Theoretical Capacity:</span><strong>{calculateCapacity(service)} kW</strong></div>
+                                    <div><span>Service Capacity:</span><strong>{calculateCapacity(service)} kW</strong></div>
                                 )}
                             </div>
                         </div>

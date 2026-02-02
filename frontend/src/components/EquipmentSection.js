@@ -73,15 +73,6 @@ const EquipmentSection = ({ siteId }) => {
         </div>
       </div>
 
-      {energySummary && (
-        <div className="card" style={{ marginBottom: '16px' }}>
-          <h4 style={{ marginTop: 0 }}>Energy Summary ({energySummary.year})</h4>
-          <p><strong>Total Miles:</strong> {energySummary.total_miles != null ? Number(energySummary.total_miles).toLocaleString(undefined) : '—'}</p>
-          <p><strong>Daily Avg kWh:</strong> {energySummary.site_daily_avg_kwh != null ? Number(energySummary.site_daily_avg_kwh).toFixed(2) : '—'}</p>
-          <p><strong>Daily Max kWh:</strong> <span title="Max daily energy in any single month across vehicles">{energySummary.site_daily_max_kwh != null ? Number(energySummary.site_daily_max_kwh).toFixed(2) : '—'}</span></p>
-        </div>
-      )}
-
       {/* Pagination controls */}
       <div className="flex-row gap-sm" style={{ alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap' }}>
         <span>Showing {total === 0 ? 0 : ((page - 1) * perPage + 1)}–{(page - 1) * perPage + returned} of {total}</span>

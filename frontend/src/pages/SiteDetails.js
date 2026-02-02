@@ -1,21 +1,12 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { updateSite, deleteSite, getSiteMetrics, getSite } from "../api";
+import { updateSite, deleteSite, getSiteMetrics, getSite, getEquipmentEnergy } from "../api";
 import EquipmentSection from "../components/EquipmentSection";
 import BillsSection from "../components/BillsSection";
 import SiteProjectsSection from "../components/SiteProjectsSection";
 import ChargersSection from "../components/ChargersSection";
 import FilesSection from "../components/FilesSection";
 import ServicesSection from "../components/ServicesSection";
-const formatDate = (d) => {
-    if (!d) return '';
-    try {
-      const s = typeof d === 'date' ? d : new Date(d).toISOString().split('T')[0];
-      return s;
-    } catch {
-      return String(d);
-    }
-  };
 
 const SiteDetails = () => {
     const { id } = useParams();
@@ -26,6 +17,7 @@ const SiteDetails = () => {
     const [billsTotalEnergyKwh, setBillsTotalEnergyKwh] = useState(0);
     const [metrics, setMetrics] = useState(null);
     const [metricsLoading, setMetricsLoading] = useState(false);
+    const [energySummary, setEnergySummary] = useState(null);
     const [showProjects, setShowProjects] = useState(true);
     const [showChargers, setShowChargers] = useState(true);
     const [showEquipment, setShowEquipment] = useState(true);
@@ -42,8 +34,14 @@ const SiteDetails = () => {
             })
             .catch(err => console.error("Error fetching site:", err));
         setMetricsLoading(true);
-        getSiteMetrics(id)
-            .then(res => setMetrics(res.data))
+        Promise.all([
+            getSiteMetrics(id),
+            getEquipmentEnergy(id)
+        ])
+            .then(([metricsRes, energyRes]) => {
+                setMetrics(metricsRes.data);
+                setEnergySummary(energyRes.data);
+            })
             .catch(err => console.error("Error fetching metrics:", err))
             .finally(() => setMetricsLoading(false));
         // Chargers and Projects are loaded within their respective sections now
@@ -134,15 +132,30 @@ const SiteDetails = () => {
                         </div>
                     )}
                     {!metricsLoading && metrics && (
-                        <div className="metrics-block">
-                            <h4>Capacity Metrics (All Services Combined)</h4>
-                            <p><strong>Last Year Peak (kW):</strong> {metrics.last_year_peak_kw}</p>
-                            <p><strong>Theoretical Capacity (kW):</strong> {metrics.theoretical_capacity_kw ?? 'N/A'}</p>
-                            <p><strong>Available Capacity (kW):</strong> {metrics.available_capacity_kw ?? 'N/A'}</p>
-                            <p><strong>Power Factor Used:</strong> {metrics.power_factor}</p>
-                            <p><strong>Total Energy (kWh):</strong> {Math.round(billsTotalEnergyKwh * 1000) / 1000}</p>
-                            <p><strong>Avg Workday Energy (kWh/day):</strong> {Math.round(avgWorkdayEnergyKwh * 1000) / 1000}</p>
-                        </div>
+                        <>
+                            <div className="metrics-block">
+                                <h4>Capacity Metrics</h4>
+                                <p><strong>Service Capacity (kW):</strong> {metrics.theoretical_capacity_kw ?? 'N/A'} <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(from electrical service specs)</span></p>
+                                <p><strong>Peak Demand (kW):</strong> {metrics.bill_count === 0 ? 'Unknown (no bills)' : metrics.last_year_peak_kw} <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(from utility bills)</span></p>
+                                <p><strong>Available Capacity (kW):</strong> {
+                                    metrics.bill_count === 0 ? 'Unknown (no bills)':
+                                    metrics.available_capacity_kw !== null && metrics.available_capacity_kw !== undefined
+                                        ? metrics.available_capacity_kw
+                                        :'N/A'
+                                } <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(service capacity - peak demand)</span></p>
+                                <p><strong>Power Factor:</strong> {metrics.power_factor}</p>
+                                <p><strong>Total Energy (kWh):</strong> {metrics.bill_count === 0 ? 'Unknown (no bills)' : Math.round(billsTotalEnergyKwh * 1000) / 1000} <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(from utility bills)</span></p>
+                                <p><strong>Avg Workday Energy (kWh/day):</strong> {metrics.bill_count === 0 ? 'Unknown (no bills)' : Math.round(avgWorkdayEnergyKwh * 1000) / 1000} <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(total / 260 days)</span></p>
+                            </div>
+                            {energySummary && (
+                                <div className="metrics-block" style={{ marginTop: '16px' }}>
+                                    <h4>Equipment Energy Summary ({energySummary.year})</h4>
+                                    <p><strong>Total Miles:</strong> {energySummary.total_miles != null ? Number(energySummary.total_miles).toLocaleString(undefined) : '—'}</p>
+                                    <p><strong>Daily Avg kWh:</strong> {energySummary.site_daily_avg_kwh != null ? Number(energySummary.site_daily_avg_kwh).toFixed(2) : '—'}</p>
+                                    <p><strong>Daily Max kWh:</strong> <span title="Max daily energy in any single month across vehicles">{energySummary.site_daily_max_kwh != null ? Number(energySummary.site_daily_max_kwh).toFixed(2) : '—'}</span></p>
+                                </div>
+                            )}
+                        </>
                     )}
                     <button className="btn" onClick={() => setEditing(true)}>Edit</button>
                 </div>

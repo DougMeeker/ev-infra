@@ -15,6 +15,15 @@ class S3StorageProvider(StorageProvider):
         self.secret_key = cfg.get('S3_SECRET_KEY')
         self.bucket = cfg.get('S3_BUCKET')
         use_ssl = bool(cfg.get('S3_USE_SSL'))
+        
+        # For MinIO, we need to configure boto3 properly
+        boto_config = BotoConfig(
+            signature_version='s3v4',
+            s3={
+                'addressing_style': 'path'  # MinIO requires path-style addressing
+            }
+        )
+        
         self.client = boto3.client(
             's3',
             endpoint_url=self.endpoint_url,
@@ -22,7 +31,7 @@ class S3StorageProvider(StorageProvider):
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
             use_ssl=use_ssl,
-            config=BotoConfig(signature_version='s3v4')
+            config=boto_config
         )
 
     def _choose_key(self, original_name: str) -> str:

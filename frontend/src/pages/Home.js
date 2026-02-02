@@ -310,8 +310,12 @@ const Home = () => {
                   title={missingFieldsForRow(row).length ? `Missing: ${missingFieldsForRow(row).join(', ')}` : ''}
                 >
                   <td><Link to={`/site/${row.site_id}`}>{row.name}</Link></td>
-                  <td style={{textAlign:'right'}}>{row.available_capacity_kw ?? '—'}</td>
-                  <td style={{textAlign:'right'}}>{row.last_year_peak_kw}</td>
+                  <td style={{textAlign:'right'}}>
+                    {row.available_capacity_kw !== null && row.available_capacity_kw !== undefined
+                      ? row.available_capacity_kw
+                      : (row.bill_count === 0 ? 'Unknown' : '—')}
+                  </td>
+                  <td style={{textAlign:'right'}}>{row.bill_count === 0 ? 'Unknown' : row.last_year_peak_kw}</td>
                   <td style={{textAlign:'right'}}>{row.theoretical_capacity_kw ?? '—'}</td>
                   <td style={{textAlign:'right'}}>{row.total_charger_kw ?? 0}</td>
                   <td style={{textAlign:'right'}}>{row.site_daily_avg_kwh != null ? Number(row.site_daily_avg_kwh).toFixed(1) : '—'}</td>

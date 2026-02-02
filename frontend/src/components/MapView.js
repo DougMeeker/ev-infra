@@ -192,8 +192,12 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
                   <div className="popup-body">Loading details...</div>
                 ) : details ? (
                   <div className="popup-body">
-                    <div><span className="popup-label">Available kW:</span> {details.available_capacity_kw ?? '—'}</div>
-                    <div><span className="popup-label">Peak kW (Yr):</span> {details.last_year_peak_kw ?? '—'}</div>
+                    <div><span className="popup-label">Available kW:</span> {
+                      details.available_capacity_kw !== null && details.available_capacity_kw !== undefined
+                        ? details.available_capacity_kw
+                        : (details.bill_count === 0 ? 'Unknown (no bills)' : '—')
+                    }</div>
+                    <div><span className="popup-label">Peak kW:</span> {details.bill_count === 0 ? 'Unknown (no bills)' : details.last_year_peak_kw}</div>
                     <div><span className="popup-label">Capacity kW:</span> {details.theoretical_capacity_kw ?? '—'}</div>
                     <div><span className="popup-label">Utility:</span> {details.utility || '—'}</div>
                     <div><span className="popup-label">Vehicles:</span> {details.vehicle_count ?? 0}</div>

@@ -43,18 +43,33 @@ def create_bill(service_id, data):
         return {"error": "Service not found"}, 404
     year = data.get("year")
     month = data.get("month")
-    if not isinstance(year, int) or not isinstance(month, int) or month < 1 or month > 12:
-        return {"error": "Invalid year/month"}, 400
-    existing = UtilityBill.query.filter_by(service_id=service_id, year=year, month=month).first()
+    
+    # Validate year and month types and range
+    if year is None or month is None:
+        return {"error": "Year and month are required"}, 400
+    if not isinstance(year, int) or not isinstance(month, int):
+        return {"error": f"Invalid year/month types: year={type(year).__name__}, month={type(month).__name__}"}, 400
+    if month < 1 or month > 12:
+        return {"error": f"Month must be between 1 and 12, got {month}"}, 400
+    
+    # Check for existing bill (including soft-deleted ones)
+    existing = UtilityBill.query.filter_by(
+        service_id=service_id, 
+        year=year, 
+        month=month,
+        is_deleted=False
+    ).first()
+    
     try:
         if existing:
+            # Update existing bill
             existing.energy_usage = data.get("energy_usage")
             existing.max_power = data.get("max_power")
-            existing.is_deleted = False
             existing.updated_at = datetime.utcnow()
             db.session.commit()
             return existing.to_dict(), 200
         else:
+            # Create new bill
             bill = UtilityBill(
                 service_id=service_id,
                 year=year,
@@ -69,7 +84,10 @@ def create_bill(service_id, data):
             return bill.to_dict(), 201
     except Exception as e:
         db.session.rollback()
-        return {"error": f"Failed to save bill: {e}"}, 400
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error creating bill: {error_details}")
+        return {"error": f"Failed to save bill: {str(e)}"}, 400
 
 
 def get_bill(bill_id):

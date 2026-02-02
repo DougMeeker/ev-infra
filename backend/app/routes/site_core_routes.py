@@ -128,6 +128,7 @@ def get_site_metrics(site_id):
     total_last_year_peak_kw = 0.0
     service_metrics = []
     has_capacity_data = False
+    total_bill_count = 0
     
     for service in services:
         # Get bills for this service
@@ -136,6 +137,8 @@ def get_site_metrics(site_id):
             .filter_by(service_id=service.id, is_deleted=False)
             .all()
         )
+        
+        total_bill_count += len(bills)
         
         # Calculate peak for this service
         service_peak_kw = 0.0
@@ -196,6 +199,7 @@ def get_site_metrics(site_id):
         "available_capacity_kw": round(available_capacity_kw, 3) if available_capacity_kw is not None else None,
         "power_factor": 0.95,  # Average, could be calculated from services
         "vehicle_count": vehicle_count,
+        "bill_count": total_bill_count,
         "services": service_metrics
     }
     return jsonify(result), 200
@@ -482,7 +486,9 @@ def aggregate_site_metrics():
 
     rows = []
     for s in sites:
-        last_year_peak_kw = max([b.max_power for b in bills_by_site.get(s.id, []) if b.max_power is not None], default=0)
+        site_bills = bills_by_site.get(s.id, [])
+        last_year_peak_kw = max([b.max_power for b in site_bills if b.max_power is not None], default=0)
+        bill_count = len(site_bills)
         
         # Calculate aggregate capacity from all services at this site
         theoretical_capacity_kw = None
@@ -540,7 +546,8 @@ def aggregate_site_metrics():
             # charger aggregates & vehicles
             "total_charger_kw": round(charger_totals.get(s.id, 0.0), 3),
             "installed_charger_kw": round(charger_installed_totals.get(s.id, 0.0), 3),
-            "vehicle_count": vehicle_counts.get(s.id, 0)
+            "vehicle_count": vehicle_counts.get(s.id, 0),
+            "bill_count": bill_count
         }
         # Attach precomputed daily metrics if available
         dm = daily_metrics_by_site.get(s.id)
