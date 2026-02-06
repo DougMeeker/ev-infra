@@ -201,7 +201,13 @@ export default function BillsSection({ siteId, onTotalsChange }) {
                         ))}
                       </select>
                     </td>
-                    <td>{bill.year}-{String(bill.month).padStart(2, '0')}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <input className="input" name="year" placeholder="Year" value={billEditData.year ?? ''} onChange={handleBillEditChange} style={{ width: '70px' }} />
+                        <span>-</span>
+                        <input className="input" name="month" placeholder="Mo" value={billEditData.month ?? ''} onChange={handleBillEditChange} style={{ width: '50px' }} />
+                      </div>
+                    </td>
                     <td><input className="input" name="energy_usage" value={billEditData.energy_usage ?? ''} onChange={handleBillEditChange} style={{ width: '100px' }} /></td>
                     <td><input className="input" name="max_power" value={billEditData.max_power ?? ''} onChange={handleBillEditChange} style={{ width: '90px' }} /></td>
                     <td>

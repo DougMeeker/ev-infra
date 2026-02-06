@@ -26,6 +26,7 @@ const SitesManager = () => {
     if (!q) return true;
     return (
       (s.name || '').toLowerCase().includes(q) ||
+      (s.address || '').toLowerCase().includes(q) ||
       (s.city || '').toLowerCase().includes(q) ||
       (s.department_id || '').toLowerCase().includes(q)
     );
@@ -37,7 +38,7 @@ const SitesManager = () => {
       <div className="card" style={{ marginBottom: 16 }}>
         <h4 style={{ marginTop: 0 }}>Search</h4>
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
-          <input className="input" placeholder="Search by name, city, department id" value={search} onChange={e=>setSearch(e.target.value)} style={{ width: 320 }} />
+          <input className="input" placeholder="Search by name, address, city, or department id" value={search} onChange={e=>setSearch(e.target.value)} style={{ width: 320 }} />
         </div>
       </div>
 
@@ -46,6 +47,7 @@ const SitesManager = () => {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Address</th>
               <th>City</th>
               <th>Department ID</th>
               <th style={{ width: 220 }}>Actions</th>
@@ -55,6 +57,7 @@ const SitesManager = () => {
             {filtered.map(s => (
               <tr key={s.id}>
                 <td><Link to={`/site/${s.id}`}>{s.name}</Link></td>
+                <td>{s.address || '—'}</td>
                 <td>{s.city || '—'}</td>
                 <td>
                   <input className="input" style={{ width: 160 }} value={s.department_id || ''} onChange={e=>{
@@ -77,7 +80,7 @@ const SitesManager = () => {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={4} className="table-empty">No matching sites</td></tr>
+              <tr><td colSpan={5} className="table-empty">No matching sites</td></tr>
             )}
           </tbody>
         </table>

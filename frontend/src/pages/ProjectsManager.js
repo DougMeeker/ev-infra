@@ -6,6 +6,7 @@ import SitesSection from '../components/SitesSection';
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import {
   getProjects,
+  createProject,
   updateProject,
   deleteProject,
   getSites,
@@ -33,6 +34,8 @@ export default function ProjectsManager() {
 
   const [editProject, setEditProject] = useState({ name: '', description: '' });
   const [editingProjectId, setEditingProjectId] = useState(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newProject, setNewProject] = useState({ name: '', description: '' });
   const [assignment, setAssignment] = useState({ siteId: '', siteName: '' });
   const [siteSearch, setSiteSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -276,6 +279,29 @@ export default function ProjectsManager() {
       setProjectSites([]);
       setLatestStatuses([]);
       setSteps([]);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    if (!newProject.name.trim()) {
+      alert('Project name is required');
+      return;
+    }
+    try {
+      const payload = {
+        name: newProject.name.trim(),
+        description: newProject.description?.trim() || undefined,
+      };
+      const { data } = await createProject(payload);
+      await loadProjects();
+      setNewProject({ name: '', description: '' });
+      setShowCreateForm(false);
+      // Auto-select the newly created project
+      setSelectedProjectId(data.id);
+      navigate(`/project/${data.id}`);
+    } catch (err) {
+      console.error('Error creating project:', err);
+      alert('Failed to create project: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -531,9 +557,9 @@ export default function ProjectsManager() {
         onDeleteProject={handleDelete}
         editProject={editProject}
         setEditProject={setEditProject}
-        onSaveEdit={async (payload) => {
+        onSaveEdit={async (projectId, payload) => {
           const data = { name: payload.name, description: payload.description || undefined };
-          await updateProject(selectedProjectId, data);
+          await updateProject(projectId, data);
           await loadProjects();
         }}
         editingProjectId={editingProjectId}
@@ -544,6 +570,11 @@ export default function ProjectsManager() {
         handleCreateStep={handleCreateStep}
         handleUpdateStep={handleUpdateStep}
         handleDeleteStep={handleDeleteStep}
+        showCreateForm={showCreateForm}
+        setShowCreateForm={setShowCreateForm}
+        newProject={newProject}
+        setNewProject={setNewProject}
+        onCreateProject={handleCreateProject}
       />
       
       <SitesSection

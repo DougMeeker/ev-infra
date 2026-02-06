@@ -22,13 +22,76 @@ export default function ProjectsSection({
   handleCreateStep,
   handleUpdateStep,
   handleDeleteStep,
+  showCreateForm,
+  setShowCreateForm,
+  newProject,
+  setNewProject,
+  onCreateProject,
 }) {
   const list = Array.isArray(projects) ? projects : [];
   const safeEdit = editProject || { name: '', description: '' };
+  const safeNewProject = newProject || { name: '', description: '' };
   
   return (
     <div className="card" style={{ marginBottom: 16 }}>
-      <h3>Projects {loadingProjects && <small style={{ fontWeight:'normal' }}>Loading...</small>}</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h3 style={{ margin: 0 }}>Projects {loadingProjects && <small style={{ fontWeight:'normal' }}>Loading...</small>}</h3>
+        <button 
+          className="btn" 
+          onClick={() => setShowCreateForm(!showCreateForm)}
+        >
+          {showCreateForm ? 'Cancel' : '+ New Project'}
+        </button>
+      </div>
+      
+      {/* Create New Project Form */}
+      {showCreateForm && (
+        <div className="card" style={{ marginBottom: 16, backgroundColor: '#f0f8ff', borderLeft: '4px solid var(--primary)' }}>
+          <h4 style={{ marginTop: 0 }}>Create New Project</h4>
+          <form
+            onSubmit={(e) => { 
+              e.preventDefault(); 
+              onCreateProject();
+            }}
+            style={{ display:'flex', flexDirection:'column', gap: 12 }}
+          >
+            <div style={{ display:'flex', gap: 12, flexWrap:'wrap' }}>
+              <label style={{ display:'flex', flexDirection:'column', flex: '1 1 250px' }}>
+                <span style={{ marginBottom: 4, fontWeight: 500 }}>Name *</span>
+                <input 
+                  className="input"
+                  placeholder="Project Name"
+                  value={safeNewProject.name}
+                  onChange={(e) => setNewProject({ ...safeNewProject, name: e.target.value })}
+                  required
+                />
+              </label>
+              <label style={{ display:'flex', flexDirection:'column', flex: '2 1 400px' }}>
+                <span style={{ marginBottom: 4, fontWeight: 500 }}>Description</span>
+                <textarea 
+                  className="input"
+                  placeholder="Project description (optional)"
+                  value={safeNewProject.description}
+                  onChange={(e) => setNewProject({ ...safeNewProject, description: e.target.value })}
+                  rows={2}
+                  style={{ resize: 'vertical' }}
+                />
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" className="btn">Create Project</button>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setShowCreateForm(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      
       <div className={styles.latestGrid}>
         {list.map((p) => {
           const isSelected = String(selectedProjectId) === String(p.id);
@@ -111,7 +174,7 @@ export default function ProjectsSection({
                   <form
                     onSubmit={(e) => { 
                       e.preventDefault(); 
-                      onSaveEdit(safeEdit);
+                      onSaveEdit(p.id, safeEdit);
                       setEditingProjectId(null);
                     }}
                     style={{ display:'flex', flexDirection:'column', gap: 12 }}
