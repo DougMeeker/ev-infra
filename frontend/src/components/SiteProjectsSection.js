@@ -92,7 +92,7 @@ export default function SiteProjectsSection({ siteId }) {
                 <button 
                     className="btn btn-secondary" 
                     style={{ marginLeft: '12px' }}
-                    onClick={() => navigate('/status')}
+                    onClick={() => navigate('/project')}
                 >
                     Manage Projects
                 </button>
@@ -165,7 +165,7 @@ export default function SiteProjectsSection({ siteId }) {
                         <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <button 
                                 className="btn btn-secondary"
-                                onClick={() => navigate(`/status?project=${project.id}&site=${siteId}`)}
+                                onClick={() => navigate(`/project/${project.id}?siteId=${siteId}`)}
                             >
                                 View Details
                             </button>

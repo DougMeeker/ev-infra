@@ -106,6 +106,9 @@ export default function ProjectsManager() {
   useEffect(() => {
     if (params.projectId) {
       setSelectedProjectId(Number(params.projectId));
+    } else {
+      // Clear selection if no project ID in URL
+      setSelectedProjectId(null);
     }
   }, [params.projectId]);
 
@@ -514,7 +517,17 @@ export default function ProjectsManager() {
         stepsCount={steps.length}
         projectAverages={projectAverages}
         loadingProjects={loadingProjects}
-        onSelectProject={(id) => { setSelectedProjectId(id); navigate(`/project/${id}`); }}
+        onSelectProject={(id) => { 
+          if (String(id) === String(selectedProjectId)) {
+            // Deselect if clicking same project
+            setSelectedProjectId(null);
+            navigate('/project');
+          } else {
+            // Select new project
+            setSelectedProjectId(id);
+            navigate(`/project/${id}`);
+          }
+        }}
         onDeleteProject={handleDelete}
         editProject={editProject}
         setEditProject={setEditProject}
