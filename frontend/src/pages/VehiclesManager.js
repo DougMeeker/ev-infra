@@ -35,7 +35,8 @@ const VehiclesManager = () => {
     getSites().then(res => setSites(res.data || [])).catch(()=>{});
     getCatalog().then(res => setCatalog(res.data || [])).catch(()=>{});
   }, []);
-  useEffect(() => { load(); }, [page, perPage, order, sort, search, siteId, departmentId, mcCode, load]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [page, perPage, order, sort, search, siteId, departmentId, mcCode]);
 
   const toggleSort = (field) => {
     if (sort === field) {

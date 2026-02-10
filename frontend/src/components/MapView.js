@@ -25,6 +25,7 @@ const ClickHandler = ({ onMapClick }) => {
 
 const FocusHelper = ({ focusSite, onClearFocus }) => {
   const map = useMap();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (focusSite && focusSite.latitude && focusSite.longitude) {
       map.flyTo([focusSite.latitude, focusSite.longitude], 13, { duration: 0.75 });
@@ -36,7 +37,7 @@ const FocusHelper = ({ focusSite, onClearFocus }) => {
         return () => clearTimeout(t);
       }
     }
-  }, [focusSite, map, onClearFocus]);
+  }, [focusSite, map]);
   return null;
 };
 

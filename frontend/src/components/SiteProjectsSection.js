@@ -21,9 +21,10 @@ export default function SiteProjectsSection({ siteId }) {
             .finally(() => setLoading(false));
     };
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         loadProjects();
-    }, [siteId, loadProjects]);
+    }, [siteId]);
 
     const handleRemoveProject = async (projectId, projectName) => {
         if (!window.confirm(`Remove "${projectName}" from this site? This will not delete the project, only unassign it from this site.`)) {

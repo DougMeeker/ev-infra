@@ -52,7 +52,8 @@ const VehicleDetails = () => {
     }
   };
 
-  useEffect(() => { load(); }, [id, load]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [id]);
 
   const saveMeta = async () => {
     const payload = {

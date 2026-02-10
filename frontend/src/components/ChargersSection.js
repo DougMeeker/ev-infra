@@ -35,7 +35,8 @@ export default function ChargersSection({ siteId }) {
     }
   };
 
-  useEffect(() => { load(); }, [siteId, load]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [siteId]);
 
   return (
     <div className="card">

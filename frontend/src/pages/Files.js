@@ -15,7 +15,8 @@ const FilesPage = () => {
       .catch(err => console.error('Error listing files', err));
   };
 
-  useEffect(() => { loadFiles(); }, [q, loadFiles]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadFiles(); }, [q]);
 
   const onAssign = async () => {
     if (!selectedFile || selectedSiteIds.length === 0) return;

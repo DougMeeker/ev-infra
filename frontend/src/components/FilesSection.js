@@ -13,7 +13,8 @@ const FilesSection = ({ siteId }) => {
       .catch(err => console.error('Error loading files', err));
   };
 
-  useEffect(() => { loadFiles(); }, [siteId, loadFiles]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadFiles(); }, [siteId]);
 
   const onUpload = async (e) => {
     e.preventDefault();

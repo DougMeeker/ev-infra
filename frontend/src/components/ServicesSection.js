@@ -15,9 +15,10 @@ const ServicesSection = ({ siteId }) => {
             .finally(() => setLoading(false));
     };
     
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         loadServices();
-    }, [siteId, loadServices]);
+    }, [siteId]);
 
     const handleAdd = () => {
         setEditing('new');
