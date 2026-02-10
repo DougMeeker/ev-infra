@@ -7,10 +7,6 @@ const ServicesSection = ({ siteId }) => {
     const [editing, setEditing] = useState(null); // service id being edited, or 'new'
     const [formData, setFormData] = useState({});
 
-    useEffect(() => {
-        loadServices();
-    }, [siteId]);
-
     const loadServices = () => {
         setLoading(true);
         getServices(siteId)
@@ -18,6 +14,10 @@ const ServicesSection = ({ siteId }) => {
             .catch(err => console.error("Error loading services:", err))
             .finally(() => setLoading(false));
     };
+    
+    useEffect(() => {
+        loadServices();
+    }, [siteId, loadServices]);
 
     const handleAdd = () => {
         setEditing('new');

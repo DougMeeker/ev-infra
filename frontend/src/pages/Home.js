@@ -154,11 +154,9 @@ const Home = () => {
 
   // For map markers, load ALL sites separately (lightweight endpoint)
   const [sitesForMap, setSitesForMap] = useState([]);
-  const [loadingMapSites, setLoadingMapSites] = useState(false);
 
   // Load map sites separately - always fetch ALL sites for complete map overview
   useEffect(() => {
-    setLoadingMapSites(true);
     // Never include capacity data - markers will use neutral color unless status mode is active
     getSitesForMap(selectedProjectId || null, false)
       .then(res => {
@@ -167,8 +165,7 @@ const Home = () => {
       .catch(err => {
         console.error('Error fetching map sites:', err);
         setSitesForMap([]);
-      })
-      .finally(() => setLoadingMapSites(false));
+      });
   }, [selectedProjectId]); // Only reload when project filter changes
 
   // Table rows are the metrics rows (already include needed fields)

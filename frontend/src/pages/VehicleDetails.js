@@ -52,7 +52,7 @@ const VehicleDetails = () => {
     }
   };
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [id, load]);
 
   const saveMeta = async () => {
     const payload = {

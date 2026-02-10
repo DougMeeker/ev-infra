@@ -35,7 +35,7 @@ const VehiclesManager = () => {
     getSites().then(res => setSites(res.data || [])).catch(()=>{});
     getCatalog().then(res => setCatalog(res.data || [])).catch(()=>{});
   }, []);
-  useEffect(() => { load(); }, [page, perPage, order, sort, search, siteId, departmentId, mcCode]);
+  useEffect(() => { load(); }, [page, perPage, order, sort, search, siteId, departmentId, mcCode, load]);
 
   const toggleSort = (field) => {
     if (sort === field) {

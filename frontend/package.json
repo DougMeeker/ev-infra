@@ -40,6 +40,14 @@
       "last 1 safari version"
     ]
   },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!(axios|react-leaflet|@react-leaflet)/)"
+    ],
+    "moduleNameMapper": {
+      "^axios$": "<rootDir>/src/__mocks__/axios.js"
+    }
+  },
   "devDependencies": {
     "baseline-browser-mapping": "^2.9.19"
   }

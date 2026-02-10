@@ -13,7 +13,7 @@ const FilesSection = ({ siteId }) => {
       .catch(err => console.error('Error loading files', err));
   };
 
-  useEffect(() => { loadFiles(); }, [siteId]);
+  useEffect(() => { loadFiles(); }, [siteId, loadFiles]);
 
   const onUpload = async (e) => {
     e.preventDefault();

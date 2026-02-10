@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { getChargers, getProjects, createCharger, updateCharger, deleteCharger } from '../api';
-import { Link, NavLink } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 const formatDate = (d) => {
   if (!d) return '';
   try {
-    const s = typeof d === 'date' ? d : new Date(d).toISOString().split('T')[0];
+    const s = typeof d === 'object' ? d : new Date(d).toISOString().split('T')[0];
     return s;
   } catch {
     return String(d);
@@ -35,7 +35,7 @@ export default function ChargersSection({ siteId }) {
     }
   };
 
-  useEffect(() => { load(); }, [siteId]);
+  useEffect(() => { load(); }, [siteId, load]);
 
   return (
     <div className="card">

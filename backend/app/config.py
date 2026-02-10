@@ -32,9 +32,16 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
 
+class TestingConfig(Config):
+    TESTING = True
+    DEBUG = True
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    WTF_CSRF_ENABLED = False
+
 def get_config(env):
     return {
         "default": DevelopmentConfig,
         "development": DevelopmentConfig,
-        "production": ProductionConfig
+        "production": ProductionConfig,
+        "testing": TestingConfig,
     }.get(env, DevelopmentConfig)

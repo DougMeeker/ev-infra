@@ -4,7 +4,7 @@ export default function ChargersTable({ chargers = [], onEdit, onDelete }) {
   const formatDate = (d) => {
     if (!d) return '';
     try {
-      const s = typeof d === 'date' ? d : new Date(d).toISOString().split('T')[0];
+      const s = typeof d === 'object' ? d : new Date(d).toISOString().split('T')[0];
       return s;
     } catch {
       return String(d);

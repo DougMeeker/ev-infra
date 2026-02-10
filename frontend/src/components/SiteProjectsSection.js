@@ -23,7 +23,7 @@ export default function SiteProjectsSection({ siteId }) {
 
     useEffect(() => {
         loadProjects();
-    }, [siteId]);
+    }, [siteId, loadProjects]);
 
     const handleRemoveProject = async (projectId, projectName) => {
         if (!window.confirm(`Remove "${projectName}" from this site? This will not delete the project, only unassign it from this site.`)) {

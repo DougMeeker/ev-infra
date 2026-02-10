@@ -14,7 +14,6 @@ const SiteDetails = () => {
     const [site, setSite] = useState(null);
     const [formData, setFormData] = useState({});
     const [editing, setEditing] = useState(false);
-    const [billsTotalEnergyKwh, setBillsTotalEnergyKwh] = useState(0);
     const [metrics, setMetrics] = useState(null);
     const [metricsLoading, setMetricsLoading] = useState(false);
     const [energySummary, setEnergySummary] = useState(null);
@@ -61,8 +60,6 @@ const SiteDetails = () => {
             .then(() => { alert("Site deleted."); navigate("/"); })
             .catch(err => { console.error("Error deleting site:", err); alert("Failed to delete site."); });
     };
-
-    const avgWorkdayEnergyKwh = billsTotalEnergyKwh / 260;
 
     if (!site) return <p>Loading...</p>;
 
@@ -143,9 +140,6 @@ const SiteDetails = () => {
                                         ? metrics.available_capacity_kw
                                         :'N/A'
                                 } <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(service capacity - peak demand)</span></p>
-                                <p><strong>Power Factor:</strong> {metrics.power_factor}</p>
-                                <p><strong>Total Energy (kWh):</strong> {metrics.bill_count === 0 ? 'Unknown (no bills)' : Math.round(billsTotalEnergyKwh * 1000) / 1000} <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(from utility bills)</span></p>
-                                <p><strong>Avg Workday Energy (kWh/day):</strong> {metrics.bill_count === 0 ? 'Unknown (no bills)' : Math.round(avgWorkdayEnergyKwh * 1000) / 1000} <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(total / 260 days)</span></p>
                             </div>
                             {energySummary && (
                                 <div className="metrics-block" style={{ marginTop: '16px' }}>
@@ -198,7 +192,7 @@ const SiteDetails = () => {
                 {showBills ? '▼' : '▶'} Utility Bills
             </h3>
             {showBills && (
-                <BillsSection siteId={id} onTotalsChange={setBillsTotalEnergyKwh} />
+                <BillsSection siteId={id} />
             )}
 
             {/* Files Section */}

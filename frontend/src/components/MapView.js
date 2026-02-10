@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import L from "leaflet";
 import { createSite, getSite, getSiteMetrics } from "../api";
 import { ratioFrom, getStatusShade } from "../utils/statusShading";
-import StatusLegend from "./StatusLegend";
 
 // Fix Leaflet icon issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -37,7 +36,7 @@ const FocusHelper = ({ focusSite, onClearFocus }) => {
         return () => clearTimeout(t);
       }
     }
-  }, [focusSite, map]);
+  }, [focusSite, map, onClearFocus]);
   return null;
 };
 
@@ -155,10 +154,6 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
             .filter(s => !selectedProjectId || projectSiteIdSet.has(s.id))
             .map(site => {
         const details = popupDetails[site.id]; // May be undefined initially
-        const cap = details?.available_capacity_kw;
-        const capClass = typeof cap === 'number'
-          ? (cap < 200 ? 'cap-low' : cap < 800 ? 'cap-mid' : 'cap-high')
-          : 'cap-unknown';
         const status = (latestStatuses || []).find(ls => String(ls.site_id) === String(site.id));
         const stepsCount = project && typeof project.steps_count === 'number' ? project.steps_count : undefined;
         const ratio = ratioFrom(status?.current_step, stepsCount);

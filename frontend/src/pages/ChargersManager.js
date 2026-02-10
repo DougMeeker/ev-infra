@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getSites, getChargers, createCharger, updateCharger, deleteCharger, getProjects } from '../api';
 import ChargersTable from '../components/ChargersTable';
@@ -7,7 +7,7 @@ import ChargerForm from '../components/ChargerForm';
 const formatDate = (d) => {
     if (!d) return '';
     try {
-      const s = typeof d === 'date' ? d : new Date(d).toISOString().split('T')[0];
+      const s = typeof d === 'object' ? d : new Date(d).toISOString().split('T')[0];
       return s;
     } catch {
       return String(d);
@@ -21,7 +21,7 @@ export default function ChargersManager() {
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState([]);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     getSites()

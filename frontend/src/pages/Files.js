@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { listFiles, getSites, assignFileSites, deleteFile, updateFile, fileDownloadUrl } from '../api';
+import { listFiles, assignFileSites, deleteFile, updateFile, fileDownloadUrl } from '../api';
 import SiteMultiSelect from '../components/SiteMultiSelect';
 
 const FilesPage = () => {
   const [files, setFiles] = useState([]);
-  const [sites, setSites] = useState([]);
   const [q, setQ] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedSiteIds, setSelectedSiteIds] = useState([]);
@@ -16,12 +15,7 @@ const FilesPage = () => {
       .catch(err => console.error('Error listing files', err));
   };
 
-  const loadSites = () => {
-    getSites().then(res => setSites(res.data || [])).catch(err => console.error('Error loading sites', err));
-  };
-
-  useEffect(() => { loadFiles(); }, [q]);
-  useEffect(() => { loadSites(); }, []);
+  useEffect(() => { loadFiles(); }, [q, loadFiles]);
 
   const onAssign = async () => {
     if (!selectedFile || selectedSiteIds.length === 0) return;

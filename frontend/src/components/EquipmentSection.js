@@ -7,7 +7,6 @@ import { getEquipment, createEquipment, getEquipmentEnergy } from '../api';
 const EquipmentSection = ({ siteId }) => {
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [energySummary, setEnergySummary] = useState(null);
   const [displayYear, setDisplayYear] = useState(null);
   const [newEq, setNewEq] = useState({ mc_code: '', equipment_id: '', department_id: '', annual_miles: '', driving_hours: '' });
   const [page, setPage] = useState(1);
@@ -30,7 +29,6 @@ const EquipmentSection = ({ siteId }) => {
         setReturned(meta.returned || (Array.isArray(data.items) ? data.items.length : 0));
         setPage(meta.page || page);
         setPerPage(meta.per_page || perPage);
-        setEnergySummary(energyRes.data);
         const yr = (energyRes.data && energyRes.data.year) || (Array.isArray(data.items) && data.items.length > 0 && data.items[0].year) || null;
         setDisplayYear(yr);
       })
