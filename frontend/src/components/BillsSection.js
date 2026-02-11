@@ -123,6 +123,53 @@ export default function BillsSection({ siteId, onTotalsChange }) {
     return service.meter_number || service.utility || `Service #${serviceId}`;
   };
 
+  // Calculate summary statistics by meter
+  const meterSummaries = useMemo(() => {
+    const summaryMap = {};
+    
+    bills.forEach(bill => {
+      if (!summaryMap[bill.service_id]) {
+        summaryMap[bill.service_id] = {
+          serviceId: bill.service_id,
+          totalEnergy: 0,
+          billCount: 0,
+          maxPower: 0,
+          years: new Set(),
+        };
+      }
+      
+      const summary = summaryMap[bill.service_id];
+      
+      // Add energy usage
+      if (bill.energy_usage != null) {
+        summary.totalEnergy += parseFloat(bill.energy_usage) || 0;
+        summary.billCount += 1;
+      }
+      
+      // Track maximum power
+      if (bill.max_power != null) {
+        const power = parseFloat(bill.max_power) || 0;
+        summary.maxPower = Math.max(summary.maxPower, power);
+      }
+      
+      // Track years for averaging
+      if (bill.year) {
+        summary.years.add(bill.year);
+      }
+    });
+    
+    // Calculate average energy per year for each meter
+    return Object.values(summaryMap).map(summary => {
+      const yearCount = summary.years.size || 1;
+      return {
+        serviceId: summary.serviceId,
+        averageEnergyPerYear: summary.totalEnergy / yearCount,
+        maxPower: summary.maxPower,
+        billCount: summary.billCount,
+      };
+    });
+  }, [bills]);
+
   return (
     <>
       {services.length === 0 && (
@@ -130,8 +177,34 @@ export default function BillsSection({ siteId, onTotalsChange }) {
           <p style={{ margin: 0 }}><strong>Note:</strong> You need to add at least one service/meter before you can add bills. Please configure services in the Services/Meters section above.</p>
         </div>
       )}
-      
-      {services.length > 0 && (
+
+      {meterSummaries.length > 0 && (
+        <div className="card">
+          <h4 style={{ marginTop: 0 }}>Summary by Meter</h4>
+          <table className="table">
+            <thead>
+              <tr>
+                <th style={{ borderBottom: '1px solid #ddd' }}>Meter</th>
+                <th style={{ borderBottom: '1px solid #ddd' }}>Avg Energy/Year (kWh)</th>
+                <th style={{ borderBottom: '1px solid #ddd' }}>Max Power (kW)</th>
+                <th style={{ borderBottom: '1px solid #ddd' }}>Bills</th>
+              </tr>
+            </thead>
+            <tbody>
+              {meterSummaries.map(summary => (
+                <tr key={summary.serviceId}>
+                  <td><strong>{getServiceLabel(summary.serviceId)}</strong></td>
+                  <td>{summary.averageEnergyPerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                  <td>{summary.maxPower > 0 ? summary.maxPower.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
+                  <td>{summary.billCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+            {services.length > 0 && (
         <div className="card">
           <h4 style={{ marginTop: 0 }}>Add Bill</h4>
           <div className="flex-row gap-sm" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
