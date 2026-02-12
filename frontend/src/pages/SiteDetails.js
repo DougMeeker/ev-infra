@@ -17,12 +17,12 @@ const SiteDetails = () => {
     const [metrics, setMetrics] = useState(null);
     const [metricsLoading, setMetricsLoading] = useState(false);
     const [energySummary, setEnergySummary] = useState(null);
-    const [showProjects, setShowProjects] = useState(true);
-    const [showChargers, setShowChargers] = useState(true);
-    const [showEquipment, setShowEquipment] = useState(true);
-    const [showBills, setShowBills] = useState(true);
-    const [showFiles, setShowFiles] = useState(true);
-    const [showServices, setShowServices] = useState(true);
+    const [showProjects, setShowProjects] = useState(() => JSON.parse(localStorage.getItem("showProjects") ?? "true"));
+    const [showChargers, setShowChargers] = useState(() => JSON.parse(localStorage.getItem("showChargers") ?? "true"));
+    const [showEquipment, setShowEquipment] = useState(() => JSON.parse(localStorage.getItem("showEquipment") ?? "true"));
+    const [showBills, setShowBills] = useState(() => JSON.parse(localStorage.getItem("showBills") ?? "true"));
+    const [showFiles, setShowFiles] = useState(() => JSON.parse(localStorage.getItem("showFiles") ?? "true"));
+    const [showServices, setShowServices] = useState(() => JSON.parse(localStorage.getItem("showServices") ?? "true"));
 
     useEffect(() => {
         getSite(id)
@@ -45,6 +45,31 @@ const SiteDetails = () => {
             .finally(() => setMetricsLoading(false));
         // Chargers and Projects are loaded within their respective sections now
     }, [id]);
+
+    // Persist section visibility to localStorage
+    useEffect(() => {
+        localStorage.setItem("showProjects", JSON.stringify(showProjects));
+    }, [showProjects]);
+
+    useEffect(() => {
+        localStorage.setItem("showChargers", JSON.stringify(showChargers));
+    }, [showChargers]);
+
+    useEffect(() => {
+        localStorage.setItem("showEquipment", JSON.stringify(showEquipment));
+    }, [showEquipment]);
+
+    useEffect(() => {
+        localStorage.setItem("showBills", JSON.stringify(showBills));
+    }, [showBills]);
+
+    useEffect(() => {
+        localStorage.setItem("showFiles", JSON.stringify(showFiles));
+    }, [showFiles]);
+
+    useEffect(() => {
+        localStorage.setItem("showServices", JSON.stringify(showServices));
+    }, [showServices]);
 
     const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -120,6 +145,10 @@ const SiteDetails = () => {
                             </div>
                         </div>
                     </div>
+                    <div>
+                        <br />
+                        <button className="btn" onClick={() => setEditing(true)}>Edit</button>
+                    </div>
                     {metricsLoading && (
                         <div className="metrics-block">
                             <h4>Capacity Metrics</h4>
@@ -151,7 +180,6 @@ const SiteDetails = () => {
                             )}
                         </>
                     )}
-                    <button className="btn" onClick={() => setEditing(true)}>Edit</button>
                 </div>
             )}
             <button className="btn btn-danger" onClick={handleDelete}>Delete Site</button>

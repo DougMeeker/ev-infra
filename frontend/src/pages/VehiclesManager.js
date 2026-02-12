@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { listVehicles, createVehicle, updateVehicle, deleteVehicle, getSites, getCatalog } from '../api';
+import SiteSelector from '../components/SiteSelector';
 
 const VehiclesManager = () => {
   const [items, setItems] = useState([]);
@@ -90,15 +91,23 @@ const VehiclesManager = () => {
 
       <div className="card" style={{ marginBottom: '16px' }}>
         <h4 style={{ marginTop:0 }}>Create Vehicle</h4>
-        <div className="flex-row gap-sm" style={{ flexWrap:'wrap' }}>
-          <select className="input" value={siteId} onChange={e=>setSiteId(e.target.value)}>
-            <option value="">Select Site</option>
-            {sites.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
-          </select>
-          <select className="input" value={mcCode} onChange={e=>setMcCode(e.target.value)}>
-            <option value="">Select MC Code</option>
-            {catalog.map(c => (<option key={c.mc_code} value={c.mc_code}>{c.mc_code} - {c.description || ''}</option>))}
-          </select>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', alignItems: 'end' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: '500' }}>Site</label>
+            <SiteSelector
+              value={siteId}
+              onChange={setSiteId}
+              variant="searchable"
+              placeholder="Search and select site..."
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', fontWeight: '500' }}>MC Code</label>
+            <select className="input" value={mcCode} onChange={e=>setMcCode(e.target.value)}>
+              <option value="">Select MC Code</option>
+              {catalog.map(c => (<option key={c.mc_code} value={c.mc_code}>{c.mc_code} - {c.description || ''}</option>))}
+            </select>
+          </div>
           <button className="btn" disabled={creating || !siteId || !mcCode} onClick={doCreate}>{creating ? 'Creating...' : 'Create'}</button>
         </div>
       </div>

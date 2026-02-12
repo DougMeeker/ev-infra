@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getSites, getChargers, createCharger, updateCharger, deleteCharger, getProjects } from '../api';
+import { getChargers, createCharger, updateCharger, deleteCharger, getProjects } from '../api';
 import ChargersTable from '../components/ChargersTable';
 import ChargerForm from '../components/ChargerForm';
+import SiteSelector from '../components/SiteSelector';
 
 const formatDate = (d) => {
     if (!d) return '';
@@ -15,7 +16,6 @@ const formatDate = (d) => {
   };
 
 export default function ChargersManager() {
-  const [sites, setSites] = useState([]);
   const [siteId, setSiteId] = useState(null);
   const [chargers, setChargers] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -24,13 +24,6 @@ export default function ChargersManager() {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    getSites()
-      .then(res => {
-        const list = res.data || [];
-        list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        setSites(list);
-      })
-      .catch(() => setSites([]));
     getProjects()
       .then(res => setProjects(res.data || []))
       .catch(() => setProjects([]));
@@ -72,13 +65,28 @@ export default function ChargersManager() {
   return (
     <div style={{padding:16}}>
       <h2>Chargers</h2>
-      <div style={{marginBottom:12}}>
-        <label>Select Site: </label>
-        <select value={siteId || ''} onChange={e=>setSiteId(e.target.value ? parseInt(e.target.value,10) : null)}>
-          <option value="">Pick a site</option>
-          {sites.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
-        </select>
-        <button onClick={()=>setEditing({})} disabled={!siteId} style={{marginLeft:8}}>Add Charger</button>
+      <div style={{marginBottom:16}}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 300px', minWidth: '250px' }}>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', fontSize: '0.9rem' }}>
+              Select Site:
+            </label>
+            <SiteSelector 
+              value={siteId} 
+              onChange={setSiteId}
+              variant="searchable"
+              placeholder="Search and select a site..."
+            />
+          </div>
+          <button 
+            className="btn" 
+            onClick={()=>setEditing({})} 
+            disabled={!siteId}
+            style={{ marginBottom: '2px' }}
+          >
+            Add Charger
+          </button>
+        </div>
       </div>
       {editing && (
         <ChargerForm initial={editing} onCancel={()=>setEditing(null)} onSubmit={onSubmit} projects={projects} />

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getEquipmentDetails, updateEquipmentDetails, getEquipmentUsage, upsertEquipmentUsage, deleteEquipmentItem, getSites, getCatalog } from '../api';
+import { getEquipmentDetails, updateEquipmentDetails, getEquipmentUsage, upsertEquipmentUsage, deleteEquipmentItem, getCatalog } from '../api';
+import SiteSelector from '../components/SiteSelector';
 
 const lastYear = new Date().getFullYear() - 1;
 
@@ -8,25 +9,20 @@ const VehicleDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [vehicle, setVehicle] = useState(null);
-  const [sites, setSites] = useState([]);
   const [catalog, setCatalog] = useState([]);
     const [editing, setEditing] = useState({ equipment_id: '', site_id: '', mc_code: '', department_id: '', annual_miles: '', driving_hours: '' });
   const [usage, setUsage] = useState([]);
   const [newUsage, setNewUsage] = useState({ year: String(lastYear), month: '12', miles: '', driving_hours: '', days_utilized: '' });
   const [loadingUsage, setLoadingUsage] = useState(false);
-  const [siteFilter, setSiteFilter] = useState('');
-  const [showSiteDropdown, setShowSiteDropdown] = useState(false);
 
   const load = async () => {
     try {
       // Load metadata and reference data immediately
-      const [vehRes, sitesRes, catRes] = await Promise.all([
+      const [vehRes, catRes] = await Promise.all([
         getEquipmentDetails(id),
-        getSites(),
         getCatalog(),
       ]);
       setVehicle(vehRes.data);
-      setSites(sitesRes.data || []);
       setCatalog(catRes.data || []);
       setEditing({
         equipment_id: vehRes.data.equipment_id ?? '',
@@ -101,18 +97,6 @@ const VehicleDetails = () => {
 
   if (!vehicle) return <div className="container"><p>Loading...</p></div>;
 
-  // Sort sites alphabetically by name
-  const sortedSites = [...sites].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  
-  // Filter sites based on search
-  const filteredSites = sortedSites.filter(s => 
-    (s.name || '').toLowerCase().includes(siteFilter.toLowerCase()) ||
-    String(s.id).includes(siteFilter)
-  );
-  
-  const selectedSite = sites.find(s => s.id === Number(editing.site_id));
-  const selectedSiteName = selectedSite ? selectedSite.name : '';
-
   return (
     <div className="container" style={{ paddingTop: 24 }}>
       <h2 className="page-header">Vehicle Details</h2>
@@ -133,74 +117,12 @@ const VehicleDetails = () => {
           {/* Searchable Site Dropdown */}
           <div className="form-group">
             <label>Site Assignment</label>
-            <div style={{ position: 'relative' }}>
-            <input 
-              className="input" 
-              placeholder="Search and select site..." 
-              value={showSiteDropdown ? siteFilter : selectedSiteName}
-              onChange={e => {
-                setSiteFilter(e.target.value);
-                setShowSiteDropdown(true);
-              }}
-              onFocus={() => {
-                setSiteFilter('');
-                setShowSiteDropdown(true);
-              }}
-              onBlur={() => setTimeout(() => setShowSiteDropdown(false), 200)}
+            <SiteSelector
+              value={editing.site_id}
+              onChange={(siteId) => setEditing(prev => ({ ...prev, site_id: siteId }))}
+              variant="searchable"
+              placeholder="Search and select site..."
             />
-            {showSiteDropdown && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                right: 0,
-                maxHeight: 300,
-                overflowY: 'auto',
-                backgroundColor: 'white',
-                border: '1px solid #ddd',
-                borderRadius: 4,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                zIndex: 1000
-              }}>
-                {filteredSites.length === 0 ? (
-                  <div style={{ padding: '8px 12px', color: '#999' }}>No sites found</div>
-                ) : (
-                  filteredSites.map(s => (
-                    <div
-                      key={s.id}
-                      onClick={() => {
-                        setEditing(prev => ({ ...prev, site_id: s.id }));
-                        setSiteFilter('');
-                        setShowSiteDropdown(false);
-                      }}
-                      style={{
-                        padding: '8px 12px',
-                        cursor: 'pointer',
-                        backgroundColor: Number(editing.site_id) === s.id ? '#e3f2fd' : 'white',
-                        borderBottom: '1px solid #f0f0f0'
-                      }}
-                      onMouseEnter={e => e.target.style.backgroundColor = '#f5f5f5'}
-                      onMouseLeave={e => e.target.style.backgroundColor = Number(editing.site_id) === s.id ? '#e3f2fd' : 'white'}
-                    >
-                      {s.name}
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-            </div>
-          </div>
-          
-          <div className="form-group">
-            <label>MC Code</label>
-            <select className="input" value={editing.mc_code} onChange={e=>setEditing(prev=>({ ...prev, mc_code: e.target.value }))}>
-              {catalog.map(c => (<option key={c.mc_code} value={c.mc_code}>{c.mc_code} - {c.description || ''}</option>))}
-            </select>
-          </div>
-          
-          <div className="form-group">
-            <label>Department ID</label>
-            <input className="input" placeholder="Dept ID" value={editing.department_id} onChange={e=>setEditing(prev=>({ ...prev, department_id: e.target.value }))} />
           </div>
           
           <div className="form-group">

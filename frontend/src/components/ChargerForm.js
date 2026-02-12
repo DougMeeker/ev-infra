@@ -47,8 +47,9 @@ export default function ChargerForm({ initial, onCancel, onSubmit, projects = []
           <label>Handle Type<select value={form.handle_type} onChange={e=>update('handle_type', e.target.value)}>
             <option value="">Select</option>
             <option value="J1772">J1772</option>
+            <option value="CCS1">CCS1</option>
             <option value="NACS">NACS</option>
-            <option value="Both">Both</option>
+            <option value="Both">Both DC</option>
           </select></label>
           <label>Date Installed<input type="date" value={form.date_installed || ''} onChange={e=>update('date_installed', e.target.value)} /></label>
           <label>Manufacturer

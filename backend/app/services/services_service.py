@@ -134,6 +134,59 @@ def get_12_month_max_demand(service_id):
     return result
 
 
+def get_meter_data_date_range(service_id):
+    """
+    Get the date range of meter data from utility bills.
+    Returns a tuple of (meter_data_from, meter_data_to) in "MM-YYYY" format.
+    - meter_data_to: Most recent bill
+    - meter_data_from: Oldest bill, but not longer than 1 year back from most recent
+    Returns ("", "") if no bills are available.
+    """
+    # Get all bills for this service, ordered by date
+    bills = db.session.query(
+        UtilityBill.year, 
+        UtilityBill.month
+    ).filter(
+        and_(
+            UtilityBill.service_id == service_id,
+            UtilityBill.is_deleted == False
+        )
+    ).order_by(
+        UtilityBill.year.asc(),
+        UtilityBill.month.asc()
+    ).all()
+    
+    if not bills:
+        return "", ""
+    
+    # Get the oldest and most recent bills
+    oldest_bill = bills[0]
+    newest_bill = bills[-1]
+    
+    # Calculate the date 1 year before the newest bill
+    newest_year = newest_bill.year
+    newest_month = newest_bill.month
+    one_year_ago_month = newest_month
+    one_year_ago_year = newest_year - 1
+    
+    # Determine the effective "from" date (oldest bill or 1 year ago, whichever is more recent)
+    oldest_date_value = oldest_bill.year * 100 + oldest_bill.month
+    one_year_ago_value = one_year_ago_year * 100 + one_year_ago_month
+    
+    if oldest_date_value >= one_year_ago_value:
+        from_month = oldest_bill.month
+        from_year = oldest_bill.year
+    else:
+        from_month = one_year_ago_month
+        from_year = one_year_ago_year
+    
+    # Format as "MM-YYYY"
+    meter_data_from = f"{from_month:02d}-{from_year}"
+    meter_data_to = f"{newest_month:02d}-{newest_year}"
+    
+    return meter_data_from, meter_data_to
+
+
 def get_electrical_profile(service_id):
     """
     Get the electrical profile for a service in a format compatible with plan_gen.
@@ -165,6 +218,9 @@ def get_electrical_profile(service_id):
     pf = service.power_factor or 0.95
     max_demand_kva = round(max_demand_kw / pf, 2) if max_demand_kw else 0
     
+    # Get meter data date range from bills
+    meter_data_from, meter_data_to = get_meter_data_date_range(service_id)
+    
     return {
         "service_id": service_id,
         "site_name": site_name,
@@ -183,6 +239,9 @@ def get_electrical_profile(service_id):
         "demand": {
             "main_breaker_A": service.main_breaker_amps or 0,
             "existing_12mo_kVA": max_demand_kva,
+            "meter_data_from": meter_data_from,
+            "meter_data_to": meter_data_to,
+            "removed_load_kva": 0.0,
             "use_continuous_factor": True,
             "continuous_factor": 1.25
         },

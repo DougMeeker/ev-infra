@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { getSiteProjects, removeSiteFromProject, reassignProjectSite, getSites } from '../api';
+import { getSiteProjects, removeSiteFromProject, reassignProjectSite } from '../api';
 import { useNavigate } from 'react-router-dom';
+import SiteSelector from './SiteSelector';
 
 export default function SiteProjectsSection({ siteId }) {
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [reassigning, setReassigning] = useState(null); // { projectId, projectName }
-    const [availableSites, setAvailableSites] = useState([]);
-    const [selectedSiteId, setSelectedSiteId] = useState('');
-    const [siteSearch, setSiteSearch] = useState('');
+    const [selectedSiteId, setSelectedSiteId] = useState(null);
     const navigate = useNavigate();
 
     const loadProjects = () => {
@@ -41,21 +40,8 @@ export default function SiteProjectsSection({ siteId }) {
     };
 
     const handleReassignClick = async (projectId, projectName) => {
-        // Load available sites
-        try {
-            const res = await getSites();
-            // Filter out current site and sort alphabetically by name
-            const otherSites = res.data
-                .filter(s => s.id !== parseInt(siteId))
-                .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-            setAvailableSites(otherSites);
-            setReassigning({ projectId, projectName });
-            setSelectedSiteId('');
-            setSiteSearch('');
-        } catch (err) {
-            console.error('Error loading sites:', err);
-            alert('Failed to load available sites');
-        }
+        setReassigning({ projectId, projectName });
+        setSelectedSiteId(null);
     };
 
     const handleReassignSubmit = async () => {
@@ -217,52 +203,16 @@ export default function SiteProjectsSection({ siteId }) {
                         
                         <div style={{ marginBottom: '16px' }}>
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                                Search Sites:
-                            </label>
-                            <input
-                                type="text"
-                                value={siteSearch}
-                                onChange={(e) => setSiteSearch(e.target.value)}
-                                placeholder="Type to search by name or address..."
-                                style={{
-                                    width: '100%',
-                                    padding: '8px',
-                                    borderRadius: '4px',
-                                    border: '1px solid #ccc',
-                                    marginBottom: '12px'
-                                }}
-                            />
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
                                 Select New Site:
                             </label>
-                            <select
+                            <SiteSelector
                                 value={selectedSiteId}
-                                onChange={(e) => setSelectedSiteId(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    padding: '8px',
-                                    borderRadius: '4px',
-                                    border: '1px solid #ccc',
-                                    maxHeight: '200px'
-                                }}
-                                size="8"
-                            >
-                                <option value="">-- Select a site --</option>
-                                {availableSites
-                                    .filter(site => {
-                                        if (!siteSearch) return true;
-                                        const searchLower = siteSearch.toLowerCase();
-                                        return (
-                                            (site.name || '').toLowerCase().includes(searchLower) ||
-                                            (site.address || '').toLowerCase().includes(searchLower)
-                                        );
-                                    })
-                                    .map(site => (
-                                        <option key={site.id} value={site.id}>
-                                            {site.name} ({site.address || 'No address'})
-                                        </option>
-                                    ))}
-                            </select>
+                                onChange={setSelectedSiteId}
+                                variant="dropdown"
+                                size={8}
+                                excludeSiteIds={[parseInt(siteId)]}
+                                placeholder="-- Select a site --"
+                            />
                         </div>
 
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>

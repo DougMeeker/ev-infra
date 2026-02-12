@@ -3,7 +3,7 @@ import { Link, NavLink } from "react-router-dom";
 
 const Header = () => {
   return (
-    <header style={{ background: 'var(--card)', borderBottom: '1px solid var(--card-border)' }}>
+    <header className="sticky-header" style={{ background: 'var(--card)', borderBottom: '1px solid var(--card-border)' }}>
       <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', paddingBottom: '12px' }}>
         <Link to="/" style={{ textDecoration: 'none', color: 'var(--text)' }}>
           <strong>EV Infra</strong>
