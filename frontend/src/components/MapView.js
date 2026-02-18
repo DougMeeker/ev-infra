@@ -47,7 +47,7 @@ const LocationButton = () => {
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleLocationRequest = () => {
+  const handleLocationRequest = async () => {
     setLocating(true);
     setError(null);
 
@@ -55,6 +55,23 @@ const LocationButton = () => {
       setError("Geolocation is not supported by your browser");
       setLocating(false);
       return;
+    }
+
+    // Check permission status first (if available)
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+        console.log('Geolocation permission state:', permissionStatus.state);
+        
+        if (permissionStatus.state === 'denied') {
+          setError("Location blocked. Please enable location in your browser settings and reload the page.");
+          setLocating(false);
+          return;
+        }
+      }
+    } catch (permErr) {
+      // Permissions API not fully supported (older Safari), continue anyway
+      console.log('Permissions API not available:', permErr);
     }
 
     navigator.geolocation.getCurrentPosition(
@@ -68,13 +85,13 @@ const LocationButton = () => {
         let errorMessage = "Unable to retrieve your location";
         
         switch(err.code) {
-          case err.PERMISSION_DENIED:
-            errorMessage = "Location access denied. Please enable location permissions in your browser settings.";
+          case 1: // PERMISSION_DENIED
+            errorMessage = "Location access denied. Please tap the 📍 icon in your browser's address bar to allow location access, then try again.";
             break;
-          case err.POSITION_UNAVAILABLE:
-            errorMessage = "Location information is unavailable. Please check your device settings.";
+          case 2: // POSITION_UNAVAILABLE
+            errorMessage = "Location unavailable. Please enable location services in your device settings.";
             break;
-          case err.TIMEOUT:
+          case 3: // TIMEOUT
             errorMessage = "Location request timed out. Please try again.";
             break;
           default:
@@ -85,9 +102,9 @@ const LocationButton = () => {
         setLocating(false);
       },
       {
-        enableHighAccuracy: false, // Changed to false for better mobile compatibility
-        timeout: 15000, // Increased timeout for Safari mobile
-        maximumAge: 60000 // Allow cached position up to 60 seconds old
+        enableHighAccuracy: false,
+        timeout: 15000,
+        maximumAge: 60000
       }
     );
   };
