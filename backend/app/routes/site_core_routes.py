@@ -214,7 +214,7 @@ def update_site(site_id):
     allowed = {
         "name", "address", "city", "latitude", "longitude",
         "department_id", "utility", "meter_number", "contact_name", "contact_phone",
-        "voltage", "phase_count", "main_breaker_amps", "power_factor"
+        "voltage", "phase_count", "main_breaker_amps", "power_factor", "leased"
     }
     for key in allowed:
         if key in data:
@@ -252,6 +252,7 @@ def create_site():
         contact_name=data.get('contact_name'),
         contact_phone=data.get('contact_phone'),
         department_id=data.get('department_id'),
+        leased=data.get('leased', False)
     )
     db.session.add(site)
     try:

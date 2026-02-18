@@ -29,7 +29,8 @@ const SiteDetails = () => {
             .then(res => {
                 setSite(res.data);
                 const { bills, ...rest } = res.data || {};
-                setFormData(rest);
+                // Ensure leased has a default value
+                setFormData({ ...rest, leased: rest.leased || false });
             })
             .catch(err => console.error("Error fetching site:", err));
         setMetricsLoading(true);
@@ -74,7 +75,9 @@ const SiteDetails = () => {
     const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
     const handleSave = () => {
-        updateSite(id, formData)
+        // Ensure leased is always included in the payload
+        const payload = { ...formData, leased: formData.leased || false };
+        updateSite(id, payload)
             .then(res => { setSite(res.data); setEditing(false); })
             .catch(err => { console.error("Error updating site:", err); alert("Failed to update site."); });
     };
@@ -90,11 +93,10 @@ const SiteDetails = () => {
 
     return (
         <div className="container">
-            <h2 className="page-header">Site Details</h2>
-            <div className="flex-row gap-sm" style={{ marginBottom:'12px' }}>
-                <button className="btn btn-secondary" onClick={() => navigate(`/?focus=${id}`)}>View on Map</button>
-                <button className="btn btn-secondary" onClick={() => navigate('/')}>Home</button>
-                <button className="btn" onClick={() => navigate(`/chargers?siteId=${id}`)}>Manage Chargers</button>
+            <h2 className="page-header">{site.name ?? "Site Details"}</h2>
+            <div className="flex-row gap-sm" style={{ marginBottom: '12px' }}>
+                <button className="btn" onClick={() => navigate(`/?focus=${id}`)}>View on Map</button>
+
             </div>
             {editing ? (
                 <div className="card">
@@ -103,18 +105,22 @@ const SiteDetails = () => {
                             <h4 className="form-section-title">Location</h4>
                             <div className="form-grid">
                                 <div className="form-group"><label>Name</label><input className="input" name="name" value={formData.name || ""} onChange={handleChange} /></div>
-                                <div className="form-group"><label>Department ID</label><input className="input" name="department_id" value={formData.department_id || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>Address</label><input className="input" name="address" value={formData.address || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>City</label><input className="input" name="city" value={formData.city || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>Latitude</label><input className="input" name="latitude" value={formData.latitude || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>Longitude</label><input className="input" name="longitude" value={formData.longitude || ""} onChange={handleChange} /></div>
+                                 <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <label style={{ margin: 0 }}>Leased Property</label>
+                                    <input type="checkbox" checked={formData.leased || false} onChange={(e) => setFormData({ ...formData, leased: e.target.checked })} style={{ transform: 'scale(1.2)', margin: 0 }} />
+                                </div>
                             </div>
                         </div>
                         <div className="form-section">
-                            <h4 className="form-section-title">Contact</h4>
+                            <h4 className="form-section-title">Details</h4>
                             <div className="form-grid">
                                 <div className="form-group"><label>Contact Name</label><input className="input" name="contact_name" value={formData.contact_name || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>Contact Phone</label><input className="input" name="contact_phone" value={formData.contact_phone || ""} onChange={handleChange} /></div>
+                                <div className="form-group"><label>Department ID</label><input className="input" name="department_id" value={formData.department_id || ""} onChange={handleChange} /></div>
                             </div>
                         </div>
                     </div>
@@ -129,19 +135,19 @@ const SiteDetails = () => {
                         <div className="details-section">
                             <h4>Location</h4>
                             <div className="detail-pairs">
-                                <div><span>Name:</span><strong>{site.name}</strong></div>
-                                <div><span>Department ID:</span><strong>{site.department_id || 'N/A'}</strong></div>
                                 <div><span>Address:</span><strong>{site.address || 'N/A'}</strong></div>
                                 <div><span>City:</span><strong>{site.city || 'N/A'}</strong></div>
                                 <div><span>Latitude:</span><strong>{site.latitude}</strong></div>
                                 <div><span>Longitude:</span><strong>{site.longitude}</strong></div>
+                                <div><span>Leased:</span><strong>{site.leased ? 'Yes' : 'No'}</strong></div>
                             </div>
                         </div>
                         <div className="details-section">
-                            <h4>Contact</h4>
+                            <h4>Details</h4>
                             <div className="detail-pairs">
                                 <div><span>Name:</span><strong>{site.contact_name || 'N/A'}</strong></div>
                                 <div><span>Phone:</span><strong>{site.contact_phone || 'N/A'}</strong></div>
+                                <div><span>Department ID:</span><strong>{site.department_id || 'N/A'}</strong></div>
                             </div>
                         </div>
                     </div>
@@ -161,14 +167,14 @@ const SiteDetails = () => {
                         <>
                             <div className="metrics-block">
                                 <h4>Capacity Metrics</h4>
-                                <p><strong>Service Capacity (kW):</strong> {metrics.theoretical_capacity_kw ?? 'N/A'} <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(from electrical service specs)</span></p>
-                                <p><strong>Peak Demand (kW):</strong> {metrics.bill_count === 0 ? 'Unknown (no bills)' : metrics.last_year_peak_kw} <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(from utility bills)</span></p>
+                                <p><strong>Service Capacity (kW):</strong> {metrics.theoretical_capacity_kw ?? 'N/A'} <span style={{ fontSize: '0.85em', color: 'var(--muted)' }}>(from electrical service specs)</span></p>
+                                <p><strong>Peak Demand (kW):</strong> {metrics.bill_count === 0 ? 'Unknown (no bills)' : metrics.last_year_peak_kw} <span style={{ fontSize: '0.85em', color: 'var(--muted)' }}>(from utility bills)</span></p>
                                 <p><strong>Available Capacity (kW):</strong> {
-                                    metrics.bill_count === 0 ? 'Unknown (no bills)':
-                                    metrics.available_capacity_kw !== null && metrics.available_capacity_kw !== undefined
-                                        ? metrics.available_capacity_kw
-                                        :'N/A'
-                                } <span style={{fontSize:'0.85em',color:'var(--muted)'}}>(service capacity - peak demand)</span></p>
+                                    metrics.bill_count === 0 ? 'Unknown (no bills)' :
+                                        metrics.available_capacity_kw !== null && metrics.available_capacity_kw !== undefined
+                                            ? metrics.available_capacity_kw
+                                            : 'N/A'
+                                } <span style={{ fontSize: '0.85em', color: 'var(--muted)' }}>(service capacity - peak demand)</span></p>
                             </div>
                             {energySummary && (
                                 <div className="metrics-block" style={{ marginTop: '16px' }}>

@@ -8,7 +8,7 @@ import ProjectsManager from "./pages/ProjectsManager";
 // Consolidate status into ProjectsManager; keep legacy /status routes via redirect
 import { useEffect } from "react";
 import Header from "./components/Header";
-import ChargersManager from "./pages/ChargersManager";
+import Chargers from "./pages/Chargers";
 import VehiclesManager from "./pages/VehiclesManager";
 import VehicleDetails from './pages/VehicleDetails';
 import SitesManager from './pages/SitesManager';
@@ -30,7 +30,7 @@ function App() {
         <Route path="/status" element={<StatusRedirect />} />
         <Route path="/status/:projectId" element={<StatusRedirect />} />
         <Route path="/status/:projectId/:siteId" element={<StatusRedirect />} />
-        <Route path="/chargers" element={<ChargersManager />} />
+        <Route path="/chargers" element={<Chargers />} />
         <Route path="/vehicles" element={<VehiclesManager />} />
         <Route path="/vehicle/:id" element={<VehicleDetails />} />
         <Route path="/sites/manage" element={<SitesManager />} />

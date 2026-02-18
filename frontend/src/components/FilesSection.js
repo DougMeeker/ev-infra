@@ -58,7 +58,6 @@ const FilesSection = ({ siteId }) => {
 
   return (
     <div className="card">
-      <h4>Files</h4>
       <form onSubmit={onUpload} className="flex-row gap-sm" style={{marginBottom:'12px'}}>
         <input type="file" onChange={e => setFileInput(e.target.files[0] || null)} />
         <input className="input" placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} />
@@ -91,9 +90,9 @@ const FilesSection = ({ siteId }) => {
                 <td>{f.description || ''}</td>
                 <td>{f.size_bytes || 0}</td>
                 <td>{f.uploaded_at ? String(f.uploaded_at).split('T')[0] : ''}</td>
-                <td>
+                <td style={{ display: 'flex', gap: '8px'}}>
                   <button className="btn" onClick={() => onRename(f)}>Rename</button>
-                  <button className="btn btn-secondary" onClick={() => onRemove(f.id)}>Remove</button>
+                  <button className="btn btn-danger" onClick={() => onRemove(f.id)}>Remove</button>
                 </td>
               </tr>
             ))}

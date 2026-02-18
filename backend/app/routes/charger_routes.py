@@ -1,12 +1,18 @@
 from flask import request
 from .site_routes import site_bp
 from ..services.chargers_service import (
+    list_all_chargers as svc_list_all_chargers,
     list_chargers as svc_list_chargers,
     create_charger as svc_create_charger,
     get_charger as svc_get_charger,
     update_charger as svc_update_charger,
     delete_charger as svc_delete_charger,
 )
+
+
+@site_bp.route("/chargers", methods=["GET"])
+def list_all_chargers():
+    return svc_list_all_chargers()
 
 
 @site_bp.route("/<int:site_id>/chargers", methods=["GET"])

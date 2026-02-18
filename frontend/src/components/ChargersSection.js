@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from "react-router-dom";
 import { getChargers, getProjects, createCharger, updateCharger, deleteCharger } from '../api';
 import { Link } from "react-router-dom";
 
@@ -20,6 +21,7 @@ export default function ChargersSection({ siteId }) {
   const [chargerEdit, setChargerEdit] = useState({});
   const [adding, setAdding] = useState(false);
   const [chargerNew, setChargerNew] = useState({ kw: '', manufacturer: '', project_id: '', date_installed: '' });
+  const navigate = useNavigate();
 
   const load = async () => {
     setChargersLoading(true);
@@ -86,8 +88,11 @@ export default function ChargersSection({ siteId }) {
                 <button className="btn btn-secondary" onClick={()=>{ setAdding(false); setChargerNew({ kw: '', manufacturer: '', project_id: '', date_installed: '' }); }}>Cancel</button>
               </div>
             ) : (
-              <button className="btn" onClick={()=>setAdding(true)}>Add Charger</button>
-            )}
+            <div className="flex-row gap-sm" style={{ marginBottom: '12px' }}>
+                <button className="btn" onClick={()=>setAdding(true)}>Add Charger</button>
+                <button className="btn" onClick={() => navigate(`/chargers?siteId=${siteId}`)}>Manage Chargers</button>
+            </div>
+)}
           </div>
           <table className="table">
             <thead>
@@ -100,6 +105,7 @@ export default function ChargersSection({ siteId }) {
                 <th>Serial #</th>
                 <th>Installed</th>
                 <th>Project</th>
+                <th>Fleet</th>
                 <th>Quick Actions</th>
               </tr>
             </thead>
@@ -114,6 +120,7 @@ export default function ChargersSection({ siteId }) {
                   <td>{c.serial_number ?? ''}</td>
                   <td>{formatDate(c.date_installed)}</td>
                   <td>{c.project_name ?? ''}</td>
+                  <td>{c.fleet ? '✓' : ''}</td>
                   <td>
                     {editingChargerId === c.id ? (
                       <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
@@ -166,7 +173,7 @@ export default function ChargersSection({ siteId }) {
                 </tr>
               ))}
               {chargers.length === 0 && (
-                <tr><td colSpan={9} className="table-empty">No chargers</td></tr>
+                <tr><td colSpan={10} className="table-empty">No chargers</td></tr>
               )}
             </tbody>
           </table>

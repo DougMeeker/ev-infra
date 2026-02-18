@@ -25,13 +25,17 @@ const sanitizeSitePayload = (site) => {
 	if (!site || typeof site !== 'object') return {};
 	const fields = [
 		'name', 'latitude', 'longitude', 'department_id', 'utility', 'utility_account', 'utility_name', 'meter_number',
-		'address', 'city', 'contact_name', 'contact_phone', 'main_breaker_amps', 'voltage', 'phase_count', 'power_factor'
+		'address', 'city', 'contact_name', 'contact_phone', 'main_breaker_amps', 'voltage', 'phase_count', 'power_factor', 'leased'
 	];
 	const out = {};
 	for (const key of fields) {
 		if (site[key] === undefined) continue;
 		let val = site[key];
 		if (val === '') continue; // drop empty strings
+		if (key === 'leased') {
+			out[key] = Boolean(val);
+			continue;
+		}
 		if (['latitude','longitude','power_factor'].includes(key)) {
 			const n = Number(val);
 			if (!Number.isNaN(n)) out[key] = n;
@@ -114,7 +118,12 @@ export const getEquipmentUsage = (equipmentId) => axios.get(`${API_BASE_URL}/sit
 export const upsertEquipmentUsage = (equipmentId, { year, month, miles, driving_hours, days_utilized }) => axios.post(`${API_BASE_URL}/sites/equipment/${equipmentId}/usage`, { year, month, miles, driving_hours, days_utilized });
 
 // Charger endpoints
-export const getChargers = (siteId) => axios.get(`${API_BASE_URL}/sites/${siteId}/chargers`);
+export const getChargers = (siteId = null) => {
+    if (siteId) {
+        return axios.get(`${API_BASE_URL}/sites/${siteId}/chargers`);
+    }
+    return axios.get(`${API_BASE_URL}/sites/chargers`);
+};
 export const createCharger = (siteId, payload) => axios.post(`${API_BASE_URL}/sites/${siteId}/chargers`, payload);
 export const getCharger = (chargerId) => axios.get(`${API_BASE_URL}/sites/chargers/${chargerId}`);
 export const updateCharger = (chargerId, payload) => axios.put(`${API_BASE_URL}/sites/chargers/${chargerId}`, payload);

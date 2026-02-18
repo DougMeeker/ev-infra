@@ -58,7 +58,6 @@ const EquipmentSection = ({ siteId }) => {
 
   return (
     <div style={{ marginTop: '32px' }}>
-      <h3>Equipment</h3>
       <div className="card" style={{ marginBottom: '16px' }}>
         <h4 style={{ marginTop: 0 }}>Add Equipment</h4>
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>

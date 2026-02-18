@@ -3,8 +3,9 @@ import React, { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from "react-leaflet";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
-import { createSite, getSite, getSiteMetrics } from "../api";
+import { createSite, getSite, getSiteMetrics, getChargers } from "../api";
 import { ratioFrom, getStatusShade } from "../utils/statusShading";
+import "./MapView.css";
 
 // Fix Leaflet icon issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -41,6 +42,97 @@ const FocusHelper = ({ focusSite, onClearFocus }) => {
   return null;
 };
 
+const LocationButton = () => {
+  const map = useMap();
+  const [locating, setLocating] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleLocationRequest = () => {
+    setLocating(true);
+    setError(null);
+
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by your browser");
+      setLocating(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        map.flyTo([latitude, longitude], 13, { duration: 0.75 });
+        setLocating(false);
+      },
+      (err) => {
+        console.error("Error getting location:", err);
+        setError("Unable to retrieve your location");
+        setLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  };
+
+  useEffect(() => {
+    const locationControl = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom location-control');
+    locationControl.innerHTML = `
+      <button 
+        class="location-button" 
+        title="Go to my location"
+        aria-label="Go to my location"
+      >
+        📍
+      </button>
+    `;
+    
+    locationControl.onclick = handleLocationRequest;
+    
+    const controlContainer = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: function() {
+        return locationControl;
+      }
+    });
+    
+    const control = new controlContainer();
+    control.addTo(map);
+    
+    return () => {
+      try {
+        map.removeControl(control);
+      } catch (e) {
+        // Control already removed
+      }
+    };
+  }, [map]);
+
+  // Show error notification if any
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  return (
+    <>
+      {locating && (
+        <div className="location-loading">
+          Getting your location...
+        </div>
+      )}
+      {error && (
+        <div className="location-error">
+          {error}
+        </div>
+      )}
+    </>
+  );
+};
+
 const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, selectedProjectId, latestStatuses = [], project, colorMode = 'capacity' }) => {
   const center = [37.5, -120];
   const [newMarker, setNewMarker] = useState(null);
@@ -50,20 +142,37 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
   const focusSite = focusSiteId ? list.find(s => s.id === focusSiteId) : null;
   const navigate = useNavigate();
 
+  // Determine missing info (contact/location fields and service-level electrical capacity data)
+  const missingFieldsForSite = (details) => {
+    if (!details) return [];
+    const missing = [];
+    // Check service-level electrical capacity data (now stored in services, not sites)
+    if (details.theoretical_capacity_kw === null || details.theoretical_capacity_kw === undefined) {
+      missing.push('Service Electrical Info (Amps/Volts/Phase)');
+    }
+    if (!details.address) missing.push('Address');
+    if (!details.city) missing.push('City');
+    if (!details.contact_name) missing.push('Contact');
+    if (!details.contact_phone) missing.push('Phone');
+    return missing;
+  };
+
   // Load site details when popup opens
   const loadSiteDetails = async (siteId) => {
     if (popupDetails[siteId]) return; // Already loaded
     
     setLoadingPopup(siteId);
     try {
-      // Fetch both site info and metrics in parallel
-      const [siteRes, metricsRes] = await Promise.all([
+      // Fetch site info, metrics, and chargers in parallel
+      const [siteRes, metricsRes, chargersRes] = await Promise.all([
         getSite(siteId),
-        getSiteMetrics(siteId)
+        getSiteMetrics(siteId),
+        getChargers(siteId)
       ]);
       
       const siteData = siteRes.data;
       const metricsData = metricsRes.data;
+      const chargersData = chargersRes.data || [];
       
       // Merge site info with metrics
       const mergedData = {
@@ -71,11 +180,14 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
         available_capacity_kw: metricsData.available_capacity_kw,
         theoretical_capacity_kw: metricsData.theoretical_capacity_kw,
         last_year_peak_kw: metricsData.last_year_peak_kw,
+        bill_count: metricsData.bill_count || 0,
         // Get utility and meter from first service if available
         utility: metricsData.services?.[0]?.utility || null,
         meter_number: metricsData.services?.[0]?.meter_number || null,
-        // Vehicle count from metrics
-        vehicle_count: metricsData.vehicle_count || 0
+        // Vehicle and charger counts
+        vehicle_count: metricsData.vehicle_count || 0,
+        charger_count: chargersData.length,
+        installed_charger_kw: chargersData.reduce((sum, c) => sum + (c.kw || 0), 0).toFixed(1)
       };
       
       setPopupDetails(prev => ({ ...prev, [siteId]: mergedData }));
@@ -127,7 +239,7 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
       
       return L.divIcon({
         className: `leaflet-div-icon marker-mode-${colorMode} ${cls}`,
-        html: `<span class="marker-outer" style="display:block;width:100%;height:100%;border-radius:50%;"><span style="background:${bg};display:block;width:100%;height:100%;border-radius:50%;"></span></span>`,
+        html: `<span class="marker-outer" style="display:block;width:100%;height:100%;border-radius:50%;"><span class="marker-inner" style="background:${bg};display:block;width:100%;height:100%;border-radius:50%;"></span></span>`,
         iconSize: [18, 18],
         iconAnchor: [9, 9],
         popupAnchor: [0, -10]
@@ -150,6 +262,7 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
 
   {enableAddSites && <ClickHandler onMapClick={handleMapClick} />}
   <FocusHelper focusSite={focusSite} onClearFocus={onClearFocus} />
+  <LocationButton />
 
       {list.filter(s => s.latitude !== null && s.latitude !== undefined && s.longitude !== null && s.longitude !== undefined)
             .filter(s => !selectedProjectId || projectSiteIdSet.has(s.id))
@@ -188,6 +301,13 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
                   <div className="popup-body">Loading details...</div>
                 ) : details ? (
                   <div className="popup-body">
+                    <div style={{ marginBottom: 4 }}>
+                      {missingFieldsForSite(details).length ? (
+                        <span className="missing-icon" aria-label="Missing info" role="img" title={`Missing: ${missingFieldsForSite(details).join(', ')}`}>⚠ Missing info</span>
+                      ) : (
+                        <span className="ok-icon" aria-label="Complete" role="img">✔ Complete</span>
+                      )}
+                    </div>
                     <div><span className="popup-label">Available kW:</span> {
                       details.available_capacity_kw !== null && details.available_capacity_kw !== undefined
                         ? details.available_capacity_kw
@@ -196,8 +316,9 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
                     <div><span className="popup-label">Peak kW:</span> {details.bill_count === 0 ? 'Unknown (no bills)' : details.last_year_peak_kw}</div>
                     <div><span className="popup-label">Capacity kW:</span> {details.theoretical_capacity_kw ?? '—'}</div>
                     <div><span className="popup-label">Utility:</span> {details.utility || '—'}</div>
+                    <div><span className="popup-label">Chargers:</span> {details.charger_count ?? 0}</div>
+                    <div><span className="popup-label">Chargers kW:</span> {details.installed_charger_kw ?? 0}</div>
                     <div><span className="popup-label">Vehicles:</span> {details.vehicle_count ?? 0}</div>
-                    <div><span className="popup-label">Meter #:</span> {details.meter_number || '—'}</div>
                     <div><span className="popup-label">Contact:</span> {details.contact_name ? `${details.contact_name}${details.contact_phone ? ' ('+details.contact_phone+')' : ''}` : '—'}</div>
                     <div><span className="popup-label">Location:</span> {details.address ? `${details.address}${details.city ? ', '+details.city : ''}` : (details.city || '—')}</div>
                     {selectedProjectId && (

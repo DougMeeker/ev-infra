@@ -24,7 +24,8 @@ const Home = () => {
   const [initialized, setInitialized] = useState(false);
   const [latestStatuses, setLatestStatuses] = useState([]);
   const [loadingLatest, setLoadingLatest] = useState(false);
-  const [markerColorMode, setMarkerColorMode] = useState('neutral'); // 'neutral' | 'status'
+  // Automatically set color mode: 'status' when project selected, 'neutral' otherwise
+  const markerColorMode = selectedProjectId ? 'status' : 'neutral';
 
   useEffect(() => {
     getProjects()
@@ -206,16 +207,7 @@ const Home = () => {
               <option value="">(none)</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            {selectedProjectId && (loadingLatest ? <span style={{ fontSize:'0.85em', color:'var(--muted)' }}>Loading status…</span> : <span style={{ fontSize:'0.85em', color:'var(--muted)' }}>Status ready</span>)}
-            {selectedProjectId && (
-              <>
-                <label style={{ fontSize:'0.9em', marginLeft:'12px' }}>Marker Color:</label>
-                <select className="input" value={markerColorMode} onChange={(e) => setMarkerColorMode(e.target.value)}>
-                  <option value="neutral">Neutral</option>
-                  <option value="status">Status</option>
-                </select>
-              </>
-            )}
+            {selectedProjectId && (loadingLatest && <span style={{ fontSize:'0.85em', color:'var(--muted)' }}>Loading status…</span> )}
           </div>
         </div>
         <MarkerLegend mode={markerColorMode} hasProject={!!selectedProjectId} />
@@ -391,7 +383,6 @@ function MarkerLegend({ mode, hasProject }) {
   return (
     <div style={wrapStyle}>
       {pill('#F16A22','#F16A22','All Sites')}
-      {hasProject && <span style={{ color:'var(--muted)', marginLeft:'6px' }}>Select "Status" color mode to see project progress</span>}
     </div>
   );
 }

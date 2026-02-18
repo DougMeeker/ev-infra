@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getChargers, createCharger, updateCharger, deleteCharger, getProjects } from '../api';
 import ChargersTable from '../components/ChargersTable';
 import ChargerForm from '../components/ChargerForm';
@@ -15,7 +15,8 @@ const formatDate = (d) => {
     }
   };
 
-export default function ChargersManager() {
+export default function Chargers() {
+  const navigate = useNavigate();
   const [siteId, setSiteId] = useState(null);
   const [chargers, setChargers] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -38,11 +39,23 @@ export default function ChargersManager() {
     }
   }, [searchParams]);
 
+  // Load chargers (all or filtered by site)
   useEffect(() => {
-    if (!siteId) return;
     setLoading(true);
-    getChargers(siteId).then(res => setChargers(res.data || [])).catch(() => setChargers([])).finally(()=>setLoading(false));
+    getChargers(siteId)
+      .then(res => setChargers(res.data || []))
+      .catch(() => setChargers([]))
+      .finally(() => setLoading(false));
   }, [siteId]);
+
+  const handleSiteChange = (newSiteId) => {
+    setSiteId(newSiteId);
+    if (newSiteId) {
+      navigate(`/chargers?siteId=${newSiteId}`);
+    } else {
+      navigate('/chargers');
+    }
+  };
 
   const onSubmit = async (payload) => {
     if (!siteId) return;
@@ -63,24 +76,29 @@ export default function ChargersManager() {
   };
 
   return (
-    <div style={{padding:16}}>
-      <h2>Chargers</h2>
-      <div style={{marginBottom:16}}>
+    <div className="container">
+      <h2 className="page-header">Chargers</h2>
+      
+      <div className="flex-row gap-sm" style={{ marginBottom: '16px' }}>
+        <button className="btn btn-secondary" onClick={() => navigate('/')}>Home</button>
+      </div>
+
+      <div className="card" style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 300px', minWidth: '250px' }}>
             <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', fontSize: '0.9rem' }}>
-              Select Site:
+              Filter by Site:
             </label>
             <SiteSelector 
               value={siteId} 
-              onChange={setSiteId}
+              onChange={handleSiteChange}
               variant="searchable"
-              placeholder="Search and select a site..."
+              placeholder="All sites (or search to filter)..."
             />
           </div>
           <button 
             className="btn" 
-            onClick={()=>setEditing({})} 
+            onClick={() => setEditing({})} 
             disabled={!siteId}
             style={{ marginBottom: '2px' }}
           >
@@ -88,14 +106,28 @@ export default function ChargersManager() {
           </button>
         </div>
       </div>
+
       {editing && (
-        <ChargerForm initial={editing} onCancel={()=>setEditing(null)} onSubmit={onSubmit} projects={projects} />
+        <div style={{ marginBottom: '16px' }}>
+          <ChargerForm 
+            initial={editing} 
+            onCancel={() => setEditing(null)} 
+            onSubmit={onSubmit} 
+            projects={projects} 
+          />
+        </div>
       )}
-      {loading ? <div>Loading…</div> : (
+      
+      {loading ? (
+        <div className="card">
+          <p>Loading chargers...</p>
+        </div>
+      ) : (
         <ChargersTable
           chargers={chargers}
           onEdit={(c) => setEditing({ ...c, date_installed: formatDate(c.date_installed) })}
           onDelete={onDelete}
+          showSite={!siteId}
         />
       )}
     </div>

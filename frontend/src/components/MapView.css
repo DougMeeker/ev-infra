@@ -1,0 +1,102 @@
+/* Location control button */
+.location-control {
+  background: white;
+  cursor: pointer;
+}
+
+.location-button {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: white;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 30px;
+  text-align: center;
+  transition: background-color 0.2s ease;
+}
+
+.location-button:hover {
+  background-color: #f4f4f4;
+}
+
+.location-button:active {
+  background-color: #e0e0e0;
+}
+
+/* Loading notification */
+.location-loading {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.95);
+  padding: 8px 16px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  font-size: 14px;
+  color: #333;
+  pointer-events: none;
+}
+
+/* Error notification */
+.location-error {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(239, 68, 68, 0.95);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* Ensure map container uses full width */
+.leaflet-container {
+  width: 100% !important;
+  max-width: 100%;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .location-button {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+    line-height: 36px;
+  }
+  
+  .location-loading,
+  .location-error {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  
+  /* Adjust map height on mobile for better viewport usage */
+  .leaflet-container {
+    height: 400px !important;
+    min-height: 300px;
+  }
+  
+  /* Make popup text smaller on mobile */
+  .popup-site {
+    font-size: 0.7rem;
+  }
+  
+  .popup-header {
+    font-size: 0.75rem;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+  .leaflet-container {
+    height: 350px !important;
+  }
+}

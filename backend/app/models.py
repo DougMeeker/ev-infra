@@ -30,6 +30,7 @@ class Site(db.Model):
     city = db.Column(db.String(128))
     contact_name = db.Column(db.String(128))
     contact_phone = db.Column(db.String(64))
+    leased = db.Column(db.Boolean, default=False)
     is_deleted = db.Column(db.Boolean, default=False)
 
     # Relationship to services (meters)
@@ -288,6 +289,7 @@ class Charger(db.Model):
     model_number = db.Column(db.String(128))
     serial_number = db.Column(db.String(128))
     date_installed = db.Column(db.Date)
+    fleet = db.Column(db.Boolean, default=False)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

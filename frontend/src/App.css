@@ -88,7 +88,7 @@
 .sticky-header {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 1100;
   box-shadow: var(--shadow);
 }
 
@@ -98,6 +98,12 @@
   padding: var(--space-5) 24px;
   background: var(--bg);
   color: var(--text);
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: var(--space-3) var(--space-2);
+  }
 }
 
 .page-header {
@@ -180,11 +186,17 @@
 .leaflet-div-icon { background: transparent !important; border: none !important; }
 
 /* ---- Unified Marker Mode Styles ---- */
-.marker-mode-capacity .marker-outer,
-.marker-mode-status .marker-outer { display:block; width:100%; height:100%; border-radius:50%; box-shadow:0 0 0 2px #fff, 0 0 4px rgba(0,0,0,0.3); }
+/* Add white outline (box-shadow) to markers in both modes */
+.marker-mode-capacity > .marker-outer,
+.marker-mode-status > .marker-outer { 
+  box-shadow: 0 0 0 2px #fff, 0 0 4px rgba(0,0,0,0.3); 
+}
+
 @media (prefers-color-scheme: dark) {
-  .marker-mode-capacity .marker-outer,
-  .marker-mode-status .marker-outer { box-shadow:0 0 0 2px #0f172a, 0 0 4px rgba(0,0,0,0.6); }
+  .marker-mode-capacity > .marker-outer,
+  .marker-mode-status > .marker-outer { 
+    box-shadow: 0 0 0 2px #0f172a, 0 0 4px rgba(0,0,0,0.6); 
+  }
 }
 
 /* Status marker specific ring colors if desired */
@@ -200,6 +212,13 @@
 
 /* ---- Utility ---- */
 .card { background:var(--card); border:1px solid var(--card-border); border-radius:var(--radius); padding:14px 16px; margin-bottom:18px; box-shadow:var(--shadow); color: var(--text); }
+
+@media (max-width: 768px) {
+  .card {
+    padding: 10px 8px;
+    margin-bottom: 12px;
+  }
+}
 .flex { display:flex; }
 .flex-row { display:flex; flex-direction:row; }
 .flex-col { display:flex; flex-direction:column; }
@@ -207,6 +226,27 @@
 .gap-md { gap:16px; }
 .justify-between { justify-content:space-between; }
 .align-center { align-items:center; }
+
+@media (max-width: 768px) {
+  .flex-row {
+    flex-wrap: wrap;
+  }
+  
+  .flex-row.gap-sm,
+  .flex-row.gap-md {
+    gap: 8px;
+  }
+  
+  /* Make map controls stack vertically on mobile */
+  .flex-row > label,
+  .flex-row > div {
+    flex: 1 1 100%;
+  }
+  
+  .flex-row > div[style*="marginLeft"] {
+    margin-left: 0 !important;
+  }
+}
 
 .metrics-block { background:var(--table-th); border:1px solid var(--card-border); padding:12px 14px; border-radius:var(--radius); margin-top:12px; }
 .metrics-block h4 { margin:0 0 8px; font-size:1rem; }
@@ -219,8 +259,32 @@ a:hover { text-decoration:underline; }
 /* ---- Responsive tweaks ---- */
 @media (max-width: 640px) {
   .form-grid { grid-template-columns: 1fr; }
-  .table th, .table td { padding: 6px 6px; }
-  .page-header { font-size:1.5rem; }
+  .table th, .table td { padding: 6px 6px; font-size: 0.8rem; }
+  .page-header { font-size:1.5rem; margin-bottom: var(--space-3); }
+  
+  /* Make table scrollable on small screens */
+  .card > table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  
+  /* Stack pagination controls vertically */
+  .flex-row.justify-between {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  /* Reduce button padding on mobile */
+  .btn {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+  }
+  
+  .input, select.input {
+    font-size: 0.8rem;
+    padding: 4px 6px;
+  }
 }
 
 /* ---- Skeleton Loader ---- */

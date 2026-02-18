@@ -87,7 +87,7 @@ const FilesPage = () => {
                     ))
                   )}
                 </td>
-                <td>
+                <td style={{ display: 'flex', gap: '8px'}}>
                   <button className="btn" onClick={() => onRename(f)}>Rename</button>
                   <button className="btn btn-secondary" onClick={() => setSelectedFile(f)}>Assign to sites</button>
                   <button className="btn btn-danger" onClick={() => onDelete(f.id)}>Delete</button>
