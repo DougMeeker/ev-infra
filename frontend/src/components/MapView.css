@@ -55,6 +55,9 @@
   z-index: 1000;
   font-size: 14px;
   pointer-events: none;
+  max-width: 90%;
+  text-align: center;
+  word-wrap: break-word;
 }
 
 /* Ensure map container uses full width */
@@ -74,8 +77,10 @@
   
   .location-loading,
   .location-error {
-    font-size: 12px;
-    padding: 6px 12px;
+    font-size: 13px;
+    padding: 8px 12px;
+    max-width: 85%;
+    line-height: 1.4;
   }
   
   /* Adjust map height on mobile for better viewport usage */

@@ -64,14 +64,30 @@ const LocationButton = () => {
         setLocating(false);
       },
       (err) => {
-        console.error("Error getting location:", err);
-        setError("Unable to retrieve your location");
+        console.error("Geolocation error:", err.code, err.message);
+        let errorMessage = "Unable to retrieve your location";
+        
+        switch(err.code) {
+          case err.PERMISSION_DENIED:
+            errorMessage = "Location access denied. Please enable location permissions in your browser settings.";
+            break;
+          case err.POSITION_UNAVAILABLE:
+            errorMessage = "Location information is unavailable. Please check your device settings.";
+            break;
+          case err.TIMEOUT:
+            errorMessage = "Location request timed out. Please try again.";
+            break;
+          default:
+            errorMessage = `Unable to get location: ${err.message || 'Unknown error'}`;
+        }
+        
+        setError(errorMessage);
         setLocating(false);
       },
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
+        enableHighAccuracy: false, // Changed to false for better mobile compatibility
+        timeout: 15000, // Increased timeout for Safari mobile
+        maximumAge: 60000 // Allow cached position up to 60 seconds old
       }
     );
   };
@@ -112,7 +128,7 @@ const LocationButton = () => {
   // Show error notification if any
   useEffect(() => {
     if (error) {
-      const timer = setTimeout(() => setError(null), 3000);
+      const timer = setTimeout(() => setError(null), 5000); // Increased to 5 seconds for longer messages
       return () => clearTimeout(timer);
     }
   }, [error]);
