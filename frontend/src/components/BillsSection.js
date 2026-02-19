@@ -8,6 +8,8 @@ export default function BillsSection({ siteId, onTotalsChange }) {
   const [newBill, setNewBill] = useState({ service_id: '', year: '', month: '', energy_usage: '', max_power: '' });
   const [billEditingId, setBillEditingId] = useState(null);
   const [billEditData, setBillEditData] = useState({});
+  const [sortColumn, setSortColumn] = useState('period');
+  const [sortDirection, setSortDirection] = useState('desc');
 
   const loadBills = useCallback(async () => {
     if (!siteId) return;
@@ -117,10 +119,71 @@ export default function BillsSection({ siteId, onTotalsChange }) {
     }
   };
 
-  const getServiceLabel = (serviceId) => {
+  const getService = (serviceId) => {
     const service = services.find(s => s.id === serviceId);
     if (!service) return `Service #${serviceId}`;
-    return service.meter_number || service.utility || `Service #${serviceId}`;
+    return service;
+  };
+
+  // Handle column sorting
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column, default to ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort bills based on current sort column and direction
+  const sortedBills = useMemo(() => {
+    const sorted = [...bills].sort((a, b) => {
+      let aVal, bVal;
+
+      switch (sortColumn) {
+        case 'meter':
+          const aService = getService(a.service_id);
+          const bService = getService(b.service_id);
+          aVal = (aService.meter_number || aService.utility || '').toLowerCase();
+          bVal = (bService.meter_number || bService.utility || '').toLowerCase();
+          break;
+        case 'account':
+          const aServiceAcc = getService(a.service_id);
+          const bServiceAcc = getService(b.service_id);
+          aVal = (aServiceAcc.utility_account || '').toLowerCase();
+          bVal = (bServiceAcc.utility_account || '').toLowerCase();
+          break;
+        case 'period':
+          // Sort by year then month
+          aVal = a.year * 100 + (a.month || 0);
+          bVal = b.year * 100 + (b.month || 0);
+          break;
+        case 'energy':
+          aVal = parseFloat(a.energy_usage) || 0;
+          bVal = parseFloat(b.energy_usage) || 0;
+          break;
+        case 'power':
+          aVal = parseFloat(a.max_power) || 0;
+          bVal = parseFloat(b.max_power) || 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  }, [bills, sortColumn, sortDirection, services]);
+
+  // Render sort indicator
+  const SortIndicator = ({ column }) => {
+    if (sortColumn !== column) return <span style={{ opacity: 0.3, marginLeft: '4px' }}>↕</span>;
+    return <span style={{ marginLeft: '4px' }}>{sortDirection === 'asc' ? '↑' : '↓'}</span>;
   };
 
   // Calculate summary statistics by meter
@@ -193,7 +256,7 @@ export default function BillsSection({ siteId, onTotalsChange }) {
             <tbody>
               {meterSummaries.map(summary => (
                 <tr key={summary.serviceId}>
-                  <td><strong>{getServiceLabel(summary.serviceId)}</strong></td>
+                  <td><strong>{getService(summary.serviceId).meter_number || getService(summary.serviceId).utility || `Service #${summary.serviceId}`}</strong></td>
                   <td>{summary.averageEnergyPerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                   <td>{summary.maxPower > 0 ? summary.maxPower.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
                   <td>{summary.billCount}</td>
@@ -253,15 +316,41 @@ export default function BillsSection({ siteId, onTotalsChange }) {
         <table className="table">
           <thead>
             <tr>
-              <th style={{ borderBottom: '1px solid #ddd' }}>Meter</th>
-              <th style={{ borderBottom: '1px solid #ddd' }}>Period</th>
-              <th style={{ borderBottom: '1px solid #ddd' }}>Energy (kWh)</th>
-              <th style={{ borderBottom: '1px solid #ddd' }}>Max Power (kW)</th>
+              <th 
+                style={{ borderBottom: '1px solid #ddd', cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('meter')}
+              >
+                Meter<SortIndicator column="meter" />
+              </th>
+              <th 
+                style={{ borderBottom: '1px solid #ddd', cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('account')}
+              >
+                Account<SortIndicator column="account" />
+              </th>
+              <th 
+                style={{ borderBottom: '1px solid #ddd', cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('period')}
+              >
+                Period<SortIndicator column="period" />
+              </th>
+              <th 
+                style={{ borderBottom: '1px solid #ddd', cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('energy')}
+              >
+                Energy (kWh)<SortIndicator column="energy" />
+              </th>
+              <th 
+                style={{ borderBottom: '1px solid #ddd', cursor: 'pointer', userSelect: 'none' }} 
+                onClick={() => handleSort('power')}
+              >
+                Max Power (kW)<SortIndicator column="power" />
+              </th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {bills.map(bill => (
+            {sortedBills.map(bill => (
               <tr key={bill.id}>
                 {billEditingId === bill.id ? (
                   <>
@@ -274,6 +363,7 @@ export default function BillsSection({ siteId, onTotalsChange }) {
                         ))}
                       </select>
                     </td>
+                    <td>{getService(bill.service_id).utility_account || `Account #${bill.service_id}`}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                         <input className="input" name="year" placeholder="Year" value={billEditData.year ?? ''} onChange={handleBillEditChange} style={{ width: '70px' }} />
@@ -290,7 +380,8 @@ export default function BillsSection({ siteId, onTotalsChange }) {
                   </>
                 ) : (
                   <>
-                    <td>{getServiceLabel(bill.service_id)}</td>
+                    <td>{getService(bill.service_id).meter_number || getService(bill.service_id).utility || `Service #${bill.service_id}`}</td>
+                    <td>{getService(bill.service_id).utility_account || `Account #${bill.service_id}`}</td>
                     <td>{bill.year}-{String(bill.month).padStart(2, '0')}</td>
                     <td>{bill.energy_usage ?? '—'}</td>
                     <td>{bill.max_power ?? '—'}</td>

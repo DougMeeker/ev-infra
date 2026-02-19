@@ -2,6 +2,9 @@ from datetime import datetime
 from flask import jsonify
 from ..models import Service, UtilityBill
 from ..extensions import db
+import csv
+import re
+from io import StringIO
 
 
 def list_bills_by_service(service_id):
@@ -120,3 +123,155 @@ def delete_bill(bill_id):
     bill.is_deleted = True
     db.session.commit()
     return {"message": f"Bill {bill_id} deleted."}, 200
+
+
+def import_pge_bills(file_content, filename):
+    """
+    Import PG&E usage reports and create bills.
+    
+    Args:
+        file_content: The file content (string or bytes)
+        filename: Original filename to extract month/year
+    
+    Returns:
+        dict with success/error counts
+    """
+    # Extract year and month from filename (e.g., Historical_20250501-20250531.csv)
+    match = re.search(r'(\d{4})(\d{2})\d{2}', filename)
+    if not match:
+        return {"error": f"Cannot extract date from filename: {filename}"}, 400
+    
+    year = int(match.group(1))
+    month = int(match.group(2))
+    
+    if month < 1 or month > 12:
+        return {"error": f"Invalid month extracted from filename: {month}"}, 400
+    
+    # Parse CSV content
+    if isinstance(file_content, bytes):
+        file_content = file_content.decode('utf-8-sig')  # Handle BOM
+    
+    # Remove BOM if present
+    if file_content.startswith('\ufeff'):
+        file_content = file_content[1:]
+    
+    csv_reader = csv.DictReader(StringIO(file_content))
+    
+    # Normalize column names by stripping whitespace and checking actual headers
+    rows = list(csv_reader)
+    if not rows:
+        return {"error": "CSV file is empty"}, 400
+    
+    # Get the actual column names from the first row
+    available_columns = list(rows[0].keys()) if rows else []
+    
+    # Find the Account ID column (handle variations)
+    account_col = None
+    for col in available_columns:
+        col_clean = col.strip().lower().replace(' ', '').replace('_', '')
+        if col_clean == 'accountid':
+            account_col = col
+            break
+    
+    if not account_col:
+        return {
+            "error": f"Cannot find 'Account ID' column. Available columns: {', '.join(available_columns)}"
+        }, 400
+    
+    # Find Usage Value column
+    usage_col = None
+    for col in available_columns:
+        col_clean = col.strip().lower().replace(' ', '').replace('_', '')
+        if col_clean == 'usagevalue':
+            usage_col = col
+            break
+    
+    # Find Interval Length column
+    interval_col = None
+    for col in available_columns:
+        col_clean = col.strip().lower().replace(' ', '').replace('_', '')
+        if col_clean == 'intervallength':
+            interval_col = col
+            break
+    
+    if not usage_col or not interval_col:
+        return {
+            "error": f"Cannot find required columns. Need 'Usage Value' and 'Interval Length'. Available: {', '.join(available_columns)}"
+        }, 400
+    
+    # Group data by Account ID
+    account_data = {}
+    
+    for row in rows:
+        # Use the identified account column
+        account_id = row.get(account_col, '').strip()
+        if not account_id:
+            continue
+        
+        try:
+            usage_value = float(row.get(usage_col, 0))
+            interval_length = int(row.get(interval_col, 15))
+        except (ValueError, TypeError):
+            continue
+        
+        if account_id not in account_data:
+            account_data[account_id] = {
+                'total_kwh': 0,
+                'max_usage': 0,
+                'interval_length': interval_length
+            }
+        
+        account_data[account_id]['total_kwh'] += usage_value
+        account_data[account_id]['max_usage'] = max(
+            account_data[account_id]['max_usage'], 
+            usage_value
+        )
+    
+    # Create bills for each account
+    created = 0
+    updated = 0
+    errors = []
+    
+    for account_id, data in account_data.items():
+        # Find service by utility_account
+        service = Service.query.filter_by(
+            utility_account=account_id, 
+            is_deleted=False
+        ).first()
+        
+        if not service:
+            errors.append(f"No service found for account {account_id}")
+            continue
+        
+        # Calculate peak power (kW)
+        # Interval Length is in minutes, convert to hours
+        interval_hours = data['interval_length'] / 60.0
+        max_power_kw = data['max_usage'] / interval_hours if interval_hours > 0 else 0
+        
+        # Create or update bill
+        bill_data = {
+            "year": year,
+            "month": month,
+            "energy_usage": round(data['total_kwh'], 2),
+            "max_power": round(max_power_kw, 2)
+        }
+        
+        result, status_code = create_bill(service.id, bill_data)
+        
+        if status_code in (200, 201):
+            if status_code == 201:
+                created += 1
+            else:
+                updated += 1
+        else:
+            errors.append(f"Account {account_id}: {result.get('error', 'Unknown error')}")
+    
+    return {
+        "success": True,
+        "year": year,
+        "month": month,
+        "created": created,
+        "updated": updated,
+        "errors": errors,
+        "total_accounts": len(account_data)
+    }, 200

@@ -117,7 +117,7 @@ const LocationButton = () => {
         title="Go to my location"
         aria-label="Go to my location"
       >
-        📍
+        𖦏
       </button>
     `;
     

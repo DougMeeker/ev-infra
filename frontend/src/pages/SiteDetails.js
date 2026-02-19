@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { updateSite, deleteSite, getSiteMetrics, getSite, getEquipmentEnergy } from "../api";
+import { updateSite, deleteSite, getSiteMetrics, getSite, getEquipmentEnergy, getVehicleCountsBySite } from "../api";
 import EquipmentSection from "../components/EquipmentSection";
 import BillsSection from "../components/BillsSection";
 import SiteProjectsSection from "../components/SiteProjectsSection";
@@ -17,6 +17,7 @@ const SiteDetails = () => {
     const [metrics, setMetrics] = useState(null);
     const [metricsLoading, setMetricsLoading] = useState(false);
     const [energySummary, setEnergySummary] = useState(null);
+    const [vehicleCount, setVehicleCount] = useState(null);
     const [showProjects, setShowProjects] = useState(() => JSON.parse(localStorage.getItem("showProjects") ?? "true"));
     const [showChargers, setShowChargers] = useState(() => JSON.parse(localStorage.getItem("showChargers") ?? "true"));
     const [showEquipment, setShowEquipment] = useState(() => JSON.parse(localStorage.getItem("showEquipment") ?? "true"));
@@ -36,11 +37,13 @@ const SiteDetails = () => {
         setMetricsLoading(true);
         Promise.all([
             getSiteMetrics(id),
-            getEquipmentEnergy(id)
+            getEquipmentEnergy(id),
+            getVehicleCountsBySite(id)
         ])
-            .then(([metricsRes, energyRes]) => {
+            .then(([metricsRes, energyRes, vehicleCountRes]) => {
                 setMetrics(metricsRes.data);
                 setEnergySummary(energyRes.data);
+                setVehicleCount(vehicleCountRes.data);
             })
             .catch(err => console.error("Error fetching metrics:", err))
             .finally(() => setMetricsLoading(false));
@@ -109,7 +112,7 @@ const SiteDetails = () => {
                                 <div className="form-group"><label>City</label><input className="input" name="city" value={formData.city || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>Latitude</label><input className="input" name="latitude" value={formData.latitude || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>Longitude</label><input className="input" name="longitude" value={formData.longitude || ""} onChange={handleChange} /></div>
-                                 <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <label style={{ margin: 0 }}>Leased Property</label>
                                     <input type="checkbox" checked={formData.leased || false} onChange={(e) => setFormData({ ...formData, leased: e.target.checked })} style={{ transform: 'scale(1.2)', margin: 0 }} />
                                 </div>
@@ -150,45 +153,54 @@ const SiteDetails = () => {
                                 <div><span>Department ID:</span><strong>{site.department_id || 'N/A'}</strong></div>
                             </div>
                         </div>
+                        {metricsLoading && (
+                            <div className="metrics-block">
+                                <h4>Capacity Metrics</h4>
+                                <div className="skeleton sk-line" style={{ width: '40%', marginBottom: 8 }} />
+                                <div className="skeleton sk-line" style={{ width: '60%', marginBottom: 8 }} />
+                                <div className="skeleton sk-line" style={{ width: '50%', marginBottom: 8 }} />
+                            </div>
+                        )}
+                        {!metricsLoading && metrics && (
+                            <>
+                                <div className="details-section">
+                                    <h4>Capacity Metrics (kW)</h4>
+                                    <div className="detail-pairs">
+                                        <div><span>Service:</span><strong> {metrics.theoretical_capacity_kw ?? 'N/A'}</strong></div>
+                                        <div><span></span><strong>-</strong></div>
+                                        <div><span>Peak Demand:</span><strong> {metrics.bill_count === 0 ? 'Unknown (no bills)' : metrics.last_year_peak_kw}</strong></div>
+                                        <div><span></span><strong>=</strong></div>
+                                        <div><span>Available:</span><strong> {
+                                            metrics.bill_count === 0 ? 'Unknown (no bills)' :
+                                                metrics.available_capacity_kw !== null && metrics.available_capacity_kw !== undefined
+                                                    ? metrics.available_capacity_kw
+                                                    : 'N/A'
+                                        }</strong></div></div>
+                                </div>
+                                {energySummary && (
+                                    <div className="details-section" >
+                                        <h4>Equipment Energy ({energySummary.year})</h4>
+                                        <div className="detail-pairs">
+                                            <div><span>Vehicles:</span><strong> {vehicleCount?.["counts"] != null ? vehicleCount["counts"]?.[id] != null ? vehicleCount["counts"][id]: "—" : "—"}</strong></div>
+                                            <div><span>Total Miles:</span><strong> {energySummary.total_miles != null ? Number(energySummary.total_miles).toLocaleString(undefined) : '—'}</strong></div>
+                                            <div><span>Daily Avg kWh:</span><strong> {energySummary.site_daily_avg_kwh != null ? Number(energySummary.site_daily_avg_kwh).toFixed(2) : '—'}</strong></div>
+                                            <div><span title="Max daily energy in any single month across vehicles">Daily Max kWh:</span><strong> {energySummary.site_daily_max_kwh != null ? Number(energySummary.site_daily_max_kwh).toFixed(2) : '—'}</strong></div>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                     <div>
                         <br />
-                        <button className="btn" onClick={() => setEditing(true)}>Edit</button>
-                    </div>
-                    {metricsLoading && (
-                        <div className="metrics-block">
-                            <h4>Capacity Metrics</h4>
-                            <div className="skeleton sk-line" style={{ width: '40%', marginBottom: 8 }} />
-                            <div className="skeleton sk-line" style={{ width: '60%', marginBottom: 8 }} />
-                            <div className="skeleton sk-line" style={{ width: '50%', marginBottom: 8 }} />
+                        <div style={{ display: 'flex', gap: '8px' }}>  
+                            <button className="btn" onClick={() => setEditing(true)}>Edit</button>
+                            <button className="btn btn-danger" onClick={handleDelete}>Delete Site</button>
                         </div>
-                    )}
-                    {!metricsLoading && metrics && (
-                        <>
-                            <div className="metrics-block">
-                                <h4>Capacity Metrics</h4>
-                                <p><strong>Service Capacity (kW):</strong> {metrics.theoretical_capacity_kw ?? 'N/A'} <span style={{ fontSize: '0.85em', color: 'var(--muted)' }}>(from electrical service specs)</span></p>
-                                <p><strong>Peak Demand (kW):</strong> {metrics.bill_count === 0 ? 'Unknown (no bills)' : metrics.last_year_peak_kw} <span style={{ fontSize: '0.85em', color: 'var(--muted)' }}>(from utility bills)</span></p>
-                                <p><strong>Available Capacity (kW):</strong> {
-                                    metrics.bill_count === 0 ? 'Unknown (no bills)' :
-                                        metrics.available_capacity_kw !== null && metrics.available_capacity_kw !== undefined
-                                            ? metrics.available_capacity_kw
-                                            : 'N/A'
-                                } <span style={{ fontSize: '0.85em', color: 'var(--muted)' }}>(service capacity - peak demand)</span></p>
-                            </div>
-                            {energySummary && (
-                                <div className="metrics-block" style={{ marginTop: '16px' }}>
-                                    <h4>Equipment Energy Summary ({energySummary.year})</h4>
-                                    <p><strong>Total Miles:</strong> {energySummary.total_miles != null ? Number(energySummary.total_miles).toLocaleString(undefined) : '—'}</p>
-                                    <p><strong>Daily Avg kWh:</strong> {energySummary.site_daily_avg_kwh != null ? Number(energySummary.site_daily_avg_kwh).toFixed(2) : '—'}</p>
-                                    <p><strong>Daily Max kWh:</strong> <span title="Max daily energy in any single month across vehicles">{energySummary.site_daily_max_kwh != null ? Number(energySummary.site_daily_max_kwh).toFixed(2) : '—'}</span></p>
-                                </div>
-                            )}
-                        </>
-                    )}
+                    </div>
                 </div>
             )}
-            <button className="btn btn-danger" onClick={handleDelete}>Delete Site</button>
+            
 
             {/* Services/Meters Section */}
             <hr />

@@ -1,4 +1,4 @@
-from flask import request
+from flask import request, jsonify
 from .site_routes import site_bp
 from ..services.bills_service import (
     list_bills_by_site,
@@ -7,6 +7,7 @@ from ..services.bills_service import (
     get_bill as svc_get_bill,
     update_bill as svc_update_bill,
     delete_bill as svc_delete_bill,
+    import_pge_bills as svc_import_pge_bills,
 )
 
 
@@ -43,3 +44,34 @@ def update_bill(bill_id):
 @site_bp.route("/bills/<int:bill_id>", methods=["DELETE"])
 def delete_bill(bill_id):
     return svc_delete_bill(bill_id)
+
+
+@site_bp.route("/bills/import/pge", methods=["POST"])
+def import_pge_bills():
+    """
+    Import PG&E usage report and create bills.
+    
+    Expects multipart/form-data with a 'file' field containing the CSV.
+    Extracts month from filename (e.g., Historical_20250501-20250531.csv).
+    Matches Account ID (first column) to Service.utility_account.
+    Sums Usage Value columns for total kWh.
+    Calculates peak kW from max Usage Value / Interval Length.
+    """
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    
+    file = request.files['file']
+    
+    if not file.filename:
+        return jsonify({"error": "No file selected"}), 400
+    
+    if not file.filename.endswith('.csv'):
+        return jsonify({"error": "File must be a CSV"}), 400
+    
+    # Read file content
+    file_content = file.read()
+    
+    # Process the import
+    result, status_code = svc_import_pge_bills(file_content, file.filename)
+    
+    return jsonify(result), status_code

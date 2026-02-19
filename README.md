@@ -25,7 +25,48 @@ export FLASK_APP=run.py
 flask run
 ```
 
+## Browser & Deployment Requirements
+
+### HTTPS Required
+The application **requires HTTPS in production** for the following features:
+- **Geolocation API**: Modern browsers (Chrome, Safari, Firefox) block location access on non-HTTPS sites
+- **Secure cookies**: For production authentication and session management
+- **Progressive Web App features**: Service workers require HTTPS
+
+**Development Exception**: `localhost` and `127.0.0.1` are exempt from HTTPS requirements for local development.
+
+### Browser Compatibility
+- **Chrome/Edge**: 90+ (fully supported)
+- **Safari**: 14+ (fully supported, including iOS Safari)
+- **Firefox**: 88+ (fully supported)
+- **Mobile browsers**: Optimized for iOS Safari and Chrome on Android
+
+### SSL Certificate Setup
+For servers behind a firewall (cannot use Let's Encrypt):
+1. Request a `.pfx` certificate from your IT department
+2. Use the automated setup script: `sudo deploy/scripts/setup_ssl.sh`
+3. See detailed instructions in `deploy/SSL_SETUP_BEHIND_FIREWALL.md`
+
+For publicly accessible servers:
+- Use Let's Encrypt with certbot (automated renewal)
+- See `deploy/README.md` for complete SSL setup instructions
+
 ## Recent Features (January 2026)
+
+### Chargers Management
+- **Enhanced Chargers Page**: Redesigned interface matching application-wide styling
+  - View all chargers across all sites by default
+  - Filter by site using searchable dropdown
+  - URL updates automatically when site is filtered for bookmarking and sharing
+  - Site name column shown when viewing all chargers
+  - Improved form styling with consistent button and input designs
+
+### Map & Geolocation
+- **User Location Feature**: Click the 𖦏 button on the map to center on your current location
+  - Optimized for mobile browsers including Safari iOS
+  - Graceful error handling with specific messages for permission issues
+  - **Requires HTTPS**: Modern browsers require secure connections for geolocation API
+  - Configurable accuracy and timeout settings for better mobile performance
 
 ### Service Management
 - **Notes Field**: Added notes text field to Services/Meters to differentiate multiple services at a site
@@ -324,6 +365,33 @@ Update bill:
 PUT /api/sites/bills/<bill_id>
 
 Soft delete bill:
+DELETE /api/sites/bills/<bill_id>
+
+**Import PG&E Bills:**
+```bash
+curl -X POST http://localhost:5000/api/sites/bills/import/pge \
+  -F "file=@Historical_20250501-20250531.csv"
+```
+
+This endpoint:
+- Extracts month/year from filename (e.g., `Historical_20250501-20250531.csv` → May 2025)
+- Matches "Account ID" column to `Service.utility_account`
+- Sums all "Usage Value" entries for total kWh
+- Finds max "Usage Value" and divides by "Interval Length" (minutes → hours) for peak kW
+- Creates or updates bills for each matched service
+
+Example response:
+```json
+{
+  "success": true,
+  "year": 2025,
+  "month": 5,
+  "created": 3,
+  "updated": 1,
+  "total_accounts": 4,
+  "errors": ["No service found for account 1234567890"]
+}
+```
 
 ### Capacity & Metrics
 
