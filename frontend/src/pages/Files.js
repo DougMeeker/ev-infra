@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { listFiles, assignFileSites, deleteFile, updateFile, fileDownloadUrl } from '../api';
+import { listFiles, assignFileSites, deleteFile, updateFile, fileDownloadUrl, fileViewUrl } from '../api';
 import SiteMultiSelect from '../components/SiteMultiSelect';
 
 const FilesPage = () => {
@@ -47,7 +47,7 @@ const FilesPage = () => {
     <div className="container">
       <h2 className="page-header">Files</h2>
       <div className="card">
-        <div className="flex-row gap-sm" style={{marginBottom:'12px'}}>
+        <div className="flex-row gap-sm" style={{ marginBottom: '12px' }}>
           <input className="input" placeholder="Search name" value={q} onChange={e => setQ(e.target.value)} />
           <button className="btn" onClick={loadFiles}>Refresh</button>
         </div>
@@ -66,8 +66,8 @@ const FilesPage = () => {
                 <td>
                   <a href={fileDownloadUrl(f.id)} target="_blank" rel="noreferrer">{f.original_name}</a>
                   {String(f.content_type || '').startsWith('image/') && (
-                    <div style={{marginTop:'6px'}}>
-                      <img src={fileDownloadUrl(f.id)} alt={f.original_name} style={{maxWidth:'160px', maxHeight:'100px', border:'1px solid var(--card-border)'}} />
+                    <div style={{ marginTop: '6px' }}>
+                      <img src={fileViewUrl(f.id)} alt={f.original_name} style={{ maxWidth: '160px', maxHeight: '100px', border: '1px solid var(--card-border)' }} />
                     </div>
                   )}
                 </td>
@@ -87,10 +87,12 @@ const FilesPage = () => {
                     ))
                   )}
                 </td>
-                <td style={{ display: 'flex', gap: '8px'}}>
-                  <button className="btn" onClick={() => onRename(f)}>Rename</button>
-                  <button className="btn btn-secondary" onClick={() => setSelectedFile(f)}>Assign to sites</button>
-                  <button className="btn btn-danger" onClick={() => onDelete(f.id)}>Delete</button>
+                <td>
+                  <div style={{ display: 'flex', gap: '8px'}}>
+                    <button className="btn" onClick={() => onRename(f)}>Rename</button>
+                    <button className="btn btn-secondary" onClick={() => setSelectedFile(f)}>Assign to sites</button>
+                    <button className="btn btn-danger" onClick={() => onDelete(f.id)}>Delete</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -99,13 +101,14 @@ const FilesPage = () => {
       </div>
 
       {selectedFile && (
-        <div className="card" style={{marginTop:'16px'}}>
+        <div className="card" style={{ marginTop: '16px' }}>
           <h4>Assign "{selectedFile.original_name}" to sites</h4>
           <SiteMultiSelect
-            initialSelectedIds={selectedSiteIds}
+            key={selectedFile.id}
+            initialSelectedIds={selectedFile.site_ids || []}
             onChange={(ids) => setSelectedSiteIds(ids)}
           />
-          <div className="flex-row gap-sm" style={{marginTop:'12px'}}>
+          <div className="flex-row gap-sm" style={{ marginTop: '12px' }}>
             <button className="btn" onClick={onAssign} disabled={selectedSiteIds.length === 0}>Assign</button>
             <button className="btn btn-secondary" onClick={() => { setSelectedFile(null); setSelectedSiteIds([]); }}>Cancel</button>
           </div>

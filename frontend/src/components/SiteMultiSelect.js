@@ -22,6 +22,11 @@ const SiteMultiSelect = ({ initialSelectedIds = [], onChange }) => {
       .finally(() => setLoading(false));
   }, []);
 
+  // Update selected sites when initialSelectedIds changes
+  useEffect(() => {
+    setSelected(new Set(initialSelectedIds.map(Number)));
+  }, [initialSelectedIds]);
+
   useEffect(() => {
     if (onChange) onChange(Array.from(selected));
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -76,3 +76,20 @@ class S3StorageProvider(StorageProvider):
             from flask import abort
             abort(404)
         return redirect(url)
+
+    def make_view_response(self, key: str):
+        # For S3/MinIO, generate a presigned URL with inline content-disposition
+        try:
+            url = self.client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': self.bucket,
+                    'Key': key,
+                    'ResponseContentDisposition': 'inline'
+                },
+                ExpiresIn=int(current_app.config.get('SIGNED_URL_TTL', 3600))
+            )
+            return redirect(url)
+        except Exception:
+            from flask import abort
+            abort(404)

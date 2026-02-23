@@ -331,6 +331,7 @@ class File(db.Model):
     content_type = db.Column(db.String(128))
     size_bytes = db.Column(db.Integer)
     description = db.Column(db.Text)
+    file_created_at = db.Column(db.DateTime)  # Original file creation date from metadata (e.g., EXIF date taken)
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
     # Optional user field; not implemented yet
     # uploaded_by = db.Column(db.String(128))

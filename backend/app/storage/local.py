@@ -49,3 +49,11 @@ class LocalStorageProvider(StorageProvider):
             as_attachment=True,
             download_name=download_name if download_name else None
         )
+
+    def make_view_response(self, key: str):
+        upload_dir = self._ensure_dir()
+        return send_from_directory(
+            upload_dir,
+            key,
+            as_attachment=False
+        )

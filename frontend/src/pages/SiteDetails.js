@@ -154,7 +154,7 @@ const SiteDetails = () => {
                             </div>
                         </div>
                         {metricsLoading && (
-                            <div className="metrics-block">
+                            <div className="details-section">
                                 <h4>Capacity Metrics</h4>
                                 <div className="skeleton sk-line" style={{ width: '40%', marginBottom: 8 }} />
                                 <div className="skeleton sk-line" style={{ width: '60%', marginBottom: 8 }} />

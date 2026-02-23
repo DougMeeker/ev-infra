@@ -39,13 +39,14 @@ def upload_file():
         return jsonify({'error': 'No file provided'}), 400
 
     try:
-        stored_name, size_bytes, content_type = save_uploaded_file(file)
+        stored_name, size_bytes, content_type, file_created_at = save_uploaded_file(file)
         new_file = File(
             original_name=file.filename,
             stored_name=stored_name,
             content_type=content_type or file.mimetype,
             size_bytes=size_bytes,
-            description=description
+            description=description,
+            file_created_at=file_created_at
         )
         if site_ids:
             linked_sites = Site.query.filter(Site.id.in_(site_ids)).all()
@@ -90,6 +91,13 @@ def download_file(file_id: int):
         resp = storage.make_download_response(f.stored_name)
     # Some providers may not set Content-Disposition filename; we can adjust if needed
     return resp
+
+@files_bp.route('/<int:file_id>/view', methods=['GET'])
+def view_file(file_id: int):
+    f = File.query.get_or_404(file_id)
+    storage = get_storage_provider()
+    # Serve file with inline content-disposition for viewing in browser/iframe
+    return storage.make_view_response(f.stored_name)
 
 @files_bp.route('/<int:file_id>/sites', methods=['POST'])
 def assign_file_sites(file_id: int):

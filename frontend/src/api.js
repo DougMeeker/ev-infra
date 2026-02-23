@@ -257,3 +257,4 @@ export const unassignFileSite = (fileId, siteId) => axios.delete(`${API_BASE_URL
 export const deleteFile = (fileId) => axios.delete(`${API_BASE_URL}/files/${fileId}`);
 export const updateFile = (fileId, payload) => axios.put(`${API_BASE_URL}/files/${fileId}`, payload);
 export const fileDownloadUrl = (fileId) => `${API_BASE_URL}/files/${fileId}/download`;
+export const fileViewUrl = (fileId) => `${API_BASE_URL}/files/${fileId}/view`;

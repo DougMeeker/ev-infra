@@ -23,3 +23,10 @@ class StorageProvider:
         Implementations may return a redirect or stream the file directly.
         """
         raise NotImplementedError
+
+    def make_view_response(self, key: str) -> Response:
+        """
+        Return a Flask response for viewing the file inline (e.g., in a browser or iframe).
+        Sets Content-Disposition to inline instead of attachment.
+        """
+        raise NotImplementedError

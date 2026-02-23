@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getSiteFiles, uploadFile, unassignFileSite, updateFile, fileDownloadUrl } from '../api';
+import { getSiteFiles, uploadFile, unassignFileSite, updateFile, fileDownloadUrl, fileViewUrl } from '../api';
 import heic2any from 'heic2any';
 
 const FilesSection = ({ siteId }) => {
@@ -166,7 +166,7 @@ const FilesSection = ({ siteId }) => {
     if (sortColumn === 'size_bytes') {
       aVal = Number(aVal) || 0;
       bVal = Number(bVal) || 0;
-    } else if (sortColumn === 'uploaded_at' || sortColumn === 'created_at') {
+    } else if (sortColumn === 'uploaded_at' || sortColumn === 'file_created_at') {
       aVal = new Date(aVal || 0);
       bVal = new Date(bVal || 0);
     } else {
@@ -239,6 +239,9 @@ const FilesSection = ({ siteId }) => {
               <th style={{cursor:'pointer'}} onClick={() => handleSort('size_bytes')}>
                 Size {sortColumn === 'size_bytes' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
+              <th style={{cursor:'pointer'}} onClick={() => handleSort('file_created_at')}>
+                Date Taken {sortColumn === 'file_created_at' && (sortDirection === 'asc' ? '▲' : '▼')}
+              </th>
               <th style={{cursor:'pointer'}} onClick={() => handleSort('uploaded_at')}>
                 Uploaded {sortColumn === 'uploaded_at' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
@@ -275,7 +278,8 @@ const FilesSection = ({ siteId }) => {
                   )}
                 </td>
                 <td>{formatBytes(f.size_bytes)}</td>
-                <td>{formatDate(f.uploaded_at || f.created_at)}</td>
+                <td>{formatDate(f.file_created_at)}</td>
+                <td>{formatDate(f.uploaded_at)}</td>
                 <td>
                   <div style={{ display: 'flex', gap: '8px'}}>
                     {editingFileId === f.id ? (
@@ -296,13 +300,13 @@ const FilesSection = ({ siteId }) => {
                     <>
                       {String(f.content_type || '').startsWith('image/') && (
                         <div style={{marginTop:'6px'}}>
-                          <img src={fileDownloadUrl(f.id)} alt={f.original_name} style={{maxWidth:'200px', maxHeight:'120px', border:'1px solid var(--card-border)'}} />
+                          <img src={fileViewUrl(f.id)} alt={f.original_name} style={{maxWidth:'200px', maxHeight:'120px', border:'1px solid var(--card-border)'}} />
                         </div>
                       )}
                       {String(f.content_type || '').startsWith('application/pdf') && (
                         <div style={{marginTop:'6px'}}>
                           <iframe 
-                            src={fileDownloadUrl(f.id)} 
+                            src={fileViewUrl(f.id)} 
                             title={f.original_name}
                             style={{width:'300px', height:'200px', border:'1px solid var(--card-border)'}}
                           />
