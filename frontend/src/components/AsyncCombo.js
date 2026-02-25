@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useDebounce } from '../hooks';
 
 export default function AsyncCombo({
   value,
@@ -10,6 +11,7 @@ export default function AsyncCombo({
   minChars = 2,
 }) {
   const [inputValue, setInputValue] = useState('');
+  const debouncedInput = useDebounce(inputValue, 250);
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -33,25 +35,27 @@ export default function AsyncCombo({
   }, [value]);
 
   useEffect(() => {
-    const q = inputValue.trim();
+    const q = debouncedInput.trim();
     if (disabled || q.length < minChars) {
       setOptions([]);
       setLoading(false);
       return;
     }
+    let cancelled = false;
     setLoading(true);
-    const t = setTimeout(async () => {
+    (async () => {
       try {
         const opts = await loadOptions(q);
+        if (cancelled) return;
         setOptions(opts || []);
         setOpen(true);
         setHighlight(opts && opts.length ? 0 : -1);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }, 250);
-    return () => clearTimeout(t);
-  }, [inputValue, loadOptions, disabled, minChars]);
+    })();
+    return () => { cancelled = true; };
+  }, [debouncedInput, loadOptions, disabled, minChars]);
 
   const selectOption = (opt) => {
     if (!opt) return;
@@ -89,7 +93,7 @@ export default function AsyncCombo({
         disabled={disabled}
         style={{ width: '100%' }}
       />
-      {open && (
+      {open && (options.length > 0 || loading || (inputValue.trim().length >= minChars && !loading)) && (
         <div
           role="listbox"
           style={{
@@ -101,7 +105,7 @@ export default function AsyncCombo({
           {loading && (
             <div style={{ padding: 8, color: 'var(--muted)' }}>Loading…</div>
           )}
-          {!loading && options.length === 0 && (
+          {!loading && options.length === 0 && inputValue.trim().length >= minChars && (
             <div style={{ padding: 8, color: 'var(--muted)' }}>No results</div>
           )}
           {!loading && options.map((opt, idx) => (

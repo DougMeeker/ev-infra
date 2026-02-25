@@ -488,7 +488,7 @@ Global styling classes were introduced in `frontend/src/App.css`:
 - Tables: `.table`, `.table-sortable`
 - Buttons: `.btn`, `.btn-secondary`, `.btn-danger`
 - Forms: `.form-grid`, `.form-group`, `.input`
-- Utility: `.flex-row`, `.gap-sm`, `.metrics-block`
+- Utility: `.flex-row`, `.gap-sm`, `.details-section`
 
 Pages updated:
 - `Home.js` now uses cards, improved table styling, search & sort UI.

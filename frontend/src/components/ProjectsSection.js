@@ -138,7 +138,10 @@ export default function ProjectsSection({
               <div className={styles.latestRowToolbar}>
                 <button
                   className={styles.miniBtn}
-                  onClick={() => onSelectProject(p.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectProject(p.id);
+                  }}
                   title="Select Project"
                 >
                   Select
@@ -160,7 +163,10 @@ export default function ProjectsSection({
                 </button>
                 <button
                   className={`${styles.miniBtn} ${styles.miniBtnDanger}`}
-                  onClick={() => onDeleteProject(p.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteProject(p.id);
+                  }}
                   title="Delete Project"
                 >
                   Delete
@@ -289,7 +295,10 @@ export default function ProjectsSection({
                           />
                           <button 
                             type="button"
-                            onClick={handleCreateStep} 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleCreateStep(e);
+                            }} 
                             className="btn"
                             style={{ padding: '4px 16px' }}
                           >

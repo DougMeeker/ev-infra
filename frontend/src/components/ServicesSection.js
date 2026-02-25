@@ -147,15 +147,7 @@ const ServicesSection = ({ siteId }) => {
                                 </div>
                             </div>
                         </div>
-                        <div className="form-section">
-                            <h5 className="form-section-title">Notes</h5>
-                            <div className="form-grid">
-                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label>Description / Notes</label>
-                                    <textarea className="input" name="notes" value={formData.notes} onChange={handleChange} rows="2" placeholder="Brief note to differentiate this service/meter..." />
-                                </div>
-                            </div>
-                        </div>
+
                         <div className="form-section">
                             <h5 className="form-section-title">Electrical Capacity</h5>
                             <div className="form-grid">
@@ -174,6 +166,15 @@ const ServicesSection = ({ siteId }) => {
                                 <div className="form-group">
                                     <label>Power Factor</label>
                                     <input className="input" type="number" step="0.01" name="power_factor" value={formData.power_factor} onChange={handleChange} />
+                                </div>
+                            </div>
+                        </div>
+                       <div className="form-section">
+                            <h5 className="form-section-title">Notes</h5>
+                            <div className="form-grid">
+                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                    <label>Description / Notes</label>
+                                    <textarea className="input" name="notes" value={formData.notes} onChange={handleChange} rows="2" placeholder="Brief note to differentiate this service/meter..." />
                                 </div>
                             </div>
                         </div>

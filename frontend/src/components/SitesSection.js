@@ -13,6 +13,8 @@ export default function SitesSection({
   setSortMode,
   siteSearch,
   setSiteSearch,
+  departmentIdSearch,
+  setDepartmentIdSearch,
   sortedProjectSites,
   sitesPage,
   setSitesPage,
@@ -58,7 +60,7 @@ export default function SitesSection({
                     if (trimmed !== selectedLabel) setAssignment(a => ({ ...a, siteId: '' }));
                   }}
                   loadOptions={loadSiteOptions}
-                  placeholder="Select a site to add"
+                  placeholder="Search by site name, address, or dept ID"
                   disabled={!selectedProjectId}
                 />
               </div>
@@ -73,13 +75,23 @@ export default function SitesSection({
               <label>
                 <input type="radio" name="sortMode" value="status" checked={sortMode==='status'} onChange={() => setSortMode('status')} /> Status
               </label>
-              <span style={{ marginLeft:12 }}>Filter:</span>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+              <span>Filter:</span>
               <input
                 className="input"
                 placeholder="Filter sites..."
                 value={siteSearch}
                 onChange={(e) => setSiteSearch(e.target.value)}
-                style={{ width: 240 }}
+                style={{ width: 200 }}
+              />
+              <span style={{ marginLeft:8 }}>Dept ID:</span>
+              <input
+                className="input"
+                placeholder="Department ID..."
+                value={departmentIdSearch}
+                onChange={(e) => setDepartmentIdSearch(e.target.value)}
+                style={{ width: 160 }}
               />
             </div>
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>

@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { ratioFrom } from '../utils/statusShading';
+import { reloadStatusData } from '../utils/statusHelpers';
+import { useDebounce, useResponsiveGrid } from '../hooks';
 import StatusEditor from '../components/StatusEditor';
 import ProjectsSection from '../components/ProjectsSection';
 import SitesSection from '../components/SitesSection';
@@ -21,7 +23,6 @@ import {
   createProjectSiteStatus,
   updateProjectSiteStatus,
   deleteProjectSiteStatus,
-  getProjectSiteStatuses,
   getAggregateMetrics,
 } from '../api';
 
@@ -38,7 +39,9 @@ export default function ProjectsManager() {
   const [newProject, setNewProject] = useState({ name: '', description: '' });
   const [assignment, setAssignment] = useState({ siteId: '', siteName: '' });
   const [siteSearch, setSiteSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearch = useDebounce(siteSearch, 300);
+  const [departmentIdSearch, setDepartmentIdSearch] = useState('');
+  const debouncedDepartmentId = useDebounce(departmentIdSearch, 300);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [latestStatuses, setLatestStatuses] = useState([]);
   const [sortMode, setSortMode] = useState('name'); // 'name' | 'status'
@@ -54,8 +57,7 @@ export default function ProjectsManager() {
   const [editingStatusId, setEditingStatusId] = useState(null);
   const [editForm, setEditForm] = useState({ current_step: '', status_message: '', status_date: '', estimated_cost: '', actual_cost: '' });
   const [statusError, setStatusError] = useState(null);
-  const gridRef = useRef(null);
-  const [gridCols, setGridCols] = useState(3);
+  const { gridRef, gridCols } = useResponsiveGrid(320, [showSitesSection, selectedProjectId]);
   const pageSizeOptions = useMemo(() => {
     const base = [2, 6, 12];
     return base.map(n => Math.max(1, gridCols * n));
@@ -106,6 +108,7 @@ export default function ProjectsManager() {
   }, [projects]);
 
   // Initialize selected project from route
+  const prevProjectIdRef = useRef(null);
   useEffect(() => {
     if (params.projectId) {
       setSelectedProjectId(Number(params.projectId));
@@ -115,19 +118,24 @@ export default function ProjectsManager() {
     }
   }, [params.projectId]);
 
-  // Reset to first page when switching projects
+  // Reset to first page when switching projects (not when re-rendering same project)
   useEffect(() => {
-    if (selectedProjectId) setSitesPage(1);
+    if (selectedProjectId && prevProjectIdRef.current !== null && prevProjectIdRef.current !== selectedProjectId) {
+      setSitesPage(1);
+    }
+    prevProjectIdRef.current = selectedProjectId;
   }, [selectedProjectId]);
 
   // Initialize state from URL search params
   useEffect(() => {
     const q = searchParams.get('q');
+    const dept = searchParams.get('department_id');
     const sort = searchParams.get('sort');
     const siteIdQ = searchParams.get('siteId');
     const page = Number(searchParams.get('page')) || undefined;
     const perPage = Number(searchParams.get('per_page')) || undefined;
     if (q !== null) setSiteSearch(q);
+    if (dept !== null) setDepartmentIdSearch(dept);
     if (sort === 'name' || sort === 'status') setSortMode(sort);
     if (siteIdQ) setSelectedSiteId(siteIdQ);
     if (page && page > 0) setSitesPage(page);
@@ -135,68 +143,59 @@ export default function ProjectsManager() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Debounce site search input
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(siteSearch), 300);
-    return () => clearTimeout(t);
-  }, [siteSearch]);
-
   // When search or sort changes, reset to first page to avoid empty pages
+  const isFirstRenderRef = useRef(true);
+  const prevSearchRef = useRef(debouncedSearch);
+  const prevDeptIdRef = useRef(debouncedDepartmentId);
+  const prevSortModeRef = useRef(sortMode);
   useEffect(() => {
-    setSitesPage(1);
-  }, [debouncedSearch, sortMode]);
+    // Skip on initial render to preserve URL page
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return;
+    }
+    // Only reset if values actually changed
+    if (
+      prevSearchRef.current !== debouncedSearch ||
+      prevDeptIdRef.current !== debouncedDepartmentId ||
+      prevSortModeRef.current !== sortMode
+    ) {
+      setSitesPage(1);
+    }
+    prevSearchRef.current = debouncedSearch;
+    prevDeptIdRef.current = debouncedDepartmentId;
+    prevSortModeRef.current = sortMode;
+  }, [debouncedSearch, debouncedDepartmentId, sortMode]);
 
   // Persist filters to URL
   useEffect(() => {
     const paramsObj = {};
     if (debouncedSearch) paramsObj.q = debouncedSearch;
+    if (debouncedDepartmentId) paramsObj.department_id = debouncedDepartmentId;
     if (sortMode) paramsObj.sort = sortMode;
     if (sitesPage) paramsObj.page = String(sitesPage);
     if (sitesPageSize) paramsObj.per_page = String(sitesPageSize);
     if (selectedSiteId) paramsObj.siteId = String(selectedSiteId);
     setSearchParams(paramsObj);
-  }, [debouncedSearch, sortMode, sitesPage, sitesPageSize, selectedSiteId, setSearchParams]);
-
-  // Observe grid (and parent) width to compute responsive column count more reliably
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el) return;
-    const MIN_ITEM_WIDTH = 320;
-
-    const calcCols = () => {
-      const parent = el.parentElement;
-      const width = (parent?.getBoundingClientRect()?.width)
-        ?? (el.getBoundingClientRect()?.width)
-        ?? el.clientWidth
-        ?? 0;
-      const cols = Math.max(1, Math.floor(width / MIN_ITEM_WIDTH));
-      setGridCols(cols);
-    };
-
-    // Initial calculation
-    calcCols();
-
-    const ro = new ResizeObserver(() => {
-      calcCols();
-    });
-    ro.observe(el);
-    if (el.parentElement) ro.observe(el.parentElement);
-    window.addEventListener('resize', calcCols);
-
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', calcCols);
-    };
-  }, [gridRef, showSitesSection, selectedProjectId]);
+  }, [debouncedSearch, debouncedDepartmentId, sortMode, sitesPage, sitesPageSize, selectedSiteId, setSearchParams]);
 
   // Auto-adjust page size to nearest responsive option when columns change
+  // Skip on initial mount to preserve URL page size
+  const pageSizeInitRef = useRef(true);
   useEffect(() => {
-    if (!pageSizeOptions.includes(sitesPageSize)) {
-      const nearest = pageSizeOptions.reduce((prev, curr) => (
+    if (pageSizeInitRef.current) {
+      pageSizeInitRef.current = false;
+      return;
+    }
+    if (pageSizeOptions.length > 0 && !pageSizeOptions.includes(sitesPageSize)) {
+      const nearest =  pageSizeOptions.reduce((prev, curr) => (
         Math.abs(curr - sitesPageSize) < Math.abs(prev - sitesPageSize) ? curr : prev
       ), pageSizeOptions[0]);
       setSitesPageSize(nearest);
-      setSitesPage(1);
+      // Only reset to page 1 if the adjustment significantly changed the page size
+      if (Math.abs(nearest - sitesPageSize) > 6) {
+        setSitesPage(1);
+      }
     }
   }, [pageSizeOptions, sitesPageSize]);
 
@@ -206,6 +205,7 @@ export default function ProjectsManager() {
       // Load assigned sites with server-side search + pagination
       const { data } = await getProjectSites(selectedProjectId, {
         q: debouncedSearch,
+        department_id: debouncedDepartmentId,
         page: sitesPage,
         page_size: sitesPageSize,
       });
@@ -223,12 +223,12 @@ export default function ProjectsManager() {
       if (proj) setEditProject({ name: proj.name || '', description: proj.description || '' });
     } finally {
     }
-  }, [selectedProjectId, debouncedSearch, sitesPage, sitesPageSize, projects]);
+  }, [selectedProjectId, debouncedSearch, debouncedDepartmentId, sitesPage, sitesPageSize, projects]);
 
   // Reload project data when selection or filters change
   useEffect(() => {
     loadProjectSites();
-  }, [loadProjectSites, selectedProjectId, debouncedSearch, sitesPage, sitesPageSize, sortMode]);
+  }, [loadProjectSites]);
 
   // Keep selected project's average up to date when its statuses or steps change
   useEffect(() => {
@@ -251,21 +251,7 @@ export default function ProjectsManager() {
       setStatusHistory([]);
       return;
     }
-    (async () => {
-      try {
-        const { data } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
-        // Sort by status_date descending (most recent first)
-        const sorted = (data || []).sort((a, b) => {
-          const dateA = new Date(a.status_date);
-          const dateB = new Date(b.status_date);
-          return dateB - dateA;
-        });
-        setStatusHistory(sorted);
-      } catch (err) {
-        console.error('Error loading status history:', err);
-        setStatusHistory([]);
-      }
-    })();
+    reloadStatusData(selectedProjectId, selectedSiteId, { setStatusHistory });
   }, [selectedProjectId, selectedSiteId]);
 
   // Create project handler is not currently used by the UI; remove to satisfy lint
@@ -336,7 +322,8 @@ export default function ProjectsManager() {
         .filter(s => (
           (s.name && String(s.name).toLowerCase().includes(qLower)) ||
           (s.address && String(s.address).toLowerCase().includes(qLower)) ||
-          (s.city && String(s.city).toLowerCase().includes(qLower))
+          (s.city && String(s.city).toLowerCase().includes(qLower)) ||
+          (s.department_id && String(s.department_id).toLowerCase().includes(qLower))
         ))
         .slice(0, 50)
         .map(s => ({ id: s.id, name: s.name, address: s.address, city: s.city }));
@@ -362,19 +349,14 @@ export default function ProjectsManager() {
     return arr.sort((a,b) => (a.name||'').localeCompare(b.name||''));
   }, [projectSites, latestStatuses, steps.length, sortMode]);
 
-  // If redirected with a specific siteId, ensure it's visible
+  // Sync selectedSiteId from URL params
   useEffect(() => {
     const siteIdParam = searchParams.get('siteId');
-    if (siteIdParam && sortedProjectSites.length > 0) {
-      const idx = sortedProjectSites.findIndex(s => String(s.id) === String(siteIdParam));
-      if (idx >= 0) {
-        const targetPage = Math.floor(idx / sitesPageSize) + 1;
-        if (targetPage !== sitesPage) setSitesPage(targetPage);
-      }
-      if (siteIdParam !== selectedSiteId) setSelectedSiteId(siteIdParam);
+    if (siteIdParam && siteIdParam !== selectedSiteId) {
+      setSelectedSiteId(siteIdParam);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortedProjectSites, sitesPageSize]);
+  }, [searchParams]);
 
   const totalPages = useMemo(() => {
     const total = sitesTotal || projectSites.length;
@@ -384,6 +366,7 @@ export default function ProjectsManager() {
   const handleAssignSite = async (e) => {
     e.preventDefault();
     if (!assignment.siteId || !selectedProjectId) return;
+    const addedSiteId = assignment.siteId;
     // optimistic add
     const site = assignment.siteName ? { id: assignment.siteId, name: assignment.siteName } : null;
     if (site) {
@@ -392,6 +375,16 @@ export default function ProjectsManager() {
     try {
       await addSiteToProject(selectedProjectId, assignment.siteId);
       await loadProjectSites();
+      // Select the newly added site and preserve current filters in URL
+      setSelectedSiteId(String(addedSiteId));
+      const params = new URLSearchParams();
+      params.set('siteId', String(addedSiteId));
+      if (debouncedSearch) params.set('q', debouncedSearch);
+      if (debouncedDepartmentId) params.set('department_id', debouncedDepartmentId);
+      if (sortMode) params.set('sort', sortMode);
+      if (sitesPage) params.set('page', String(sitesPage));
+      if (sitesPageSize) params.set('per_page', String(sitesPageSize));
+      navigate(`/project/${selectedProjectId}?${params.toString()}`);
     } finally {
       setAssignment({ siteId: '', siteName: '' });
     }
@@ -412,13 +405,8 @@ export default function ProjectsManager() {
       };
       await createProjectSiteStatus(selectedProjectId, selectedSiteId, payload);
       setStatusForm({ current_step: '', status_message: '', status_date: new Date().toISOString().slice(0,10), estimated_cost: '', actual_cost: '' });
-      // Reload latest statuses for shading
-      const { data: latest } = await getLatestProjectStatuses(selectedProjectId);
-      setLatestStatuses(latest || []);
-      // Reload status history for the selected site
-      const { data: history } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
-      const sorted = (history || []).sort((a, b) => new Date(b.status_date) - new Date(a.status_date));
-      setStatusHistory(sorted);
+      // Reload status data
+      await reloadStatusData(selectedProjectId, selectedSiteId, { setStatusHistory, setLatestStatuses });
     } catch (err) {
       console.error('Error creating status:', err);
       const errorMsg = err.response?.data?.error || 'Failed to add status. Please try again.';
@@ -438,13 +426,8 @@ export default function ProjectsManager() {
         actual_cost: data.actual_cost ? Number(data.actual_cost) : undefined,
       };
       await updateProjectSiteStatus(selectedProjectId, selectedSiteId, statusId, payload);
-      // Reload status history
-      const { data: history } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
-      const sorted = (history || []).sort((a, b) => new Date(b.status_date) - new Date(a.status_date));
-      setStatusHistory(sorted);
-      // Reload latest statuses for shading
-      const { data: latest } = await getLatestProjectStatuses(selectedProjectId);
-      setLatestStatuses(latest || []);
+      // Reload status data
+      await reloadStatusData(selectedProjectId, selectedSiteId, { setStatusHistory, setLatestStatuses });
       setEditingStatusId(null);
     } catch (err) {
       console.error('Error updating status:', err);
@@ -457,13 +440,8 @@ export default function ProjectsManager() {
     if (!selectedProjectId || !selectedSiteId) return;
     try {
       await deleteProjectSiteStatus(selectedProjectId, selectedSiteId, statusId);
-      // Reload status history
-      const { data: history } = await getProjectSiteStatuses(selectedProjectId, selectedSiteId);
-      const sorted = (history || []).sort((a, b) => new Date(b.status_date) - new Date(a.status_date));
-      setStatusHistory(sorted);
-      // Reload latest statuses for shading
-      const { data: latest } = await getLatestProjectStatuses(selectedProjectId);
-      setLatestStatuses(latest || []);
+      // Reload status data
+      await reloadStatusData(selectedProjectId, selectedSiteId, { setStatusHistory, setLatestStatuses });
     } catch (err) {
       console.error('Error deleting status:', err);
       alert('Failed to delete status');
@@ -484,7 +462,7 @@ export default function ProjectsManager() {
   };
 
   const handleCreateStep = async (e) => {
-    e.preventDefault();
+    if (e?.preventDefault) e.preventDefault();
     if (!selectedProjectId) return;
     const payload = {
       title: (newStep.title || '').trim(),
@@ -587,6 +565,8 @@ export default function ProjectsManager() {
         setSortMode={setSortMode}
         siteSearch={siteSearch}
         setSiteSearch={setSiteSearch}
+        departmentIdSearch={departmentIdSearch}
+        setDepartmentIdSearch={setDepartmentIdSearch}
         sortedProjectSites={sortedProjectSites}
         sitesPage={sitesPage}
         setSitesPage={setSitesPage}
@@ -603,7 +583,15 @@ export default function ProjectsManager() {
           setSelectedSiteId(id);
           const next = currentStep != null ? Number(currentStep) + 1 : '';
           setStatusForm(f => ({ ...f, current_step: next }));
-          navigate(`/project/${selectedProjectId}?siteId=${id}`);
+          // Preserve current filters in URL
+          const params = new URLSearchParams();
+          params.set('siteId', id);
+          if (debouncedSearch) params.set('q', debouncedSearch);
+          if (debouncedDepartmentId) params.set('department_id', debouncedDepartmentId);
+          if (sortMode) params.set('sort', sortMode);
+          if (sitesPage) params.set('page', String(sitesPage));
+          if (sitesPageSize) params.set('per_page', String(sitesPageSize));
+          navigate(`/project/${selectedProjectId}?${params.toString()}`);
         }}
         onOpenDetails={(siteId) => navigate(`/site/${siteId}`)}
         onRemove={handleRemoveSite}

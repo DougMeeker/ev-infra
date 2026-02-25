@@ -181,9 +181,10 @@ export const getProjects = () => axios.get(`${API_BASE_URL}/projects`);
 export const createProject = ({ name, total_steps, description }) => axios.post(`${API_BASE_URL}/projects`, { name, total_steps, description });
 export const updateProject = (projectId, payload) => axios.put(`${API_BASE_URL}/projects/${projectId}`, payload);
 export const deleteProject = (projectId) => axios.delete(`${API_BASE_URL}/projects/${projectId}`);
-export const getProjectSites = (projectId, { q = '', page = 1, page_size = 25 } = {}) => {
+export const getProjectSites = (projectId, { q = '', department_id = '', page = 1, page_size = 25 } = {}) => {
 	const params = new URLSearchParams();
 	if (q) params.append('q', q);
+	if (department_id) params.append('department_id', department_id);
 	params.append('page', String(page));
 	params.append('page_size', String(page_size));
 	return axios.get(`${API_BASE_URL}/projects/${projectId}/sites?${params.toString()}`);

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { listVehicles, createVehicle, updateVehicle, deleteVehicle, getSites, getCatalog } from '../api';
+import { useDebounce } from '../hooks';
 import SiteSelector from '../components/SiteSelector';
 
 const VehiclesManager = () => {
@@ -12,6 +13,7 @@ const VehiclesManager = () => {
   const [order, setOrder] = useState('asc');
   const [sort, setSort] = useState('equipment_id');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [siteId, setSiteId] = useState('');
   const [departmentId, setDepartmentId] = useState('');
   const [mcCode, setMcCode] = useState('');
@@ -22,7 +24,7 @@ const VehiclesManager = () => {
 
   const load = () => {
     setLoading(true);
-    listVehicles({ page, perPage, order, sort, search, siteId, departmentId, mcCode })
+    listVehicles({ page, perPage, order, sort, search: debouncedSearch, siteId, departmentId, mcCode })
       .then(res => {
         setItems(res.data.items);
         setTotal(res.data.total);
@@ -37,7 +39,7 @@ const VehiclesManager = () => {
     getCatalog().then(res => setCatalog(res.data || [])).catch(()=>{});
   }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [page, perPage, order, sort, search, siteId, departmentId, mcCode]);
+  useEffect(() => { load(); }, [page, perPage, order, sort, debouncedSearch, siteId, departmentId, mcCode]);
 
   const toggleSort = (field) => {
     if (sort === field) {

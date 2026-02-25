@@ -377,8 +377,14 @@ def aggregate_site_metrics():
         site_query = site_query.join(project_sites, Site.id == project_sites.c.site_id)\
                                .filter(project_sites.c.project_id == project_id)
     if search:
+        from sqlalchemy import or_, func
         like = f"%{search}%"
-        site_query = site_query.filter(Site.name.ilike(like))
+        site_query = site_query.filter(or_(
+            Site.name.ilike(like),
+            func.coalesce(Site.address, '').ilike(like),
+            func.coalesce(Site.city, '').ilike(like),
+            func.coalesce(Site.department_id, '').ilike(like)
+        ))
     # Compute filtered total before pagination
     filtered_total = site_query.count()
     sites = site_query.all()

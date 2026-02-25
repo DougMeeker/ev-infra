@@ -82,11 +82,12 @@ def add_site_to_project(project_id):
 @project_bp.route('/<int:project_id>/sites', methods=['GET'])
 def list_project_sites(project_id):
     """List sites associated with a project with optional search and pagination.
-    Query params: q (search by site name), page (default 1), page_size (default 25)
+    Query params: q (search by site name), department_id (filter by department), page (default 1), page_size (default 25)
     Returns a simple array of site dicts sorted by name.
     """
     project = _get_project_or_404(project_id)
     q = (request.args.get('q') or '').strip()
+    department_id = (request.args.get('department_id') or '').strip()
     try:
         page = int(request.args.get('page', '1'))
     except ValueError:
@@ -98,15 +99,18 @@ def list_project_sites(project_id):
 
     # Base query: join through association table `project_sites`
     from ..models import project_sites
-    from sqlalchemy import or_
+    from sqlalchemy import or_, func
     site_query = Site.query.join(project_sites, Site.id == project_sites.c.site_id).filter(project_sites.c.project_id == project_id)
     if q:
         like = f"%{q}%"
         site_query = site_query.filter(or_(
             Site.name.ilike(like),
-            Site.address.ilike(like),
-            Site.city.ilike(like)
+            func.coalesce(Site.address, '').ilike(like),
+            func.coalesce(Site.city, '').ilike(like),
+            func.coalesce(Site.department_id, '').ilike(like)
         ))
+    if department_id:
+        site_query = site_query.filter(func.coalesce(Site.department_id, '').ilike(f"%{department_id}%"))
     site_query = site_query.order_by(Site.name)
 
     if page <= 0:
@@ -121,7 +125,8 @@ def list_project_sites(project_id):
         'page': page,
         'page_size': page_size,
         'returned': len(items),
-        'q': q
+        'q': q,
+        'department_id': department_id
     }
     return jsonify({'items': data, 'meta': meta})
 
