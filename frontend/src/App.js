@@ -14,10 +14,12 @@ import VehicleDetails from './pages/VehicleDetails';
 import SitesManager from './pages/SitesManager';
 import FilesPage from './pages/Files';
 import DepartmentsManager from './pages/DepartmentsManager';
+import { RequireAuth } from './AuthProvider';
 
 function App() {
   return (
     <Router>
+      <RequireAuth>
       <Header />
       <Routes>
         <Route path="/" element={<Home />} />
@@ -38,6 +40,7 @@ function App() {
         <Route path="/files" element={<FilesPage />} />
         <Route path="/departments" element={<DepartmentsManager />} />
       </Routes>
+      </RequireAuth>
     </Router>
   );
 }

@@ -20,7 +20,7 @@ export default function ChargersSection({ siteId }) {
   const [editingChargerId, setEditingChargerId] = useState(null);
   const [chargerEdit, setChargerEdit] = useState({});
   const [adding, setAdding] = useState(false);
-  const [chargerNew, setChargerNew] = useState({ kw: '', manufacturer: '', project_id: '', date_installed: '' });
+  const [chargerNew, setChargerNew] = useState({ kw: '', port_count: '', handle_type: '', manufacturer: '', model_number: '', project_id: '', date_installed: '', description: '' });
   const navigate = useNavigate();
 
   const load = async () => {
@@ -65,6 +65,11 @@ export default function ChargersSection({ siteId }) {
             {adding ? (
               <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
                 <input className="input" style={{width:90}} placeholder="kW" value={chargerNew.kw} onChange={e=>setChargerNew(prev=>({ ...prev, kw: e.target.value }))} />
+                <input className="input" style={{width:70}} placeholder="Ports" value={chargerNew.port_count} onChange={e=>setChargerNew(prev=>({ ...prev, port_count: e.target.value }))} />
+                <select className="input" value={chargerNew.handle_type} onChange={e=>setChargerNew(prev=>({ ...prev, handle_type: e.target.value }))}>
+                  <option value="">Handle Type</option>
+                  {['J1772','NACS','Both'].map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
                 <select className="input" value={chargerNew.manufacturer} onChange={e=>setChargerNew(prev=>({ ...prev, manufacturer: e.target.value }))}>
                   <option value="">Manufacturer</option>
                   {['KemPower','ABB','ChargePoint','Enphase/Clipper Creek','XOS','ChargePodX','BTC','Other'].map(m => (
@@ -75,17 +80,22 @@ export default function ChargersSection({ siteId }) {
                   <option value="">Project</option>
                   {(Array.isArray(projects) ? projects : []).map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
                 </select>
+                <input className="input" placeholder="Model #" value={chargerNew.model_number} onChange={e=>setChargerNew(prev=>({ ...prev, model_number: e.target.value }))} />
                 <input className="input" type="date" value={chargerNew.date_installed} onChange={e=>setChargerNew(prev=>({ ...prev, date_installed: e.target.value }))} />
+                <input className="input" placeholder="Description" value={chargerNew.description} onChange={e=>setChargerNew(prev=>({ ...prev, description: e.target.value }))} />
                 <button className="btn" onClick={async ()=>{
                   const payload = { ...chargerNew };
                   if (payload.kw === '') payload.kw = null; else { const n = parseFloat(payload.kw); if (!Number.isNaN(n)) payload.kw = n; }
+                  if (payload.port_count === '') payload.port_count = null; else { const n = parseInt(payload.port_count,10); if (!Number.isNaN(n)) payload.port_count = n; }
+                  if (payload.handle_type === '') payload.handle_type = null;
+                  if (payload.model_number === '') payload.model_number = null;
                   if (payload.project_id === '') payload.project_id = null; else { const n = parseInt(payload.project_id,10); if (!Number.isNaN(n)) payload.project_id = n; }
                   await createCharger(siteId, payload);
-                  setAdding(false); setChargerNew({ kw: '', manufacturer: '', project_id: '', date_installed: '' });
+                  setAdding(false); setChargerNew({ kw: '', port_count: '', handle_type: '', manufacturer: '', model_number: '', project_id: '', date_installed: '', description: '' });
                   const res = await getChargers(siteId);
                   setChargers(res.data || []);
                 }}>Add Charger</button>
-                <button className="btn btn-secondary" onClick={()=>{ setAdding(false); setChargerNew({ kw: '', manufacturer: '', project_id: '', date_installed: '' }); }}>Cancel</button>
+                <button className="btn btn-secondary" onClick={()=>{ setAdding(false); setChargerNew({ kw: '', port_count: '', handle_type: '', manufacturer: '', model_number: '', project_id: '', date_installed: '', description: '' }); }}>Cancel</button>
               </div>
             ) : (
             <div className="flex-row gap-sm" style={{ marginBottom: '12px' }}>
@@ -97,7 +107,7 @@ export default function ChargersSection({ siteId }) {
           <table className="table">
             <thead>
               <tr>
-                <th>Power/Voltage/Amps</th>
+                <th>Power/Voltage/CB</th>
                 <th>Ports</th>
                 <th>Handle</th>
                 <th>Manufacturer</th>
@@ -106,6 +116,7 @@ export default function ChargersSection({ siteId }) {
                 <th>Installed</th>
                 <th>Project</th>
                 <th>Fleet</th>
+                <th>Description</th>
                 <th>Quick Actions</th>
               </tr>
             </thead>
@@ -121,10 +132,16 @@ export default function ChargersSection({ siteId }) {
                   <td>{formatDate(c.date_installed)}</td>
                   <td>{c.project_name ?? ''}</td>
                   <td>{c.fleet ? '✓' : ''}</td>
+                  <td>{c.description ?? ''}</td>
                   <td>
                     {editingChargerId === c.id ? (
                       <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
                         <input className="input" style={{width:90}} placeholder="kW" value={chargerEdit.kw ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, kw: e.target.value }))} />
+                        <input className="input" style={{width:70}} placeholder="Ports" value={chargerEdit.port_count ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, port_count: e.target.value }))} />
+                        <select className="input" value={chargerEdit.handle_type ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, handle_type: e.target.value }))}>
+                          <option value="">Handle Type</option>
+                          {['J1772','NACS','Both'].map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
                         <select className="input" value={chargerEdit.manufacturer ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, manufacturer: e.target.value }))}>
                           <option value="">Manufacturer</option>
                           {['KemPower','ABB','ChargePoint','Enphase/Clipper Creek','XOS','ChargePodX','BTC','Other'].map(m => (
@@ -135,10 +152,15 @@ export default function ChargersSection({ siteId }) {
                           <option value="">Project</option>
                           {(Array.isArray(projects) ? projects : []).map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
                         </select>
+                        <input className="input" placeholder="Model #" value={chargerEdit.model_number ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, model_number: e.target.value }))} />
                         <input className="input" type="date" value={chargerEdit.date_installed ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, date_installed: e.target.value }))} />
+                        <input className="input" placeholder="Description" value={chargerEdit.description ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, description: e.target.value }))} />
                         <button className="btn" onClick={async ()=>{
                           const payload = { ...chargerEdit };
                           if (payload.kw === '') payload.kw = null; else if (payload.kw != null) { const n = parseFloat(payload.kw); if (!Number.isNaN(n)) payload.kw = n; }
+                          if (payload.port_count === '' || payload.port_count == null) payload.port_count = null; else { const n = parseInt(payload.port_count,10); if (!Number.isNaN(n)) payload.port_count = n; }
+                          if (payload.handle_type === '') payload.handle_type = null;
+                          if (payload.model_number === '') payload.model_number = null;
                           if (payload.project_id === '') payload.project_id = null; else if (payload.project_id != null) { const n = parseInt(payload.project_id,10); if (!Number.isNaN(n)) payload.project_id = n; }
                           await updateCharger(c.id, payload);
                           setEditingChargerId(null);
@@ -149,15 +171,22 @@ export default function ChargersSection({ siteId }) {
                           // Save current edits and prefill add form for quick duplication
                           const payload = { ...chargerEdit };
                           if (payload.kw === '') payload.kw = null; else if (payload.kw != null) { const n = parseFloat(payload.kw); if (!Number.isNaN(n)) payload.kw = n; }
+                          if (payload.port_count === '' || payload.port_count == null) payload.port_count = null; else { const n = parseInt(payload.port_count,10); if (!Number.isNaN(n)) payload.port_count = n; }
+                          if (payload.handle_type === '') payload.handle_type = null;
+                          if (payload.model_number === '') payload.model_number = null;
                           if (payload.project_id === '') payload.project_id = null; else if (payload.project_id != null) { const n = parseInt(payload.project_id,10); if (!Number.isNaN(n)) payload.project_id = n; }
                           await updateCharger(c.id, payload);
                           // Prefill add form with the edited values to enter several chargers quickly
                           setAdding(true);
                           setChargerNew({
                             kw: payload.kw ?? '',
+                            port_count: payload.port_count ?? '',
+                            handle_type: payload.handle_type ?? '',
                             manufacturer: payload.manufacturer ?? '',
+                            model_number: payload.model_number ?? '',
                             project_id: payload.project_id ?? '',
-                            date_installed: formatDate(payload.date_installed)
+                            date_installed: formatDate(payload.date_installed),
+                            description: payload.description ?? ''
                           });
                           setEditingChargerId(null);
                         }}>Duplicate</button>
@@ -165,7 +194,7 @@ export default function ChargersSection({ siteId }) {
                       </div>
                     ) : (
                       <div style={{display:'flex', gap:8}}>
-                        <button className="btn btn-secondary" onClick={()=>{ setEditingChargerId(c.id); setChargerEdit({ kw: c.kw ?? '', manufacturer: c.manufacturer ?? '', project_id: c.project_id ?? '', date_installed: formatDate(c.date_installed) }); }}>Edit</button>
+                        <button className="btn btn-secondary" onClick={()=>{ setEditingChargerId(c.id); setChargerEdit({ kw: c.kw ?? '', port_count: c.port_count ?? '', handle_type: c.handle_type ?? '', manufacturer: c.manufacturer ?? '', model_number: c.model_number ?? '', project_id: c.project_id ?? '', date_installed: formatDate(c.date_installed), description: c.description ?? '' }); }}>Edit</button>
                         <button className="btn btn-danger" onClick={async ()=>{ if (!window.confirm('Delete this charger?')) return; await deleteCharger(c.id); const res = await getChargers(siteId); setChargers(res.data || []); }}>Delete</button>
                       </div>
                     )}

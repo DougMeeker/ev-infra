@@ -17,12 +17,19 @@ const formatDate = (d) => {
 
 export default function Chargers() {
   const navigate = useNavigate();
-  const [siteId, setSiteId] = useState(null);
+  const [searchParams] = useSearchParams();
+  const [siteId, setSiteId] = useState(() => {
+    const sid = searchParams.get('siteId');
+    if (sid) {
+      const num = parseInt(sid, 10);
+      if (!Number.isNaN(num)) return num;
+    }
+    return null;
+  });
   const [chargers, setChargers] = useState([]);
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState([]);
-  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     getProjects()
@@ -30,13 +37,14 @@ export default function Chargers() {
       .catch(() => setProjects([]));
   }, []);
 
-  // Initialize site from query param, e.g., /chargers?siteId=123
+  // Keep siteId in sync if the URL changes externally (e.g., back/forward navigation)
   useEffect(() => {
     const sid = searchParams.get('siteId');
-    if (sid) {
-      const num = parseInt(sid, 10);
-      if (!Number.isNaN(num)) setSiteId(num);
-    }
+    const num = sid ? parseInt(sid, 10) : null;
+    setSiteId(prev => {
+      const next = num && !Number.isNaN(num) ? num : null;
+      return prev === next ? prev : next;
+    });
   }, [searchParams]);
 
   // Load chargers (all or filtered by site)

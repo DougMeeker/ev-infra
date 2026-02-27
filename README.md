@@ -25,6 +25,213 @@ export FLASK_APP=run.py
 flask run
 ```
 
+## Authentication (Microsoft Entra ID / Azure AD)
+
+The app uses **Microsoft Entra ID** (formerly Azure AD) for authentication via the MSAL library
+on the frontend and JWT token validation on the backend.
+
+Authentication is **opt-in** — it is completely disabled by default so the app works
+out of the box for local development with no Azure setup required. Turn it on by setting a
+few environment variables.
+
+### How It Works
+
+```
+Browser  →  MSAL login redirect  →  Microsoft login page
+                                           ↓
+                              Access token (JWT) issued
+                                           ↓
+Browser  →  GET /api/...  →  Flask validates token via Microsoft's public JWKS
+```
+
+1. The frontend (MSAL) redirects the user to Microsoft's login page.
+2. After sign-in, an access token is returned and cached in `sessionStorage`.
+3. Every API request automatically attaches the token as `Authorization: Bearer <token>`.
+4. The Flask backend validates the token's signature, expiry, issuer, and audience before
+   serving any `/api/` response. Unauthenticated requests receive `401`.
+
+### Step 1 — Register the App in Entra ID
+
+You need an app registration in the Caltrans Microsoft Entra ID tenant. Most users
+will **not** have admin access to do this themselves — submit a request to your IT
+department / identity team with the details below.
+
+#### What to request from IT
+
+Ask them to create an **App registration** in Entra ID with these settings:
+
+| Setting | Value |
+|---|---|
+| **Name** | `EV Infrastructure App` (or similar) |
+| **Supported account types** | *Accounts in this organizational directory only (Single tenant)* |
+| **Platform** | Single-page application (SPA) |
+| **Redirect URIs** | `http://localhost:3000` (dev) and `https://<your-production-hostname>` |
+| **Expose an API scope** | `access_as_user` (or similar; URI like `api://<client-id>/access_as_user`) |
+
+Once created, ask IT to provide:
+- **Application (client) ID**
+- **Directory (tenant) ID**
+- **API scope string** (e.g., `api://<client-id>/access_as_user`)
+
+> **Tip — free dev tenant for testing:** If you want to test auth before IT processes
+> the request, you can create a free [Microsoft 365 Developer Program](https://developer.microsoft.com/en-us/microsoft-365/dev-program)
+> tenant (no Visual Studio subscription required). This gives you a sandbox Entra ID
+> directory where you can register apps and create test users. Once the real Caltrans
+> registration is ready, just swap the tenant/client IDs in your `.env` files.
+
+#### If you do have admin access
+
+1. Go to the [Microsoft Entra admin center](https://entra.microsoft.com) and sign in.
+2. Navigate to **Applications → App registrations → New registration**.
+3. Fill in the settings from the table above.
+4. Click **Register**.
+5. Copy the **Application (client) ID** and **Directory (tenant) ID**.
+
+#### Expose an API Scope
+
+1. In the app registration, go to **Expose an API**.
+2. Set the **Application ID URI** (e.g., `api://<client-id>`).
+3. Click **Add a scope** and create `access_as_user` (or any name you prefer).
+4. Note the full scope string: `api://<client-id>/access_as_user`.
+
+### Step 2 — Configure the Backend
+
+Copy `.env.example` to `.env` inside the `backend/` folder and fill in the values:
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Edit `backend/.env`:
+
+```dotenv
+AZURE_AD_ENABLED=true
+AZURE_AD_TENANT_ID=<your-directory-tenant-id>
+AZURE_AD_CLIENT_ID=<your-application-client-id>
+# AZURE_AD_AUDIENCE defaults to AZURE_AD_CLIENT_ID — only set if different
+```
+
+Install the new dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Step 3 — Configure the Frontend
+
+Copy `.env.example` to `.env.local` inside the `frontend/` folder:
+
+```bash
+cd frontend
+cp .env.example .env.local
+```
+
+Edit `frontend/.env.local`:
+
+```dotenv
+REACT_APP_AZURE_AD_CLIENT_ID=<your-application-client-id>
+REACT_APP_AZURE_AD_TENANT_ID=<your-directory-tenant-id>
+# If you created a custom scope, set it here:
+REACT_APP_AZURE_AD_SCOPE=api://<client-id>/access_as_user
+```
+
+Install the new MSAL packages:
+
+```bash
+cd frontend
+npm install
+```
+
+### Step 4 — Run With Auth Enabled
+
+```powershell
+# Backend (PowerShell)
+cd backend
+$env:FLASK_APP = "run.py"
+flask run
+
+# Frontend (separate terminal)
+cd frontend
+npm start
+```
+
+Open `http://localhost:3000` — you will be redirected to the Microsoft login page.
+After signing in with your Caltrans account, you are returned to the app with full access.
+
+The header shows your account name and a **Sign out** button.
+
+### Turning Auth Off (Local Development)
+
+Simply leave `AZURE_AD_CLIENT_ID` unset in both env files (or set `AZURE_AD_ENABLED=false`
+in the backend). The app runs exactly as it did before — no login required.
+
+The backend's `TestingConfig` also hard-disables auth so the existing test suite is
+unaffected.
+
+### API Endpoint — Current User
+
+When auth is enabled, a convenience endpoint is available:
+
+```
+GET /api/auth/me
+```
+
+Returns the signed-in user's profile:
+
+```json
+{
+  "authenticated": true,
+  "auth_enabled": true,
+  "oid": "...",
+  "name": "Jane Smith",
+  "email": "jsmith@caltrans.ca.gov",
+  "roles": [],
+  "tenant_id": "..."
+}
+```
+
+When auth is disabled it returns `"authenticated": false` and a stub name, so the
+frontend can call it safely in either mode.
+
+### Future: External Users
+
+If people outside Caltrans ever need access:
+
+1. In Entra ID, change the app registration's **Supported account types** to
+   *Accounts in any organizational directory (Any Microsoft Entra ID tenant — Multitenant)*.
+2. Set both env vars to use the `common` endpoint:
+   - Backend: `AZURE_AD_TENANT_ID=common` (and update `AZURE_AD_ISSUER` / `AZURE_AD_JWKS_URI`
+     if you have them overridden)
+   - Frontend: `REACT_APP_AZURE_AD_TENANT_ID=common`
+3. External users can then log in with any Microsoft work or school account and be
+   directed to the standard Microsoft consent page before accessing the app.
+
+For guest user (B2B) invitations you can also invite external accounts directly into
+the Caltrans tenant from the Entra ID admin center without changing the tenant mode.
+
+### Configuration Reference
+
+#### Backend (`backend/.env`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `AZURE_AD_ENABLED` | `false` | Set `true` to enforce auth on all `/api/` routes |
+| `AZURE_AD_TENANT_ID` | `""` | Directory (tenant) ID from Entra ID |
+| `AZURE_AD_CLIENT_ID` | `""` | Application (client) ID from Entra ID |
+| `AZURE_AD_AUDIENCE` | *(client ID)* | Token audience; defaults to client ID |
+| `AZURE_AD_ISSUER` | *(auto)* | Override issuer URL (auto-derived from tenant) |
+| `AZURE_AD_JWKS_URI` | *(auto)* | Override JWKS endpoint (auto-derived from tenant) |
+
+#### Frontend (`frontend/.env.local`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `REACT_APP_AZURE_AD_CLIENT_ID` | `""` | Client ID — leave blank to disable auth |
+| `REACT_APP_AZURE_AD_TENANT_ID` | `common` | Tenant ID |
+| `REACT_APP_AZURE_AD_REDIRECT_URI` | *(origin)* | Override OAuth redirect URI |
+| `REACT_APP_AZURE_AD_SCOPE` | `api://<clientId>/.default` | API scope for access token |
+
 ## Browser & Deployment Requirements
 
 ### HTTPS Required

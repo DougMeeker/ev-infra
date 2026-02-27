@@ -26,6 +26,26 @@ class Config:
     S3_USE_SSL = os.getenv("S3_USE_SSL", "false").lower() == "true"
     SIGNED_URL_TTL = int(os.getenv("SIGNED_URL_TTL", "3600"))
 
+    # ── Microsoft Entra ID (Azure AD) authentication ──────────────────
+    # Set AZURE_AD_ENABLED=true to enforce JWT validation on API routes.
+    # When disabled (default for local dev), all routes are open.
+    AZURE_AD_ENABLED = os.getenv("AZURE_AD_ENABLED", "false").lower() == "true"
+    # Tenant ID – use Caltrans tenant; set to "common" for multi-tenant later
+    AZURE_AD_TENANT_ID = os.getenv("AZURE_AD_TENANT_ID", "")
+    # Application (client) ID registered in Entra ID
+    AZURE_AD_CLIENT_ID = os.getenv("AZURE_AD_CLIENT_ID", "")
+    # Optional: allowed audience(s); defaults to client ID
+    AZURE_AD_AUDIENCE = os.getenv("AZURE_AD_AUDIENCE", "") or os.getenv("AZURE_AD_CLIENT_ID", "")
+    # JWKS URI is auto-derived but can be overridden
+    AZURE_AD_JWKS_URI = os.getenv(
+        "AZURE_AD_JWKS_URI",
+        f"https://login.microsoftonline.com/{os.getenv('AZURE_AD_TENANT_ID', 'common')}/discovery/v2.0/keys",
+    )
+    AZURE_AD_ISSUER = os.getenv(
+        "AZURE_AD_ISSUER",
+        f"https://login.microsoftonline.com/{os.getenv('AZURE_AD_TENANT_ID', 'common')}/v2.0",
+    )
+
 class DevelopmentConfig(Config):
     DEBUG = True
     
@@ -37,6 +57,7 @@ class TestingConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
+    AZURE_AD_ENABLED = False  # auth always off in tests
 
 def get_config(env):
     return {

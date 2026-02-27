@@ -3,13 +3,16 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import './App.css'; // ensure global component styles & marker colors are bundled
 import App from './App';
+import { AuthProvider } from './AuthProvider';
 import reportWebVitals from './reportWebVitals';
 import 'leaflet/dist/leaflet.css'
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </React.StrictMode>
 );
 

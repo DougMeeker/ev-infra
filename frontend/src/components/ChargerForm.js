@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 const empty = {
   kw: '', breaker_size: '', input_voltage: '', output_voltage: '', port_count: '',
-  handle_type: '', manufacturer: '', model_number: '', serial_number: '', date_installed: '', project_id: '', fleet: false
+  handle_type: '', manufacturer: '', model_number: '', serial_number: '', date_installed: '', project_id: '', fleet: false, description: ''
 };
 
 export default function ChargerForm({ initial, onCancel, onSubmit, projects = [] }) {
@@ -89,6 +89,10 @@ export default function ChargerForm({ initial, onCancel, onSubmit, projects = []
           />
           <span>Fleet Charger</span>
         </label>
+      </fieldset>
+      <fieldset style={{border:'1px solid var(--card-border)', padding:12, marginTop:12}}>
+        <legend>Description</legend>
+        <textarea className="input" rows={3} style={{width:'100%', resize:'vertical'}} value={form.description || ''} onChange={e=>update('description', e.target.value)} />
       </fieldset>
       <div className="flex-row gap-sm" style={{marginTop:12}}>
         <button type="submit" className="btn">Save</button>

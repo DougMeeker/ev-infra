@@ -292,6 +292,7 @@ class Charger(db.Model):
     serial_number = db.Column(db.String(128))
     date_installed = db.Column(db.Date)
     fleet = db.Column(db.Boolean, default=False)
+    description = db.Column(db.Text)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { msalInstance, loginRequest, AUTH_ENABLED } from "./authConfig";
 
 // Determine API base:
 // - In production (served by nginx) use same-origin "/api" to avoid CORS
@@ -17,6 +18,48 @@ function resolveApiBase() {
 }
 
 const API_BASE_URL = resolveApiBase();
+
+// ── Axios interceptor: attach Bearer token to every request ─────────
+// When Azure AD auth is enabled, silently acquire a token from the
+// MSAL cache and add it as an Authorization header.
+axios.interceptors.request.use(async (config) => {
+	if (!AUTH_ENABLED) return config;
+
+	const accounts = msalInstance.getAllAccounts();
+	if (accounts.length === 0) return config;
+
+	try {
+		const response = await msalInstance.acquireTokenSilent({
+			...loginRequest,
+			account: accounts[0],
+		});
+		if (response?.accessToken) {
+			config.headers = config.headers || {};
+			config.headers.Authorization = `Bearer ${response.accessToken}`;
+		}
+	} catch (err) {
+		// If silent acquisition fails, let the request go through without
+		// a token – the backend will return 401 and the UI will prompt login.
+		console.warn("Token acquisition failed", err);
+	}
+	return config;
+});
+
+// ── Axios interceptor: handle 401 responses ─────────────────────────
+// If the backend returns 401, redirect to login.
+axios.interceptors.response.use(
+	(response) => response,
+	(error) => {
+		if (AUTH_ENABLED && error?.response?.status === 401) {
+			const accounts = msalInstance.getAllAccounts();
+			if (accounts.length > 0) {
+				// Token expired / revoked – force re-login
+				msalInstance.acquireTokenRedirect(loginRequest).catch(() => {});
+			}
+		}
+		return Promise.reject(error);
+	}
+);
 
 // Site endpoints
 export const getSites = () => axios.get(`${API_BASE_URL}/sites`);

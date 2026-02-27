@@ -53,7 +53,8 @@ def create_charger(site_id, data):
         model_number=data.get('model_number'),
         serial_number=data.get('serial_number'),
         date_installed=data.get('date_installed'),
-        fleet=data.get('fleet', False)
+        fleet=data.get('fleet', False),
+        description=data.get('description')
     )
     if isinstance(c.project_id, str) and c.project_id.strip() == "":
         c.project_id = None
@@ -88,7 +89,7 @@ def update_charger(charger_id, data):
         return {"error": "Charger not found"}, 404
     scalar_fields = [
         'project_id','kw','breaker_size','input_voltage','output_voltage',
-        'port_count','handle_type','manufacturer','model_number','serial_number','date_installed','fleet'
+        'port_count','handle_type','manufacturer','model_number','serial_number','date_installed','fleet','description'
     ]
     for f in scalar_fields:
         if f in data:
