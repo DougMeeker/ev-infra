@@ -24,29 +24,31 @@ export const getSites = () => axios.get(`${API_BASE_URL}/sites`);
 const sanitizeSitePayload = (site) => {
 	if (!site || typeof site !== 'object') return {};
 	const fields = [
-		'name', 'latitude', 'longitude', 'department_id', 'utility', 'utility_account', 'utility_name', 'meter_number',
+		'name', 'latitude', 'longitude', 'utility', 'utility_account', 'utility_name', 'meter_number',
 		'address', 'city', 'contact_name', 'contact_phone', 'main_breaker_amps', 'voltage', 'phase_count', 'power_factor', 'leased'
 	];
 	const out = {};
 	for (const key of fields) {
 		if (site[key] === undefined) continue;
 		let val = site[key];
-		if (val === '') continue; // drop empty strings
 		if (key === 'leased') {
 			out[key] = Boolean(val);
 			continue;
 		}
 		if (['latitude','longitude','power_factor'].includes(key)) {
+			if (val === '') continue; // blank numeric field — omit rather than send NaN
 			const n = Number(val);
 			if (!Number.isNaN(n)) out[key] = n;
 			continue;
 		}
 		if (['main_breaker_amps','voltage','phase_count'].includes(key)) {
+			if (val === '') continue; // blank integer field — omit rather than send NaN
 			const n = parseInt(val, 10);
 			if (!Number.isNaN(n)) out[key] = n;
 			continue;
 		}
-		out[key] = val;
+		// String fields: send null for empty string so the backend clears the column
+		out[key] = val === '' ? null : val;
 	}
 	return out;
 };
@@ -164,6 +166,36 @@ export const importFleet = (minConfidence = 0) => {
 };
 
 // Department mapping tools
+export const getSiteDepartments = (siteId) =>
+	axios.get(`${API_BASE_URL}/departments/?site_id=${siteId}`);
+
+export const getDepartments = ({ q = '', page = 1, perPage = 50, unassigned = false, district = '' } = {}) => {
+	const params = new URLSearchParams();
+	if (q)          params.append('q', q);
+	if (page > 1)   params.append('page', String(page));
+	if (perPage !== 50) params.append('per_page', String(perPage));
+	if (unassigned) params.append('unassigned', '1');
+	if (district)   params.append('district', String(district));
+	return axios.get(`${API_BASE_URL}/departments/?${params.toString()}`);
+};
+
+export const createDepartment = (payload) =>
+	axios.post(`${API_BASE_URL}/departments/`, payload);
+
+export const updateDepartment = (id, payload) =>
+	axios.put(`${API_BASE_URL}/departments/${id}`, payload);
+
+export const deleteDepartment = (id) =>
+	axios.delete(`${API_BASE_URL}/departments/${id}`);
+
+export const assignDepartmentSite = (id, siteId) =>
+	axios.patch(`${API_BASE_URL}/departments/${id}/site`, { site_id: siteId ?? null });
+
+export const searchSites = (q = '') => {
+	const params = new URLSearchParams({ search: q, per_page: '15', page: '1', sort: 'name', order: 'asc' });
+	return axios.get(`${API_BASE_URL}/sites/metrics/aggregate?${params.toString()}`);
+};
+
 export const previewDepartmentMapping = (minConfidence = 0) => {
 	const params = new URLSearchParams();
 	if (minConfidence != null) params.append('min_confidence', String(minConfidence));

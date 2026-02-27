@@ -43,6 +43,8 @@ class Site(db.Model):
     project_statuses = relationship('ProjectStatus', back_populates='site', cascade='all, delete-orphan')
     # Many-to-many relationship to files/documents
     files = relationship('File', secondary='site_files', back_populates='sites')
+    # Departments associated with this site
+    departments = relationship('Department', back_populates='site')
 
     def to_dict(self, include_services: bool = False, include_project_ids: bool = True):
         data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -320,6 +322,28 @@ class Charger(db.Model):
         except Exception:
             pass
         return data
+
+
+class Department(db.Model):
+    __tablename__ = 'departments'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    district = db.Column(db.Integer, nullable=False)
+    unit = db.Column(db.Integer, nullable=False)
+    unit_name = db.Column(db.String(256), nullable=False)
+    site_id = db.Column(db.Integer, db.ForeignKey('sites.id', ondelete='SET NULL'), nullable=True, index=True)
+
+    site = relationship('Site', back_populates='departments')
+
+    __table_args__ = (
+        db.UniqueConstraint('district', 'unit', name='uq_department_district_unit'),
+    )
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+    def __repr__(self):
+        return f"<Department district={self.district} unit={self.unit} name={self.unit_name!r}>"
 
 
 class File(db.Model):

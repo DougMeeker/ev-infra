@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from ..extensions import db
-from ..models import Site
+from ..models import Site, Department
 import csv
 import os
 import math
@@ -50,6 +50,184 @@ def getv(nrow, *keys):
         if v not in (None, ''):
             return v
     return None
+
+
+def _dept_to_dict(d, site_map=None):
+    row = d.to_dict()
+    row['code'] = f"{d.district:02d}-{d.unit:04d}"
+    if site_map is not None and d.site_id is not None:
+        s = site_map.get(d.site_id)
+        row['site_name'] = s.name if s else None
+    elif d.site_id is not None and d.site is not None:
+        row['site_name'] = d.site.name
+    else:
+        row['site_name'] = None
+    return row
+
+
+@department_bp.route("/", methods=["GET"])
+def list_departments():
+    """List departments with optional filtering and pagination.
+
+    Query params:
+        q           – search unit_name or formatted code 'DD-UUUU'
+        site_id     – filter to a specific site
+        unassigned  – '1' to return only rows with site_id IS NULL
+        district    – integer filter on district
+        page        – 1-based page (default 1)
+        per_page    – rows per page (default 50, max 200)
+    """
+    from sqlalchemy import or_, func, cast
+    from sqlalchemy import String as SAString
+
+    q           = (request.args.get('q') or '').strip()
+    site_id_param = request.args.get('site_id')
+    unassigned  = request.args.get('unassigned') == '1'
+    district_param = request.args.get('district')
+
+    try:
+        page     = max(1, int(request.args.get('page', 1)))
+        per_page = min(200, max(1, int(request.args.get('per_page', 50))))
+    except (TypeError, ValueError):
+        page, per_page = 1, 50
+
+    query = Department.query
+    if site_id_param:
+        try:
+            query = query.filter(Department.site_id == int(site_id_param))
+        except (TypeError, ValueError):
+            pass
+    if unassigned:
+        query = query.filter(Department.site_id.is_(None))
+    if district_param:
+        try:
+            query = query.filter(Department.district == int(district_param))
+        except (TypeError, ValueError):
+            pass
+    if q:
+        like = f"%{q}%"
+        formatted_code = (
+            func.lpad(cast(Department.district, SAString), 2, '0')
+            + '-'
+            + func.lpad(cast(Department.unit, SAString), 4, '0')
+        )
+        query = query.filter(or_(
+            Department.unit_name.ilike(like),
+            formatted_code.ilike(like),
+        ))
+
+    query = query.order_by(Department.district, Department.unit)
+    total = query.count()
+    depts = query.offset((page - 1) * per_page).limit(per_page).all()
+
+    # Build site name map for the page in one query
+    site_ids = {d.site_id for d in depts if d.site_id is not None}
+    site_map = {}
+    if site_ids:
+        from ..models import Site as _Site
+        for s in _Site.query.filter(_Site.id.in_(site_ids)).all():
+            site_map[s.id] = s
+
+    result = [_dept_to_dict(d, site_map) for d in depts]
+    return jsonify({
+        'items': result,
+        'meta': {'total': total, 'page': page, 'per_page': per_page, 'returned': len(result)}
+    }), 200
+
+
+@department_bp.route("/", methods=["POST"])
+def create_department():
+    """Create a new department row."""
+    data = request.get_json(silent=True) or {}
+    try:
+        district  = int(data['district'])
+        unit      = int(data['unit'])
+        unit_name = str(data.get('unit_name', '')).strip()
+    except (KeyError, TypeError, ValueError) as e:
+        return {"error": f"district (int), unit (int) and unit_name (str) are required: {e}"}, 400
+
+    site_id = data.get('site_id')
+    if site_id is not None:
+        try:
+            site_id = int(site_id)
+        except (TypeError, ValueError):
+            site_id = None
+
+    dept = Department(district=district, unit=unit, unit_name=unit_name, site_id=site_id)
+    db.session.add(dept)
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Could not create department: {e}"}, 400
+    return jsonify(_dept_to_dict(dept)), 201
+
+
+@department_bp.route("/<int:dept_id>", methods=["PUT"])
+def update_department(dept_id):
+    """Update district, unit, and/or unit_name of a department."""
+    dept = Department.query.get(dept_id)
+    if not dept:
+        return {"error": "Department not found"}, 404
+    data = request.get_json(silent=True) or {}
+    if 'district' in data:
+        try:
+            dept.district = int(data['district'])
+        except (TypeError, ValueError):
+            return {"error": "district must be an integer"}, 400
+    if 'unit' in data:
+        try:
+            dept.unit = int(data['unit'])
+        except (TypeError, ValueError):
+            return {"error": "unit must be an integer"}, 400
+    if 'unit_name' in data:
+        dept.unit_name = str(data['unit_name']).strip()
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Could not update department: {e}"}, 400
+    return jsonify(_dept_to_dict(dept)), 200
+
+
+@department_bp.route("/<int:dept_id>/site", methods=["PATCH"])
+def assign_department_site(dept_id):
+    """Assign or unassign a site to a department.
+    Body: { "site_id": <int|null> }
+    """
+    dept = Department.query.get(dept_id)
+    if not dept:
+        return {"error": "Department not found"}, 404
+    data = request.get_json(silent=True) or {}
+    raw = data.get('site_id')
+    if raw is None:
+        dept.site_id = None
+    else:
+        try:
+            dept.site_id = int(raw)
+        except (TypeError, ValueError):
+            return {"error": "site_id must be an integer or null"}, 400
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Could not assign site: {e}"}, 400
+    return jsonify(_dept_to_dict(dept)), 200
+
+
+@department_bp.route("/<int:dept_id>", methods=["DELETE"])
+def delete_department(dept_id):
+    """Permanently delete a department row."""
+    dept = Department.query.get(dept_id)
+    if not dept:
+        return {"error": "Department not found"}, 404
+    db.session.delete(dept)
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Could not delete department: {e}"}, 400
+    return {"status": "deleted", "id": dept_id}, 200
 
 
 @department_bp.route("/site-mapping/preview", methods=["GET"])

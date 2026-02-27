@@ -2,7 +2,7 @@ from flask import jsonify, request
 from datetime import datetime, timedelta
 import math
 from .site_routes import site_bp
-from ..models import Site, UtilityBill, Charger, Equipment, EquipmentUsage, EquipmentCatalog, EquipmentCategory
+from ..models import Site, UtilityBill, Charger, Equipment, EquipmentUsage, EquipmentCatalog, EquipmentCategory, Department
 from ..extensions import db
 from ..models import project_sites
 
@@ -377,13 +377,22 @@ def aggregate_site_metrics():
         site_query = site_query.join(project_sites, Site.id == project_sites.c.site_id)\
                                .filter(project_sites.c.project_id == project_id)
     if search:
-        from sqlalchemy import or_, func
+        from sqlalchemy import or_, func, cast
+        from sqlalchemy import String as SAString
         like = f"%{search}%"
+        dept_sites_sub = db.session.query(Department.site_id).filter(
+            or_(
+                Department.unit_name.ilike(like),
+                (func.lpad(cast(Department.district, SAString), 2, '0') + '-' +
+                 func.lpad(cast(Department.unit, SAString), 4, '0')).ilike(like)
+            ),
+            Department.site_id.isnot(None)
+        ).subquery()
         site_query = site_query.filter(or_(
             Site.name.ilike(like),
             func.coalesce(Site.address, '').ilike(like),
             func.coalesce(Site.city, '').ilike(like),
-            func.coalesce(Site.department_id, '').ilike(like)
+            Site.id.in_(dept_sites_sub)
         ))
     # Compute filtered total before pagination
     filtered_total = site_query.count()

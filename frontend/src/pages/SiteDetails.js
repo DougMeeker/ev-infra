@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { updateSite, deleteSite, getSiteMetrics, getSite, getEquipmentEnergy, getVehicleCountsBySite } from "../api";
+import { updateSite, deleteSite, getSiteMetrics, getSite, getEquipmentEnergy, getVehicleCountsBySite, getSiteDepartments } from "../api";
 import EquipmentSection from "../components/EquipmentSection";
 import BillsSection from "../components/BillsSection";
 import SiteProjectsSection from "../components/SiteProjectsSection";
@@ -24,6 +24,8 @@ const SiteDetails = () => {
     const [showBills, setShowBills] = useState(() => JSON.parse(localStorage.getItem("showBills") ?? "true"));
     const [showFiles, setShowFiles] = useState(() => JSON.parse(localStorage.getItem("showFiles") ?? "true"));
     const [showServices, setShowServices] = useState(() => JSON.parse(localStorage.getItem("showServices") ?? "true"));
+    const [showDepartments, setShowDepartments] = useState(() => JSON.parse(localStorage.getItem("showDepartments") ?? "true"));
+    const [departments, setDepartments] = useState([]);
 
     useEffect(() => {
         getSite(id)
@@ -34,6 +36,9 @@ const SiteDetails = () => {
                 setFormData({ ...rest, leased: rest.leased || false });
             })
             .catch(err => console.error("Error fetching site:", err));
+        getSiteDepartments(id)
+            .then(res => setDepartments((res.data && res.data.items) || []))
+            .catch(() => setDepartments([]));
         setMetricsLoading(true);
         Promise.all([
             getSiteMetrics(id),
@@ -74,6 +79,10 @@ const SiteDetails = () => {
     useEffect(() => {
         localStorage.setItem("showServices", JSON.stringify(showServices));
     }, [showServices]);
+
+    useEffect(() => {
+        localStorage.setItem("showDepartments", JSON.stringify(showDepartments));
+    }, [showDepartments]);
 
     const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -123,7 +132,6 @@ const SiteDetails = () => {
                             <div className="form-grid">
                                 <div className="form-group"><label>Contact Name</label><input className="input" name="contact_name" value={formData.contact_name || ""} onChange={handleChange} /></div>
                                 <div className="form-group"><label>Contact Phone</label><input className="input" name="contact_phone" value={formData.contact_phone || ""} onChange={handleChange} /></div>
-                                <div className="form-group"><label>Department ID</label><input className="input" name="department_id" value={formData.department_id || ""} onChange={handleChange} /></div>
                             </div>
                         </div>
                     </div>
@@ -150,7 +158,6 @@ const SiteDetails = () => {
                             <div className="detail-pairs">
                                 <div><span>Name:</span><strong>{site.contact_name || 'N/A'}</strong></div>
                                 <div><span>Phone:</span><strong>{site.contact_phone || 'N/A'}</strong></div>
-                                <div><span>Department ID:</span><strong>{site.department_id || 'N/A'}</strong></div>
                             </div>
                         </div>
                         {metricsLoading && (
@@ -201,6 +208,40 @@ const SiteDetails = () => {
                 </div>
             )}
             
+
+            {/* Departments Section */}
+            <hr />
+            <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowDepartments(v => !v)}>
+                {showDepartments ? '▼' : '▶'} Departments
+            </h3>
+            {showDepartments && (
+                <div className="card">
+                    {departments.length === 0 ? (
+                        <p style={{ color: '#888', margin: 0 }}>No departments linked to this site.</p>
+                    ) : (
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid #ddd', textAlign: 'left' }}>
+                                    <th style={{ padding: '6px 10px' }}>Code</th>
+                                    <th style={{ padding: '6px 10px' }}>District</th>
+                                    <th style={{ padding: '6px 10px' }}>Unit</th>
+                                    <th style={{ padding: '6px 10px' }}>Unit Name</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {departments.map(d => (
+                                    <tr key={d.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                        <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{d.code}</td>
+                                        <td style={{ padding: '6px 10px' }}>{d.district}</td>
+                                        <td style={{ padding: '6px 10px' }}>{d.unit}</td>
+                                        <td style={{ padding: '6px 10px' }}>{d.unit_name}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            )}
 
             {/* Services/Meters Section */}
             <hr />

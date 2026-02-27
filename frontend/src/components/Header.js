@@ -30,6 +30,9 @@ const Header = () => {
           <NavLink to="/files" style={({ isActive }) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration: 'none' })}>
             Files
           </NavLink>
+          <NavLink to="/departments" style={({ isActive }) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration: 'none' })}>
+            Departments
+          </NavLink>
         </nav>
       </div>
     </header>

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, abort
 from ..extensions import db
-from ..models import Project, Site, ProjectStatus, ProjectStep
+from ..models import Project, Site, ProjectStatus, ProjectStep, Department
 import csv
 import io
 import re
@@ -99,18 +99,36 @@ def list_project_sites(project_id):
 
     # Base query: join through association table `project_sites`
     from ..models import project_sites
-    from sqlalchemy import or_, func
+    from sqlalchemy import or_, func, cast
+    from sqlalchemy import String as SAString
     site_query = Site.query.join(project_sites, Site.id == project_sites.c.site_id).filter(project_sites.c.project_id == project_id)
     if q:
         like = f"%{q}%"
+        dept_sites_q = db.session.query(Department.site_id).filter(
+            or_(
+                Department.unit_name.ilike(like),
+                (func.lpad(cast(Department.district, SAString), 2, '0') + '-' +
+                 func.lpad(cast(Department.unit, SAString), 4, '0')).ilike(like)
+            ),
+            Department.site_id.isnot(None)
+        ).subquery()
         site_query = site_query.filter(or_(
             Site.name.ilike(like),
             func.coalesce(Site.address, '').ilike(like),
             func.coalesce(Site.city, '').ilike(like),
-            func.coalesce(Site.department_id, '').ilike(like)
+            Site.id.in_(dept_sites_q)
         ))
     if department_id:
-        site_query = site_query.filter(func.coalesce(Site.department_id, '').ilike(f"%{department_id}%"))
+        dept_like = f"%{department_id}%"
+        dept_sites_filter = db.session.query(Department.site_id).filter(
+            or_(
+                Department.unit_name.ilike(dept_like),
+                (func.lpad(cast(Department.district, SAString), 2, '0') + '-' +
+                 func.lpad(cast(Department.unit, SAString), 4, '0')).ilike(dept_like)
+            ),
+            Department.site_id.isnot(None)
+        ).subquery()
+        site_query = site_query.filter(Site.id.in_(dept_sites_filter))
     site_query = site_query.order_by(Site.name)
 
     if page <= 0:
