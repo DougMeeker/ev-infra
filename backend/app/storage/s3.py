@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 from werkzeug.datastructures import FileStorage
-from flask import current_app, redirect
+from flask import current_app, redirect, Response, stream_with_context
 from .base import StorageProvider
 
 import boto3
@@ -69,27 +69,45 @@ class S3StorageProvider(StorageProvider):
         except Exception:
             return None
 
-    def make_download_response(self, key: str, download_name: str = None):
-        url = self.get_download_url(key, current_app.config.get('SIGNED_URL_TTL', 3600))
-        if not url:
-            # Fallback to 404-like behavior if URL generation fails
-            from flask import abort
-            abort(404)
-        return redirect(url)
+    def _proxy_response(self, key: str, content_disposition: str, download_name: str = None) -> Response:
+        """Stream object bytes from MinIO/S3 through the backend.
 
-    def make_view_response(self, key: str):
-        # For S3/MinIO, generate a presigned URL with inline content-disposition
+        This avoids mixed-content errors when the MinIO endpoint is HTTP and
+        the app is served over HTTPS – the browser only ever contacts the
+        HTTPS backend, which fetches from MinIO internally.
+        """
         try:
-            url = self.client.generate_presigned_url(
-                'get_object',
-                Params={
-                    'Bucket': self.bucket,
-                    'Key': key,
-                    'ResponseContentDisposition': 'inline'
-                },
-                ExpiresIn=int(current_app.config.get('SIGNED_URL_TTL', 3600))
+            s3_resp = self.client.get_object(Bucket=self.bucket, Key=key)
+            content_type = s3_resp.get('ContentType', 'application/octet-stream')
+            content_length = s3_resp.get('ContentLength')
+            body = s3_resp['Body']
+
+            if download_name and content_disposition == 'attachment':
+                disp = f'attachment; filename="{download_name}"'
+            elif download_name:
+                disp = f'inline; filename="{download_name}"'
+            else:
+                disp = content_disposition
+
+            headers = {
+                'Content-Disposition': disp,
+                'Cache-Control': 'private, max-age=3600',
+            }
+            if content_length is not None:
+                headers['Content-Length'] = str(content_length)
+
+            return Response(
+                stream_with_context(body.iter_chunks(chunk_size=65536)),
+                status=200,
+                headers=headers,
+                content_type=content_type,
             )
-            return redirect(url)
         except Exception:
             from flask import abort
             abort(404)
+
+    def make_download_response(self, key: str, download_name: str = None):
+        return self._proxy_response(key, 'attachment', download_name=download_name)
+
+    def make_view_response(self, key: str):
+        return self._proxy_response(key, 'inline')

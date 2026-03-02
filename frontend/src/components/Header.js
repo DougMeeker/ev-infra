@@ -1,7 +1,10 @@
 import React from "react";
 import { Link, NavLink } from "react-router-dom";
+import { useAuth } from "../AuthProvider";
 
 const Header = () => {
+  const { user, logout, authEnabled } = useAuth();
+
   return (
     <header className="sticky-header" style={{ background: 'var(--card)', borderBottom: '1px solid var(--card-border)' }}>
       <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', paddingBottom: '12px' }}>
@@ -34,6 +37,25 @@ const Header = () => {
             Departments
           </NavLink>
         </nav>
+        {authEnabled && user && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem' }}>
+            <span style={{ color: 'var(--text-secondary, #666)' }}>{user.name || user.email}</span>
+            <button
+              onClick={logout}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--card-border, #ccc)',
+                borderRadius: '4px',
+                padding: '4px 10px',
+                cursor: 'pointer',
+                color: 'var(--link)',
+                fontSize: '0.8rem',
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

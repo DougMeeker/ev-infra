@@ -107,22 +107,6 @@ export default function StatusEditor({
               style={{ marginRight: 8 }}
               disabled={!selectedSiteId}
             />
-            <input
-              placeholder="Estimated Cost"
-              type="number"
-              value={statusForm.estimated_cost}
-              onChange={(e) => setStatusForm({ ...statusForm, estimated_cost: e.target.value })}
-              style={{ marginRight: 8 }}
-              disabled={!selectedSiteId}
-            />
-            <input
-              placeholder="Actual Cost"
-              type="number"
-              value={statusForm.actual_cost}
-              onChange={(e) => setStatusForm({ ...statusForm, actual_cost: e.target.value })}
-              style={{ marginRight: 8 }}
-              disabled={!selectedSiteId}
-            />
             <button type="submit" className="btn" disabled={!selectedSiteId}>Add Status</button>
           </form>
 
@@ -187,28 +171,6 @@ export default function StatusEditor({
                                 type="date"
                                 value={editForm.status_date}
                                 onChange={(e) => setEditForm({ ...editForm, status_date: e.target.value })}
-                              />
-                            </label>
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <label style={{ display: 'flex', flexDirection: 'column', flex: '1 1 140px' }}>
-                              <span style={{ fontSize: '12px', color: '#666', marginBottom: 4 }}>Estimated Cost</span>
-                              <input 
-                                className="input"
-                                type="number"
-                                value={editForm.estimated_cost}
-                                onChange={(e) => setEditForm({ ...editForm, estimated_cost: e.target.value })}
-                                placeholder="Est. cost"
-                              />
-                            </label>
-                            <label style={{ display: 'flex', flexDirection: 'column', flex: '1 1 140px' }}>
-                              <span style={{ fontSize: '12px', color: '#666', marginBottom: 4 }}>Actual Cost</span>
-                              <input 
-                                className="input"
-                                type="number"
-                                value={editForm.actual_cost}
-                                onChange={(e) => setEditForm({ ...editForm, actual_cost: e.target.value })}
-                                placeholder="Actual cost"
                               />
                             </label>
                           </div>
@@ -320,16 +282,6 @@ export default function StatusEditor({
                           lineHeight: '1.5'
                         }}>
                           {status.status_message}
-                        </div>
-                      )}
-                      {(status.estimated_cost || status.actual_cost) && (
-                        <div style={{ fontSize: '13px', color: '#666', display: 'flex', gap: 16 }}>
-                          {status.estimated_cost && (
-                            <span>Est. Cost: ${Number(status.estimated_cost).toLocaleString()}</span>
-                          )}
-                          {status.actual_cost && (
-                            <span>Actual Cost: ${Number(status.actual_cost).toLocaleString()}</span>
-                          )}
                         </div>
                       )}
                     </div>

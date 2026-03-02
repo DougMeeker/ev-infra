@@ -104,7 +104,14 @@
 }
 
 .latestRowSelected {
-  box-shadow: inset 0 0 0 2px #0ea5e9;
+  box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px #1d4ed8;
+  outline: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .latestRowSelected {
+    box-shadow: inset 0 0 0 2px #0f172a, inset 0 0 0 4px #93c5fd;
+  }
 }
 
 .latestRow:hover {

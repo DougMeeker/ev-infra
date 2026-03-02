@@ -38,17 +38,20 @@ export default function ProjectsManager() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', description: '' });
   const [assignment, setAssignment] = useState({ siteId: '', siteName: '' });
-  const [siteSearch, setSiteSearch] = useState('');
+  const [siteSearch, setSiteSearch] = useState(() => searchParams.get('q') || '');
   const debouncedSearch = useDebounce(siteSearch, 300);
-  const [departmentIdSearch, setDepartmentIdSearch] = useState('');
+  const [departmentIdSearch, setDepartmentIdSearch] = useState(() => searchParams.get('department_id') || '');
   const debouncedDepartmentId = useDebounce(departmentIdSearch, 300);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [latestStatuses, setLatestStatuses] = useState([]);
-  const [sortMode, setSortMode] = useState('name'); // 'name' | 'status'
+  const [sortMode, setSortMode] = useState(() => {
+    const s = searchParams.get('sort');
+    return (s === 'name' || s === 'status') ? s : 'name';
+  }); // 'name' | 'status'
   const [projectSites, setProjectSites] = useState([]);
-  const [selectedSiteId, setSelectedSiteId] = useState('');
-  const [sitesPage, setSitesPage] = useState(1);
-  const [sitesPageSize, setSitesPageSize] = useState(25);
+  const [selectedSiteId, setSelectedSiteId] = useState(() => searchParams.get('siteId') || '');
+  const [sitesPage, setSitesPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1));
+  const [sitesPageSize, setSitesPageSize] = useState(() => Math.max(1, Number(searchParams.get('per_page')) || 25));
   const [sitesTotal, setSitesTotal] = useState(0);
   const [steps, setSteps] = useState([]);
   const [newStep, setNewStep] = useState({ title: '', step_order: '', description: '' });
@@ -126,22 +129,7 @@ export default function ProjectsManager() {
     prevProjectIdRef.current = selectedProjectId;
   }, [selectedProjectId]);
 
-  // Initialize state from URL search params
-  useEffect(() => {
-    const q = searchParams.get('q');
-    const dept = searchParams.get('department_id');
-    const sort = searchParams.get('sort');
-    const siteIdQ = searchParams.get('siteId');
-    const page = Number(searchParams.get('page')) || undefined;
-    const perPage = Number(searchParams.get('per_page')) || undefined;
-    if (q !== null) setSiteSearch(q);
-    if (dept !== null) setDepartmentIdSearch(dept);
-    if (sort === 'name' || sort === 'status') setSortMode(sort);
-    if (siteIdQ) setSelectedSiteId(siteIdQ);
-    if (page && page > 0) setSitesPage(page);
-    if (perPage && perPage > 0) setSitesPageSize(perPage);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // State is initialized directly from URL search params via lazy useState initializers above.
 
   // When search or sort changes, reset to first page to avoid empty pages
   const isFirstRenderRef = useRef(true);
@@ -202,12 +190,14 @@ export default function ProjectsManager() {
   const loadProjectSites = useCallback(async () => {
     if (!selectedProjectId) return;
     try {
-      // Load assigned sites with server-side search + pagination
+      // When sorting by status, fetch all items so client-side sort+paging covers the full set.
+      // When sorting by name, use normal server-side pagination.
+      const fetchAll = sortMode === 'status';
       const { data } = await getProjectSites(selectedProjectId, {
         q: debouncedSearch,
         department_id: debouncedDepartmentId,
-        page: sitesPage,
-        page_size: sitesPageSize,
+        page: fetchAll ? 1 : sitesPage,
+        page_size: fetchAll ? 99999 : sitesPageSize,
       });
       const items = data?.items || [];
       setProjectSites(items);
@@ -223,7 +213,7 @@ export default function ProjectsManager() {
       if (proj) setEditProject({ name: proj.name || '', description: proj.description || '' });
     } finally {
     }
-  }, [selectedProjectId, debouncedSearch, debouncedDepartmentId, sitesPage, sitesPageSize, projects]);
+  }, [selectedProjectId, debouncedSearch, debouncedDepartmentId, sitesPage, sitesPageSize, sortMode, projects]);
 
   // Reload project data when selection or filters change
   useEffect(() => {
