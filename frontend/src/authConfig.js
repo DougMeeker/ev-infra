@@ -57,5 +57,7 @@ export const loginRequest = {
 	],
 };
 
-// Pre-built MSAL instance (singleton)
-export const msalInstance = new PublicClientApplication(msalConfig);
+// Pre-built MSAL instance (singleton) – only created when auth is enabled.
+// Constructing PublicClientApplication on plain HTTP (no client ID) throws
+// MSAL errors that break the app, so guard it here.
+export const msalInstance = AUTH_ENABLED ? new PublicClientApplication(msalConfig) : null;

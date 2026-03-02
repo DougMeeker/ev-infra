@@ -125,7 +125,7 @@ function NoAuthProvider({ children }) {
 // ── Exported <AuthProvider> ─────────────────────────────────────────
 
 export function AuthProvider({ children }) {
-	if (!AUTH_ENABLED) {
+	if (!AUTH_ENABLED || !msalInstance) {
 		return <NoAuthProvider>{children}</NoAuthProvider>;
 	}
 	return (
