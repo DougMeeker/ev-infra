@@ -2,7 +2,7 @@ import React from 'react';
 import { ratioFrom, getStatusShade } from '../utils/statusShading';
 import styles from '../pages/Status.module.css';
 
-export default function LatestStatusBox({ item, stepsCount, onUpdate, isSelected = false, actions }) {
+export default function LatestStatusBox({ item, stepsCount, onUpdate, isSelected = false, actions, chargerCountProject = null, chargerCountSite = null }) {
   const ratio = ratioFrom(item.current_step, stepsCount);
   const col = getStatusShade(ratio);
 
@@ -20,6 +20,14 @@ export default function LatestStatusBox({ item, stepsCount, onUpdate, isSelected
             <span className={styles.token}>Step {item.current_step ?? '—'}</span>
             {item.status_date && (
               <span className={styles.tokenMuted}>{new Date(item.status_date).toLocaleDateString()}</span>
+            )}
+            {chargerCountSite !== null && (
+              <span
+                className={styles.token}
+                title={`${chargerCountProject} charger(s) in this project / ${chargerCountSite} total at site`}
+              >
+                ⚡ {chargerCountProject}/{chargerCountSite}
+              </span>
             )}
           </div>
         </div>

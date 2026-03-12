@@ -423,7 +423,7 @@ Projects manage many Sites. Each project can define ordered steps; sites report 
 ### API Endpoints
 
 #### Sites
-- `GET /api/sites` — list all sites with vehicle counts and charger totals
+- `GET /api/sites` — list all sites with vehicle counts, charger totals, and department codes
 - `GET /api/sites/:id` — get single site details
 - `GET /api/sites/:id/metrics` — get calculated capacity metrics and vehicle count for a site
 - `GET /api/sites/:id/projects` — get projects associated with site (includes progress and latest status)
@@ -434,6 +434,19 @@ Projects manage many Sites. Each project can define ordered steps; sites report 
 - `POST /api/sites` — create site
 - `PUT /api/sites/:id` — update site
 - `DELETE /api/sites/:id` — soft delete site
+
+#### Departments
+Departments are managed via a dedicated `departments` table with `district`, `unit`, `unit_name`, and an optional `site_id` foreign key. Each site can have multiple departments assigned to it. The old `site.department_id` text column is deprecated.
+
+- `GET /api/departments/?q=&site_id=&unassigned=1&district=&page=1&per_page=50` — paginated list with search
+- `POST /api/departments/` — create department `{ district, unit, unit_name, site_id? }`
+- `PUT /api/departments/:id` — update `{ district?, unit?, unit_name? }`
+- `PATCH /api/departments/:id/site` — assign/unassign site `{ site_id: <int|null> }`
+- `DELETE /api/departments/:id` — permanently delete
+- `GET /api/departments/site-mapping/preview?min_confidence=0` — preview auto-mapping from CSV
+- `POST /api/departments/site-mapping/import?min_confidence=0` — apply auto-mapping
+
+The `GET /api/sites` response includes a `departments` array on each site with `{ code, unit_name }` entries derived from the departments table.
 
 #### Projects
 - `GET /api/projects` — list projects
@@ -754,7 +767,7 @@ Adds three new tables:
 - `equipment_catalog` (MC master list)
   - `mc_code` (PK), `description`, `status`, `revised_date`, `energy_per_mile` (kWh per mile, nullable until set)
 - `equipment`
-  - `id`, `site_id` (FK), `equipment_identifier`, `mc_code` (FK to catalog), `department_id`, `annual_miles`, `downtime_hours`, timestamps
+  - `id`, `site_id` (FK), `equipment_identifier`, `mc_code` (FK to catalog), `department_id` (owning dept string), `annual_miles`, `driving_hours`, timestamps
 - `equipment_usage`
   - `id`, `equipment_id` (FK), `year`, `miles`, timestamps (unique per equipment/year)
 
@@ -920,18 +933,18 @@ Imports vehicles from `FleetList.csv` into the `equipment` table, assigning each
 - Preview matches: `GET /api/fleet/match-preview?min_confidence=0.7`
 - Import fleet: `POST /api/fleet/import?min_confidence=0.7`
 
-Matching rules (in order):
+Matching rules (in priority order):
+- Department ID: if Dept ID matches a department code assigned to a site (via the departments table), that site is used with highest confidence.
 - Coordinates: nearest site by `CT_DEPT_LATITUDE`/`CT_DEPT_LONGITUDE` with distance-weighted confidence.
 - Department name: case-insensitive substring match of `DEPT ID NAME` against `Site.name`.
 - District: match `District` to `Site.city` or substring of `Site.name`.
- - Department ID: if `Dept ID` matches a `Site.department_id`, it’s used first with highest confidence.
 
 Confidence filter:
 - Both preview and import accept `min_confidence` (0–1). Rows with a match confidence below the threshold are excluded from preview and skipped during import.
 
 Import behavior:
 - Requires valid `MC` codes present in `equipment_catalog`; rows with unknown MC are skipped and reported.
-- Upsert by `(site_id, equipment_identifier)`; updates `mc_code`/`department_id` for existing records.
+- Upsert by `(site_id, equipment_identifier)`; updates `mc_code` and department for existing records.
 
 CSV columns used (best-effort): `Eq ID`, `MC`, `Dept ID`/`DEPT ID`, `DEPT ID NAME`, `District`, `CT_DEPT_LATITUDE`, `CT_DEPT_LONGITUDE`.
 

@@ -36,12 +36,30 @@ def get_sites():
     except Exception:
         pass
 
+    # Get department codes by site in a single query
+    dept_rows = db.session.query(
+        Department.site_id,
+        Department.district,
+        Department.unit,
+        Department.unit_name,
+    ).filter(
+        Department.site_id.in_(site_ids)
+    ).order_by(Department.district, Department.unit).all()
+
+    dept_map = {}
+    for site_id_val, district, unit, unit_name in dept_rows:
+        dept_map.setdefault(site_id_val, []).append({
+            'code': f"{district:02d}-{unit:04d}",
+            'unit_name': unit_name,
+        })
+
     # Build response
     rows = []
     for s in sites:
         d = s.to_dict(include_services=False, include_project_ids=False)
         d['total_charger_kw'] = round(charger_totals.get(s.id, 0.0), 3)
         d['vehicle_count'] = vehicle_counts.get(s.id, 0)
+        d['departments'] = dept_map.get(s.id, [])
         rows.append(d)
     return jsonify(rows)
 
@@ -121,7 +139,7 @@ def get_site_metrics(site_id):
             "services": []
         }), 200
 
-    cutoff = datetime.utcnow() - timedelta(days=365)
+   
     
     # Calculate metrics for each service and aggregate
     total_theoretical_capacity_kw = 0.0
@@ -137,7 +155,10 @@ def get_site_metrics(site_id):
             .filter_by(service_id=service.id, is_deleted=False)
             .all()
         )
-        
+
+        last_bill_date = max([datetime(b.year, b.month, 1) for b in bills], default=None) if bills else None
+        if last_bill_date:
+            cutoff = last_bill_date - timedelta(days=365)
         total_bill_count += len(bills)
         
         # Calculate peak for this service
@@ -194,9 +215,9 @@ def get_site_metrics(site_id):
 
     result = {
         "site_id": site_id,
-        "last_year_peak_kw": round(total_last_year_peak_kw, 3),
-        "theoretical_capacity_kw": round(total_theoretical_capacity_kw, 3) if has_capacity_data else None,
-        "available_capacity_kw": round(available_capacity_kw, 3) if available_capacity_kw is not None else None,
+        "last_year_peak_kw": round(total_last_year_peak_kw, 1),
+        "theoretical_capacity_kw": round(total_theoretical_capacity_kw, 1) if has_capacity_data else None,
+        "available_capacity_kw": round(available_capacity_kw, 1) if available_capacity_kw is not None else None,
         "power_factor": 0.95,  # Average, could be calculated from services
         "vehicle_count": vehicle_count,
         "bill_count": total_bill_count,

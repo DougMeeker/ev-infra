@@ -116,7 +116,7 @@ export default function ProjectsSection({
                 <div className={styles.latestRowContent}>
                   <div className={styles.latestRowHeader}>
                     <span className={styles.siteName}>{p.name}</span>
-                    <div className={styles.metaGrid}>
+                    <div className={styles.metaGroup}>
                       <span className={`${styles.token} ${styles.tokenNowrap}`}>ID: {p.id}</span>
                       <span className={`${styles.token} ${styles.tokenNowrap}`}>Steps: {typeof p.steps_count === 'number' ? p.steps_count : '—'}</span>
                       <span
@@ -126,6 +126,11 @@ export default function ProjectsSection({
                       >
                         Avg: {avg != null ? Math.round(avg * 100) : '—'}%
                       </span>
+                      {typeof p.charger_count === 'number' && (
+                        <span className={`${styles.token} ${styles.tokenNowrap}`} title="Chargers assigned to this project">
+                          ⚡ {p.charger_count}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {(p.description) && (

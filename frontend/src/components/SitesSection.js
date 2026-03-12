@@ -129,6 +129,8 @@ export default function SitesSection({
                       stepsCount={stepsCount}
                       isSelected={String(selectedSiteId) === String(s.id)}
                       onUpdate={(siteId, currentStep) => onOpenSite(siteId, currentStep)}
+                      chargerCountProject={typeof s.charger_count_project === 'number' ? s.charger_count_project : null}
+                      chargerCountSite={typeof s.charger_count_site === 'number' ? s.charger_count_site : null}
                     />
                     <div className={styles.latestRowToolbar}>
                       <button

@@ -68,7 +68,7 @@ export default function ChargersSection({ siteId }) {
                 <input className="input" style={{width:70}} placeholder="Ports" value={chargerNew.port_count} onChange={e=>setChargerNew(prev=>({ ...prev, port_count: e.target.value }))} />
                 <select className="input" value={chargerNew.handle_type} onChange={e=>setChargerNew(prev=>({ ...prev, handle_type: e.target.value }))}>
                   <option value="">Handle Type</option>
-                  {['J1772','NACS','Both'].map(h => <option key={h} value={h}>{h}</option>)}
+                  {['J1772','NACS','CCS1','Both DC'].map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
                 <select className="input" value={chargerNew.manufacturer} onChange={e=>setChargerNew(prev=>({ ...prev, manufacturer: e.target.value }))}>
                   <option value="">Manufacturer</option>
@@ -140,7 +140,7 @@ export default function ChargersSection({ siteId }) {
                         <input className="input" style={{width:70}} placeholder="Ports" value={chargerEdit.port_count ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, port_count: e.target.value }))} />
                         <select className="input" value={chargerEdit.handle_type ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, handle_type: e.target.value }))}>
                           <option value="">Handle Type</option>
-                          {['J1772','NACS','Both'].map(h => <option key={h} value={h}>{h}</option>)}
+                          {['J1772','NACS','CCS1','Both DC'].map(h => <option key={h} value={h}>{h}</option>)}
                         </select>
                         <select className="input" value={chargerEdit.manufacturer ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, manufacturer: e.target.value }))}>
                           <option value="">Manufacturer</option>

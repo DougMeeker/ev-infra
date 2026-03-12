@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getSites, updateSite } from '../api';
+import { getSites } from '../api';
 import { Link } from 'react-router-dom';
 
 const SitesManager = () => {
@@ -24,11 +24,12 @@ const SitesManager = () => {
   const filtered = sites.filter(s => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
+    const deptStr = (s.departments || []).map(d => `${d.code} ${d.unit_name}`).join(' ').toLowerCase();
     return (
       (s.name || '').toLowerCase().includes(q) ||
       (s.address || '').toLowerCase().includes(q) ||
       (s.city || '').toLowerCase().includes(q) ||
-      (s.department_id || '').toLowerCase().includes(q)
+      deptStr.includes(q)
     );
   });
 
@@ -38,7 +39,7 @@ const SitesManager = () => {
       <div className="card" style={{ marginBottom: 16 }}>
         <h4 style={{ marginTop: 0 }}>Search</h4>
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
-          <input className="input" placeholder="Search by name, address, city, or department id" value={search} onChange={e=>setSearch(e.target.value)} style={{ width: 320 }} />
+          <input className="input" placeholder="Search by name, address, city, or department" value={search} onChange={e=>setSearch(e.target.value)} style={{ width: 320 }} />
         </div>
       </div>
 
@@ -49,8 +50,8 @@ const SitesManager = () => {
               <th>Name</th>
               <th>Address</th>
               <th>City</th>
-              <th>Department ID</th>
-              <th style={{ width: 220 }}>Actions</th>
+              <th>Departments</th>
+              <th style={{ width: 120 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -60,21 +61,13 @@ const SitesManager = () => {
                 <td>{s.address || '—'}</td>
                 <td>{s.city || '—'}</td>
                 <td>
-                  <input className="input" style={{ width: 160 }} value={s.department_id || ''} onChange={e=>{
-                    const v = e.target.value;
-                    setSites(prev => prev.map(x => x.id===s.id ? { ...x, department_id: v } : x));
-                  }} />
+                  {(s.departments || []).length === 0 ? '—' : (s.departments || []).map((d, i) => (
+                    <span key={i} title={d.unit_name} style={{ display: 'inline-block', marginRight: 6, padding: '2px 6px', background: '#f0f0f0', borderRadius: 4, fontSize: 13 }}>
+                      {d.code}
+                    </span>
+                  ))}
                 </td>
                 <td style={{ display:'flex', gap: 6 }}>
-                  <button className="btn" onClick={async ()=>{
-                    const payload = { department_id: s.department_id || '' };
-                    try {
-                      await updateSite(s.id, payload);
-                      await load();
-                    } catch (e) {
-                      alert('Update failed');
-                    }
-                  }}>Save</button>
                   <Link className="btn btn-secondary" to={`/site/${s.id}`}>Details</Link>
                 </td>
               </tr>

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from ..extensions import db
-from ..models import Site, Equipment, EquipmentCatalog
+from ..models import Site, Equipment, EquipmentCatalog, Department
 from ..services.utilization_service import import_utilization
 import csv
 import os
@@ -23,11 +23,16 @@ def haversine(lat1, lon1, lat2, lon2):
 
 
 def _site_has_department(site: Site, dept_id: str) -> bool:
-    s = (site.department_id or '').strip()
-    if not s or not dept_id:
+    """Check if a site has a department matching the given dept_id code (e.g. '07-1234' or '071234')."""
+    if not dept_id:
         return False
-    tokens = [t.strip() for t in s.split(',') if t.strip()]
-    return dept_id.strip() in tokens
+    dept_id = dept_id.strip()
+    for d in site.departments:
+        code_dash = f"{d.district:02d}-{d.unit:04d}"
+        code_flat = f"{d.district:02d}{d.unit:04d}"
+        if dept_id == code_dash or dept_id == code_flat:
+            return True
+    return False
 
 
 def find_best_site(dept_name: str, district: str, lat: float, lon: float, dept_id: str = None):
@@ -35,7 +40,7 @@ def find_best_site(dept_name: str, district: str, lat: float, lon: float, dept_i
     best = None
     confidence = 0.0
 
-    # Rule 0: direct department_id match (supports comma-separated lists)
+    # Rule 0: department code match via departments table
     if dept_id:
         for s in sites:
             if _site_has_department(s, dept_id):

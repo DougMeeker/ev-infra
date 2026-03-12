@@ -89,7 +89,10 @@ const ServicesSection = ({ siteId }) => {
     const handleDelete = (serviceId) => {
         if (!window.confirm("Delete this service/meter? This will also delete all associated bills.")) return;
         deleteService(serviceId)
-            .then(() => loadServices())
+            .then(() => {
+                if (editing === serviceId) setEditing(null);
+                loadServices();
+            })
             .catch(err => {
                 console.error("Error deleting service:", err);
                 alert("Failed to delete service");

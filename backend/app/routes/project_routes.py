@@ -18,8 +18,23 @@ def _get_project_or_404(project_id):
 
 @project_bp.route('', methods=['GET'])
 def list_projects():
+    from ..models import Charger
+    from sqlalchemy import func
     projects = Project.query.filter_by(is_deleted=False).order_by(Project.name).all()
-    return jsonify([p.to_dict() for p in projects])
+    # One query: charger counts keyed by project_id
+    project_ids = [p.id for p in projects]
+    charger_counts = {}
+    if project_ids:
+        rows = db.session.query(Charger.project_id, func.count(Charger.id)) \
+            .filter(Charger.project_id.in_(project_ids)) \
+            .group_by(Charger.project_id).all()
+        charger_counts = {pid: cnt for pid, cnt in rows}
+    result = []
+    for p in projects:
+        d = p.to_dict()
+        d['charger_count'] = charger_counts.get(p.id, 0)
+        result.append(d)
+    return jsonify(result)
 
 @project_bp.route('', methods=['POST'])
 def create_project():
@@ -138,6 +153,24 @@ def list_project_sites(project_id):
     total = site_query.count()
     items = site_query.offset((page - 1) * page_size).limit(page_size).all()
     data = [s.to_dict() for s in items]
+    # Two queries: chargers for this project per site, and total chargers per site
+    from ..models import Charger
+    from sqlalchemy import func
+    page_site_ids = [s.id for s in items]
+    project_charger_counts = {}
+    site_charger_counts = {}
+    if page_site_ids:
+        proj_rows = db.session.query(Charger.site_id, func.count(Charger.id)) \
+            .filter(Charger.site_id.in_(page_site_ids), Charger.project_id == project_id) \
+            .group_by(Charger.site_id).all()
+        project_charger_counts = {sid: cnt for sid, cnt in proj_rows}
+        total_rows = db.session.query(Charger.site_id, func.count(Charger.id)) \
+            .filter(Charger.site_id.in_(page_site_ids)) \
+            .group_by(Charger.site_id).all()
+        site_charger_counts = {sid: cnt for sid, cnt in total_rows}
+    for d in data:
+        d['charger_count_project'] = project_charger_counts.get(d['id'], 0)
+        d['charger_count_site'] = site_charger_counts.get(d['id'], 0)
     meta = {
         'total': total,
         'page': page,

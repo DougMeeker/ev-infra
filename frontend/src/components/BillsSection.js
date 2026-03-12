@@ -206,13 +206,13 @@ export default function BillsSection({ siteId, onTotalsChange }) {
       // Add energy usage
       if (bill.energy_usage != null) {
         summary.totalEnergy += parseFloat(bill.energy_usage) || 0;
-        summary.billCount += 1;
       }
       
       // Track maximum power
       if (bill.max_power != null) {
         const power = parseFloat(bill.max_power) || 0;
         summary.maxPower = Math.max(summary.maxPower, power);
+        summary.billCount += 1;
       }
       
       // Track years for averaging
