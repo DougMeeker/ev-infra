@@ -258,6 +258,105 @@ For publicly accessible servers:
 - Use Let's Encrypt with certbot (automated renewal)
 - See `deploy/README.md` for complete SSL setup instructions
 
+## Recent Features (March 2026)
+
+### Phase 1 — Site Prioritization Model
+
+A configurable scoring engine that ranks all ~240+ sites by EV infrastructure readiness using seven weighted dimensions.
+
+**Backend:**
+- **Weight Profiles** — Create multiple named profiles with custom weights for: Vehicle Count, Annual Miles, Electrical Headroom, Charger Gap, Project Readiness, Energy Demand, and Data Completeness.
+- **Composite Scoring** — Min-max normalization across all sites, then weighted sum (0–100 scale). Deterministic: same data + same weights = same scores.
+- **Investigation Urgency** — Separate metric flagging sites with vehicles but missing service/survey data, calculated as `(100 - completeness) × (vehicle_count_score + charger_gap_score) / 200`.
+- **CSV Export** — Download ranked tables or investigation lists as CSV.
+
+**Frontend:**
+- **Priority Dashboard** (`/priorities`) — Two tabs:
+  - *Design Priority*: Ranked table with per-dimension breakdown, sortable/filterable/searchable, weight profile selector, recalculate button
+  - *Needs Investigation*: Sites requiring field surveys, with data completeness % and missing data indicators
+- **Home Page Widgets** — Top 10 Priority Sites and Top 10 Needs Investigation cards on the dashboard
+- **Site Details Enhancement** — Data completeness progress bar and "Needs Survey" banner with missing-data checklist
+
+**API Endpoints:**
+- `POST /api/priorities/recalculate` — Recalculate all scores (optional `weight_profile_id`)
+- `GET /api/priorities/scores?page=&per_page=&sort=&order=&district=&min_score=&search=` — Paginated ranked scores
+- `GET /api/priorities/scores/:site_id` — Single site score breakdown
+- `GET /api/priorities/scores/export` — CSV export
+- `GET /api/priorities/investigation?page=&per_page=&district=&search=` — Investigation list
+- `GET /api/priorities/investigation/export` — Investigation CSV export
+- `GET /api/priorities/weights` — List weight profiles
+- `POST /api/priorities/weights` — Create profile
+- `PUT /api/priorities/weights/:id` — Update profile
+- `DELETE /api/priorities/weights/:id` — Delete profile (cannot delete Default)
+
+**Migration:** `alembic upgrade head` creates `site_priority_weights` and `site_priority_scores` tables with a seeded Default profile.
+
+### Phase 2 — MCP Knowledge Base Integration
+
+Connects ev-infra-app to the MCP RAG knowledge base so site data, project facts, and fleet statistics are searchable via semantic queries in VS Code Copilot.
+
+**Architecture:**
+```
+ev-infra-app (PostgreSQL)
+       │
+       ▼
+  Sync Service (mcp_sync_service.py)
+       │  Generates text documents from structured data
+       │  POST to pgvector-api /ingest endpoint
+       ▼
+  pgvector-api (PostgreSQL + pgvector)
+       │
+       ▼
+  mcp_server.py ──► VS Code Copilot / Claude Desktop
+```
+
+**Backend:**
+- **Sync Service** (`app/services/mcp_sync_service.py`) — Generates natural-language summaries for 4 document types:
+  - `evinfra://sites/{id}` — Site Summary (location, electrical, chargers, vehicles)
+  - `evinfra://sites/{id}/fleet` — Fleet Profile (vehicle categories, miles, energy demand)
+  - `evinfra://projects/{id}` — Project Status (steps, per-site progress)
+  - `evinfra://priorities/latest` — Priority Rankings (top/bottom 20, score distribution)
+- **Sync Modes:**
+  - `sync_all()` — Full re-sync of all documents
+  - `sync_site(site_id)` — Incremental sync after site data changes
+  - `sync_project(project_id)` — Incremental sync after project status update
+  - `sync_priorities()` — Re-sync after priority recalculation
+- **Auto-Sync Hooks** (fire-and-forget, gated by `MCP_SYNC_ENABLED`):
+  - Site update → `sync_site()`
+  - Charger create/update/delete → `sync_site()`
+  - Equipment create → `sync_site()`
+  - Project status create/update → `sync_project()`
+  - Priority recalculate → `sync_priorities()`
+- **Sync Logging** — `mcp_sync_log` table tracks every sync (type, status, document count, errors)
+
+**API Endpoints:**
+- `POST /api/mcp/sync` — Trigger full sync (all sites, projects, priorities)
+- `POST /api/mcp/sync/site/:site_id` — Sync a single site's documents
+- `POST /api/mcp/sync/project/:project_id` — Sync a single project's documents
+- `GET /api/mcp/status` — Sync status (last sync time, document count, recent errors)
+
+**Frontend:**
+- **Settings Page** (`/settings`) — MCP Sync section with:
+  - Enabled/Disabled status badge
+  - Last sync info (time, type, result, document count)
+  - "Sync Now" button for manual full sync
+  - Recent errors log viewer
+
+**Configuration (`backend/.env`):**
+
+| Variable | Default | Description |
+|---|---|---|
+| `MCP_PGVECTOR_URL` | `http://127.0.0.1:8000` | pgvector-api base URL |
+| `MCP_API_KEY` | `""` | API key for pgvector-api authentication |
+| `MCP_SYNC_ENABLED` | `false` | Enable/disable MCP sync (opt-in, zero impact when off) |
+
+**Migration:** `alembic upgrade head` creates the `mcp_sync_log` table.
+
+**Key design decisions:**
+- Sync is disabled by default — zero performance impact until opted in
+- All sync hooks are fire-and-forget — failures are logged but never break the primary API
+- Documents use `evinfra://` URI scheme for scoped semantic search in MCP tools
+
 ## Recent Features (January 2026)
 
 ### Chargers Management

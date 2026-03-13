@@ -370,3 +370,71 @@ class File(db.Model):
             data['site_ids'] = [s.id for s in self.sites]
             data['sites'] = [{'id': s.id, 'name': s.name} for s in self.sites]
         return data
+
+
+class SitePriorityWeight(db.Model):
+    __tablename__ = 'site_priority_weights'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(64), nullable=False, unique=True)
+    vehicle_count_w = db.Column(db.Float, nullable=False, default=0.20)
+    annual_miles_w = db.Column(db.Float, nullable=False, default=0.15)
+    electrical_headroom_w = db.Column(db.Float, nullable=False, default=0.15)
+    charger_gap_w = db.Column(db.Float, nullable=False, default=0.20)
+    project_readiness_w = db.Column(db.Float, nullable=False, default=0.10)
+    energy_demand_w = db.Column(db.Float, nullable=False, default=0.10)
+    data_completeness_w = db.Column(db.Float, nullable=False, default=0.10)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+class SitePriorityScore(db.Model):
+    __tablename__ = 'site_priority_scores'
+
+    site_id = db.Column(db.Integer, db.ForeignKey('sites.id', ondelete='CASCADE'), primary_key=True)
+    weight_profile_id = db.Column(db.Integer, db.ForeignKey('site_priority_weights.id'), nullable=False)
+    composite_score = db.Column(db.Float)
+    vehicle_count_score = db.Column(db.Float)
+    annual_miles_score = db.Column(db.Float)
+    electrical_headroom_score = db.Column(db.Float)  # null if service data missing
+    charger_gap_score = db.Column(db.Float)
+    project_readiness_score = db.Column(db.Float)
+    energy_demand_score = db.Column(db.Float)
+    data_completeness_score = db.Column(db.Float)
+    investigation_urgency = db.Column(db.Float)
+    needs_survey = db.Column(db.Boolean, default=False)
+    calculated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    site = relationship('Site', backref='priority_score')
+    weight_profile = relationship('SitePriorityWeight')
+
+    def to_dict(self):
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        if self.site:
+            data['site_name'] = self.site.name
+            data['district'] = None
+            if self.site.departments:
+                data['district'] = self.site.departments[0].district
+        return data
+
+
+class McpSyncLog(db.Model):
+    __tablename__ = 'mcp_sync_log'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    sync_type = db.Column(db.String(32), nullable=False)  # full, site, project, priorities
+    status = db.Column(db.String(16), nullable=False, default='pending')  # pending, success, error
+    document_count = db.Column(db.Integer, default=0)
+    error_message = db.Column(db.Text)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    finished_at = db.Column(db.DateTime)
+
+    def to_dict(self):
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        for k in ('started_at', 'finished_at'):
+            if data.get(k):
+                data[k] = data[k].isoformat()
+        return data

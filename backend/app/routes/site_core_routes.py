@@ -248,6 +248,12 @@ def update_site(site_id):
         from ..extensions import db
         db.session.rollback()
         return {"error": f"Failed to update site: {e}"}, 500
+    # MCP sync hook (fire-and-forget)
+    try:
+        from ..services.mcp_sync_service import sync_site
+        sync_site(site_id)
+    except Exception:
+        pass
     return site.to_dict(), 200
 
 

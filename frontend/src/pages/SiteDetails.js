@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { updateSite, deleteSite, getSiteMetrics, getSite, getEquipmentEnergy, getVehicleCountsBySite, getSiteDepartments } from "../api";
+import { updateSite, deleteSite, getSiteMetrics, getSite, getEquipmentEnergy, getVehicleCountsBySite, getSiteDepartments, getSiteScore } from "../api";
 import EquipmentSection from "../components/EquipmentSection";
 import BillsSection from "../components/BillsSection";
 import SiteProjectsSection from "../components/SiteProjectsSection";
@@ -26,6 +26,7 @@ const SiteDetails = () => {
     const [showServices, setShowServices] = useState(() => JSON.parse(localStorage.getItem("showServices") ?? "true"));
     const [showDepartments, setShowDepartments] = useState(() => JSON.parse(localStorage.getItem("showDepartments") ?? "true"));
     const [departments, setDepartments] = useState([]);
+    const [priorityScore, setPriorityScore] = useState(null);
 
     useEffect(() => {
         getSite(id)
@@ -39,6 +40,9 @@ const SiteDetails = () => {
         getSiteDepartments(id)
             .then(res => setDepartments((res.data && res.data.items) || []))
             .catch(() => setDepartments([]));
+        getSiteScore(id)
+            .then(res => setPriorityScore(res.data))
+            .catch(() => setPriorityScore(null));
         setMetricsLoading(true);
         Promise.all([
             getSiteMetrics(id),
@@ -108,8 +112,29 @@ const SiteDetails = () => {
             <h2 className="page-header">{site.name ?? "Site Details"}</h2>
             <div className="flex-row gap-sm" style={{ marginBottom: '12px' }}>
                 <button className="btn" onClick={() => navigate(`/?focus=${id}`)}>View on Map</button>
-
             </div>
+            {priorityScore && priorityScore.needs_survey && (
+                <div style={{ padding: '10px 14px', marginBottom: 12, background: '#fff3e0', border: '1px solid #ffe0b2', borderRadius: 6 }}>
+                    <strong>⚠️ Site Survey Needed:</strong> This site has vehicles assigned but no electrical service data. Schedule a site visit to collect service information.
+                </div>
+            )}
+            {priorityScore && (
+                <div className="card" style={{ marginBottom: 12, padding: '10px 14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        <strong>Data Completeness:</strong>
+                        <div style={{ background: '#e0e0e0', borderRadius: 4, height: 14, width: 150, position: 'relative' }}>
+                            <div style={{ background: priorityScore.data_completeness_score >= 75 ? '#4caf50' : priorityScore.data_completeness_score >= 40 ? '#ff9800' : '#f44336', width: `${priorityScore.data_completeness_score}%`, height: '100%', borderRadius: 4 }} />
+                        </div>
+                        <span>{priorityScore.data_completeness_score?.toFixed(0)}%</span>
+                        <span style={{ color: '#888', fontSize: 12 }}>
+                            {priorityScore.data_completeness_score < 25 && '(Missing: service data)'}
+                            {priorityScore.data_completeness_score >= 25 && priorityScore.data_completeness_score < 60 && '(Missing: utility bills or usage data)'}
+                            {priorityScore.data_completeness_score >= 60 && priorityScore.data_completeness_score < 100 && '(Partially complete)'}
+                        </span>
+                        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#888' }}>Priority Score: <strong>{priorityScore.composite_score?.toFixed(1)}</strong></span>
+                    </div>
+                </div>
+            )}
             {editing ? (
                 <div className="card">
                     <div className="form-sections">

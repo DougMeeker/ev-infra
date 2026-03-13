@@ -312,6 +312,12 @@ def create_status(project_id, site_id):
                 'error': 'A status entry already exists for this date. Please choose a different date or time.'
             }), 409
         return jsonify({'error': 'Failed to create status: ' + str(e)}), 500
+    # MCP sync hook (fire-and-forget)
+    try:
+        from ..services.mcp_sync_service import sync_project
+        sync_project(project_id)
+    except Exception:
+        pass
     return jsonify(status.to_dict()), 201
 
 
@@ -357,7 +363,12 @@ def update_status(project_id, site_id, status_id):
                 'error': 'A status entry already exists for this date. Please choose a different date or time.'
             }), 409
         return jsonify({'error': 'Failed to update status: ' + str(e)}), 500
-    
+    # MCP sync hook (fire-and-forget)
+    try:
+        from ..services.mcp_sync_service import sync_project
+        sync_project(project_id)
+    except Exception:
+        pass
     return jsonify(status.to_dict()), 200
 
 

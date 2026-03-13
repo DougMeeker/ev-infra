@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { getSites } from '../api';
 
 /**
@@ -27,6 +27,15 @@ export default function SiteSelector({
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
+    const wrapRef = useRef(null);
+    const [dropRect, setDropRect] = useState(null);
+
+    const recalcRect = useCallback(() => {
+        if (wrapRef.current) {
+            const r = wrapRef.current.getBoundingClientRect();
+            setDropRect({ top: r.bottom + 2, left: r.left, width: r.width });
+        }
+    }, []);
 
     // Create a stable string representation of excludeSiteIds for the dependency
     const excludeIdsKey = useMemo(() => JSON.stringify(excludeSiteIds), [excludeSiteIds.join(',')]);
@@ -69,7 +78,7 @@ export default function SiteSelector({
     // Searchable variant (autocomplete style)
     if (variant === 'searchable') {
         return (
-            <div style={{ position: 'relative', ...style }}>
+            <div ref={wrapRef} style={{ position: 'relative', ...style }}>
                 <input
                     className="input"
                     placeholder={placeholder}
@@ -77,28 +86,29 @@ export default function SiteSelector({
                     onChange={e => {
                         setSearch(e.target.value);
                         setShowDropdown(true);
+                        recalcRect();
                     }}
                     onFocus={() => {
                         setSearch('');
                         setShowDropdown(true);
+                        recalcRect();
                     }}
                     onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
                     disabled={disabled}
                 />
-                {showDropdown && (
+                {showDropdown && dropRect && (
                     <div style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
+                        position: 'fixed',
+                        top: dropRect.top,
+                        left: dropRect.left,
+                        width: dropRect.width,
                         maxHeight: 300,
                         overflowY: 'auto',
                         backgroundColor: 'var(--card)',
                         border: '1px solid var(--card-border)',
                         borderRadius: '4px',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                        zIndex: 1000,
-                        marginTop: '2px'
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        zIndex: 10000
                     }}>
                         {filteredSites.length === 0 ? (
                             <div style={{ padding: '12px', color: 'var(--muted)', textAlign: 'center' }}>

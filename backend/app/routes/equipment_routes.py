@@ -49,7 +49,14 @@ def list_equipment(site_id):
 @site_bp.route("/<int:site_id>/equipment", methods=["POST"])
 def create_equipment(site_id):
     data = request.get_json() or {}
-    return svc_create_equipment(site_id, data)
+    result = svc_create_equipment(site_id, data)
+    if isinstance(result, tuple) and result[1] == 201:
+        try:
+            from ..services.mcp_sync_service import sync_site
+            sync_site(site_id)
+        except Exception:
+            pass
+    return result
 
 
 @site_bp.route("/equipment/<int:equipment_id>", methods=["GET"])

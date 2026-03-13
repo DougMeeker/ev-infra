@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { getAggregateMetrics, getProjects, getLatestProjectStatuses, getSitesForMap } from "../api";
+import { getAggregateMetrics, getProjects, getLatestProjectStatuses, getSitesForMap, getPriorityScores, getInvestigationList } from "../api";
 import { Link, useSearchParams } from "react-router-dom";
 import MapView from "../components/MapView";
 import StatusLegend from "../components/StatusLegend";
@@ -27,10 +27,21 @@ const Home = () => {
   // Automatically set color mode: 'status' when project selected, 'neutral' otherwise
   const markerColorMode = selectedProjectId ? 'status' : 'neutral';
 
+  // Priority widgets
+  const [topPriority, setTopPriority] = useState([]);
+  const [topInvestigation, setTopInvestigation] = useState([]);
+
   useEffect(() => {
     getProjects()
       .then((res) => setProjects(res.data))
       .catch((err) => console.error("Error fetching projects:", err));
+    // Load priority top-10 widgets
+    getPriorityScores({ page: 1, perPage: 10, sort: 'composite_score', order: 'desc' })
+      .then((res) => setTopPriority(res.data.items || []))
+      .catch(() => setTopPriority([]));
+    getInvestigationList({ page: 1, perPage: 10 })
+      .then((res) => setTopInvestigation(res.data.items || []))
+      .catch(() => setTopInvestigation([]));
   }, []);
 
   // Initialize focus from query param ?focus=<id>
@@ -222,6 +233,48 @@ const Home = () => {
           colorMode={markerColorMode}
         />
       </div>
+
+      {/* Priority Widgets */}
+      {(topPriority.length > 0 || topInvestigation.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 0 }}>
+          {topPriority.length > 0 && (
+            <div className="card" style={{ padding: '12px 16px' }}>
+              <h3 style={{ margin: '0 0 8px' }}>Top 10 Priority Sites</h3>
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                <thead><tr style={{ borderBottom: '1px solid #ddd' }}><th style={{ textAlign: 'left', padding: '4px' }}>#</th><th style={{ textAlign: 'left', padding: '4px' }}>Site</th><th style={{ textAlign: 'right', padding: '4px' }}>Score</th></tr></thead>
+                <tbody>
+                  {topPriority.map((s, i) => (
+                    <tr key={s.site_id} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                      <td style={{ padding: '3px 4px' }}>{i + 1}</td>
+                      <td style={{ padding: '3px 4px' }}><Link to={`/site/${s.site_id}`}>{s.site_name || `Site #${s.site_id}`}</Link></td>
+                      <td style={{ padding: '3px 4px', textAlign: 'right' }}>{s.composite_score?.toFixed(1)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <Link to="/priorities" style={{ fontSize: 12 }}>View all →</Link>
+            </div>
+          )}
+          {topInvestigation.length > 0 && (
+            <div className="card" style={{ padding: '12px 16px' }}>
+              <h3 style={{ margin: '0 0 8px' }}>Top 10 Needs Investigation</h3>
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                <thead><tr style={{ borderBottom: '1px solid #ddd' }}><th style={{ textAlign: 'left', padding: '4px' }}>#</th><th style={{ textAlign: 'left', padding: '4px' }}>Site</th><th style={{ textAlign: 'right', padding: '4px' }}>Urgency</th></tr></thead>
+                <tbody>
+                  {topInvestigation.map((s, i) => (
+                    <tr key={s.site_id} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                      <td style={{ padding: '3px 4px' }}>{i + 1}</td>
+                      <td style={{ padding: '3px 4px' }}><Link to={`/site/${s.site_id}`}>{s.site_name || `Site #${s.site_id}`}</Link></td>
+                      <td style={{ padding: '3px 4px', textAlign: 'right' }}>{s.investigation_urgency?.toFixed(1)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <Link to="/priorities" style={{ fontSize: 12 }}>View all →</Link>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card">
         <div className="flex-row gap-md align-center justify-between" style={{marginBottom:'10px'}}>

@@ -37,7 +37,7 @@ def list_vehicles():
     if site_id:
         q = q.filter(Equipment.site_id == _parse_int(site_id))
     if department_id:
-        q = q.filter(Equipment.department_id == department_id)
+        q = q.filter(Equipment.department_id.ilike(f"%{department_id}%"))
     if mc_code:
         q = q.filter(Equipment.mc_code == mc_code)
     if search:

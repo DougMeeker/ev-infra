@@ -383,8 +383,8 @@ export default function BillsSection({ siteId, onTotalsChange }) {
                     <td>{getService(bill.service_id).meter_number || getService(bill.service_id).utility || `Service #${bill.service_id}`}</td>
                     <td>{getService(bill.service_id).utility_account || `Account #${bill.service_id}`}</td>
                     <td>{bill.year}-{String(bill.month).padStart(2, '0')}</td>
-                    <td>{bill.energy_usage ?? '—'}</td>
-                    <td>{bill.max_power ?? '—'}</td>
+                    <td>{bill.energy_usage != null ? Number(bill.energy_usage).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
+                    <td>{bill.max_power != null ? Number(bill.max_power).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
                     <td style={{ display: 'flex', gap: '8px' }}>
                       <button className="btn btn-secondary" onClick={() => startEditBill(bill)}>Edit</button>
                       <button className="btn btn-danger" onClick={() => handleDeleteBill(bill.id)}>Delete</button>

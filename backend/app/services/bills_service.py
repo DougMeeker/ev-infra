@@ -104,6 +104,24 @@ def update_bill(bill_id, data):
     bill = UtilityBill.query.get(bill_id)
     if not bill or bill.is_deleted:
         return {"error": "Bill not found"}, 404
+
+    new_service = data.get("service_id", bill.service_id)
+    new_year = data.get("year", bill.year)
+    new_month = data.get("month", bill.month)
+
+    # If the date/service changed, check for a conflicting soft-deleted row
+    if (new_service != bill.service_id or new_year != bill.year or new_month != bill.month):
+        conflict = UtilityBill.query.filter_by(
+            service_id=new_service, year=new_year, month=new_month
+        ).filter(UtilityBill.id != bill_id).first()
+        if conflict:
+            if conflict.is_deleted:
+                # Remove the soft-deleted row so the unique constraint is freed
+                db.session.delete(conflict)
+                db.session.flush()
+            else:
+                return {"error": f"A bill already exists for {new_year}-{new_month:02d} on this service"}, 409
+
     for field in ["year", "month", "energy_usage", "max_power", "service_id"]:
         if field in data:
             setattr(bill, field, data[field])

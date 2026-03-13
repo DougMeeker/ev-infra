@@ -46,6 +46,11 @@ class Config:
         f"https://login.microsoftonline.com/{os.getenv('AZURE_AD_TENANT_ID', 'common')}/v2.0",
     )
 
+    # ── MCP Knowledge Base Sync ──────────────────────────────────────
+    MCP_PGVECTOR_URL = os.getenv("MCP_PGVECTOR_URL", "http://127.0.0.1:8000")
+    MCP_API_KEY = os.getenv("MCP_API_KEY", "")
+    MCP_SYNC_ENABLED = os.getenv("MCP_SYNC_ENABLED", "false").lower() == "true"
+
 class DevelopmentConfig(Config):
     DEBUG = True
     
@@ -58,6 +63,7 @@ class TestingConfig(Config):
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
     AZURE_AD_ENABLED = False  # auth always off in tests
+    MCP_SYNC_ENABLED = False   # sync off in tests
 
 def get_config(env):
     return {

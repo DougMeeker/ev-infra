@@ -334,3 +334,47 @@ export const deleteFile = (fileId) => axios.delete(`${API_BASE_URL}/files/${file
 export const updateFile = (fileId, payload) => axios.put(`${API_BASE_URL}/files/${fileId}`, payload);
 export const fileDownloadUrl = (fileId) => `${API_BASE_URL}/files/${fileId}/download`;
 export const fileViewUrl = (fileId) => `${API_BASE_URL}/files/${fileId}/view`;
+
+// ── Priority Model endpoints ─────────────────────────────────────────
+export const getPriorityScores = ({ page = 1, perPage = 25, sort = 'composite_score', order = 'desc', district, minScore, search, weightProfileId } = {}) => {
+	const params = new URLSearchParams({ page: String(page), per_page: String(perPage), sort, order });
+	if (district != null) params.append('district', String(district));
+	if (minScore != null) params.append('min_score', String(minScore));
+	if (search) params.append('search', search);
+	if (weightProfileId != null) params.append('weight_profile_id', String(weightProfileId));
+	return axios.get(`${API_BASE_URL}/priorities/scores?${params.toString()}`);
+};
+export const getSiteScore = (siteId) => axios.get(`${API_BASE_URL}/priorities/scores/${siteId}`);
+export const getInvestigationList = ({ page = 1, perPage = 25, district, search } = {}) => {
+	const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+	if (district != null) params.append('district', String(district));
+	if (search) params.append('search', search);
+	return axios.get(`${API_BASE_URL}/priorities/investigation?${params.toString()}`);
+};
+export const recalculatePriorities = (weightProfileId) =>
+	axios.post(`${API_BASE_URL}/priorities/recalculate`, weightProfileId ? { weight_profile_id: weightProfileId } : {});
+
+export const getWeightProfiles = () => axios.get(`${API_BASE_URL}/priorities/weights`);
+export const createWeightProfile = (data) => axios.post(`${API_BASE_URL}/priorities/weights`, data);
+export const updateWeightProfile = (id, data) => axios.put(`${API_BASE_URL}/priorities/weights/${id}`, data);
+export const deleteWeightProfile = (id) => axios.delete(`${API_BASE_URL}/priorities/weights/${id}`);
+
+export const exportPriorityScoresCsv = ({ district, minScore, search } = {}) => {
+	const params = new URLSearchParams();
+	if (district != null) params.append('district', String(district));
+	if (minScore != null) params.append('min_score', String(minScore));
+	if (search) params.append('search', search);
+	return `${API_BASE_URL}/priorities/scores/export?${params.toString()}`;
+};
+export const exportInvestigationCsv = ({ district, search } = {}) => {
+	const params = new URLSearchParams();
+	if (district != null) params.append('district', String(district));
+	if (search) params.append('search', search);
+	return `${API_BASE_URL}/priorities/investigation/export?${params.toString()}`;
+};
+
+// ── MCP Knowledge Base Sync endpoints ────────────────────────────────
+export const mcpTriggerFullSync = () => axios.post(`${API_BASE_URL}/mcp/sync`);
+export const mcpSyncSite = (siteId) => axios.post(`${API_BASE_URL}/mcp/sync/site/${siteId}`);
+export const mcpSyncProject = (projectId) => axios.post(`${API_BASE_URL}/mcp/sync/project/${projectId}`);
+export const mcpGetStatus = () => axios.get(`${API_BASE_URL}/mcp/status`);

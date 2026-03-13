@@ -25,7 +25,7 @@ const Header = () => {
             Chargers
           </NavLink>
           <NavLink to="/vehicles" style={({ isActive }) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration: 'none' })}>
-            Vehicles
+            Equipment
           </NavLink>
           <NavLink to="/catalog" style={({ isActive }) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration: 'none' })}>
             Catalog
@@ -35,6 +35,12 @@ const Header = () => {
           </NavLink>
           <NavLink to="/departments" style={({ isActive }) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration: 'none' })}>
             Departments
+          </NavLink>
+          <NavLink to="/priorities" style={({ isActive }) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration: 'none' })}>
+            Priorities
+          </NavLink>
+          <NavLink to="/settings" style={({ isActive }) => ({ color: isActive ? 'var(--primary)' : 'var(--link)', textDecoration: 'none' })}>
+            Settings
           </NavLink>
         </nav>
         {authEnabled && user && (

@@ -12,6 +12,8 @@ from .fleet_routes import fleet_bp
 from .department_routes import department_bp
 from .files_routes import files_bp
 from .service_routes import bp as service_bp
+from .priority_routes import priority_bp
+from .mcp_routes import mcp_bp
 
 def register_routes(app: Flask):
     # site_bp already has url_prefix in its declaration
@@ -22,6 +24,8 @@ def register_routes(app: Flask):
     app.register_blueprint(department_bp, url_prefix="/api/departments")
     app.register_blueprint(files_bp)
     app.register_blueprint(service_bp)
+    app.register_blueprint(priority_bp)
+    app.register_blueprint(mcp_bp)
 
     # Provide a simple API root/health response to avoid 404 on /api/
     def _api_root():

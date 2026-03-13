@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getDepartments,
@@ -6,71 +6,8 @@ import {
   updateDepartment,
   deleteDepartment,
   assignDepartmentSite,
-  searchSites,
 } from '../api';
-
-// ─── Inline site-search combobox ─────────────────────────────────────────────
-function SiteCombo({ onSelect, onCancel }) {
-  const [q, setQ] = useState('');
-  const [options, setOptions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const timerRef = useRef(null);
-  const inputRef = useRef(null);
-
-  useEffect(() => { inputRef.current?.focus(); }, []);
-
-  const search = useCallback((val) => {
-    clearTimeout(timerRef.current);
-    if (!val.trim()) { setOptions([]); return; }
-    timerRef.current = setTimeout(() => {
-      setLoading(true);
-      searchSites(val)
-        .then(res => setOptions((res.data.data || []).slice(0, 12)))
-        .catch(() => setOptions([]))
-        .finally(() => setLoading(false));
-    }, 280);
-  }, []);
-
-  const handleChange = (e) => {
-    const v = e.target.value;
-    setQ(v);
-    search(v);
-  };
-
-  return (
-    <div style={{ position: 'relative', display: 'inline-block', minWidth: 220 }}>
-      <input
-        ref={inputRef}
-        className="input"
-        style={{ width: '100%' }}
-        placeholder="Type site name…"
-        value={q}
-        onChange={handleChange}
-        onKeyDown={e => { if (e.key === 'Escape') onCancel(); }}
-      />
-      {loading && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 4, padding: '6px 10px', fontSize: '0.8rem', color: '#999', zIndex: 100 }}>
-          Searching…
-        </div>
-      )}
-      {!loading && options.length > 0 && (
-        <ul style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 4, margin: 0, padding: 0, listStyle: 'none', zIndex: 100, maxHeight: 220, overflowY: 'auto' }}>
-          {options.map(s => (
-            <li
-              key={s.id}
-              style={{ padding: '6px 10px', cursor: 'pointer', fontSize: '0.85rem', borderBottom: '1px solid var(--card-border)' }}
-              onMouseDown={e => { e.preventDefault(); onSelect(s); }}
-            >
-              <strong>{s.name}</strong>
-              {s.city && <span style={{ color: '#999', marginLeft: 6 }}>{s.city}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-      <button className="btn btn-secondary" style={{ marginLeft: 4 }} onClick={onCancel}>Cancel</button>
-    </div>
-  );
-}
+import SiteSelector from '../components/SiteSelector';
 
 // ─── Create form ─────────────────────────────────────────────────────────────
 function CreateForm({ onCreate }) {
@@ -249,24 +186,24 @@ const DepartmentsManager = () => {
       {/* ── Filter bar ── */}
       <div className="card" style={{ marginBottom: 16 }}>
         <form onSubmit={handleSearch}>
-          <div className="flex-row gap-sm" style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 200 }}>
+          <div className="flex-row gap-md" style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ margin: 10, flex: 1 }}>
               <label>Search (code or name)</label>
               <input className="input" style={{ width: '100%' }} placeholder="e.g. 01-0022  or  TRAINING" value={q} onChange={e => setQ(e.target.value)} />
             </div>
-            <div className="form-group" style={{ margin: 0, width: 100 }}>
+            <div className="form-group" style={{ margin: 10 }}>
               <label>District</label>
               <input className="input" style={{ width: '100%' }} placeholder="All" value={district} onChange={e => setDistrict(e.target.value)} />
             </div>
-            <div className="form-group" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 2 }}>
-              <input type="checkbox" id="unassigned" checked={unassigned} onChange={e => setUnassigned(e.target.checked)} />
-              <label htmlFor="unassigned" style={{ margin: 0, cursor: 'pointer' }}>Unassigned only</label>
-            </div>
-            <div className="form-group" style={{ margin: 0, width: 90 }}>
+            <div className="form-group" style={{ margin: 10 }}>
               <label>Per page</label>
               <select className="input" value={perPage} onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}>
                 {PAGE_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
+            </div>
+            <div className="form-group" style={{ margin: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <label htmlFor="unassigned" style={{ cursor: 'pointer' }}>Unassigned only</label>
+              <input type="checkbox" id="unassigned" checked={unassigned} onChange={e => setUnassigned(e.target.checked)} style={{ marginTop: 6 }} />
             </div>
             <button className="btn" type="submit" disabled={loading}>Search</button>
             <button className="btn btn-secondary" type="button" onClick={clearFilters}>Clear</button>
@@ -344,10 +281,19 @@ const DepartmentsManager = () => {
                     {/* Site assignment */}
                     <td>
                       {isAssigning ? (
-                        <SiteCombo
-                          onSelect={(site) => handleSiteSelect(row.id, site)}
-                          onCancel={() => setAssigningId(null)}
-                        />
+                        <div className="flex-row gap-sm align-center">
+                          <SiteSelector
+                            value={null}
+                            onChange={(siteId) => {
+                              if (siteId) handleSiteSelect(row.id, { id: siteId });
+                              setAssigningId(null);
+                            }}
+                            variant="searchable"
+                            placeholder="Search site..."
+                            style={{ minWidth: 220 }}
+                          />
+                          <button className="btn btn-secondary" onClick={() => setAssigningId(null)}>Cancel</button>
+                        </div>
                       ) : row.site_id ? (
                         <span className="flex-row gap-sm align-center" style={{ flexWrap: 'nowrap' }}>
                           <Link to={`/site/${row.site_id}`} style={{ fontSize: '0.85rem' }}>
