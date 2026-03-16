@@ -10,6 +10,7 @@ from datetime import datetime
 import requests
 from flask import current_app
 from sqlalchemy import func
+from typing import Optional
 
 from ..extensions import db
 from ..models import (
@@ -93,7 +94,7 @@ def _bulk_purge_evinfra() -> None:
         resp.raise_for_status()
 
 
-def _log_sync(sync_type: str, doc_count: int = 0, error: str | None = None):
+def _log_sync(sync_type: str, doc_count: int = 0, error: Optional[str] = None):
     """Persist a sync log entry."""
     entry = McpSyncLog(
         sync_type=sync_type,
