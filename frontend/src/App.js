@@ -15,6 +15,7 @@ import SitesManager from './pages/SitesManager';
 import FilesPage from './pages/Files';
 import DepartmentsManager from './pages/DepartmentsManager';
 import PriorityDashboard from './pages/PriorityDashboard';
+import FinancialTracker from './pages/FinancialTracker';
 import Settings from './pages/Settings';
 import { RequireAuth } from './AuthProvider';
 
@@ -42,6 +43,7 @@ function App() {
         <Route path="/files" element={<FilesPage />} />
         <Route path="/departments" element={<DepartmentsManager />} />
         <Route path="/priorities" element={<PriorityDashboard />} />
+        <Route path="/financials" element={<FinancialTracker />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
       </RequireAuth>

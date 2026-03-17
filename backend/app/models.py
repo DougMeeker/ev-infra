@@ -84,7 +84,13 @@ class Service(db.Model):
     
     # Optional notes for differentiating services
     notes = db.Column(db.Text)
-    
+
+    # C-4: Utility interconnection tracking (Phase 5)
+    interconnection_application_date = db.Column(db.Date)
+    interconnection_agreement_date = db.Column(db.Date)
+    meter_install_date = db.Column(db.Date)
+    rate_schedule = db.Column(db.String(32))
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_deleted = db.Column(db.Boolean, default=False)
@@ -94,7 +100,12 @@ class Service(db.Model):
     bills = relationship('UtilityBill', back_populates='service', cascade='all, delete-orphan')
 
     def to_dict(self):
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        # Serialize date fields
+        for k in ('interconnection_application_date', 'interconnection_agreement_date', 'meter_install_date'):
+            if data.get(k) is not None:
+                data[k] = data[k].isoformat()
+        return data
 
 
 class UtilityBill(db.Model):
@@ -212,6 +223,10 @@ class Project(db.Model):
     name = db.Column(db.String(128), nullable=False, unique=True)
     description = db.Column(db.Text)
     is_deleted = db.Column(db.Boolean, default=False)
+    # C-2: Budget tracking fields (Phase 5)
+    budget_allocated = db.Column(db.Numeric, nullable=False, default=0.0)
+    budget_committed = db.Column(db.Numeric, nullable=False, default=0.0)
+    budget_spent = db.Column(db.Numeric, nullable=False, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -418,6 +433,94 @@ class SitePriorityScore(db.Model):
             data['district'] = None
             if self.site.departments:
                 data['district'] = self.site.departments[0].district
+        return data
+
+
+# ── Phase 5: Financial & Milestone Tracking ──────────────────────────────────
+
+# Standard milestone types for EV charging infrastructure projects
+MILESTONE_TYPES = [
+    'Site Assessment Complete',
+    'Design Complete',
+    'Permit Submitted',
+    'Permit Approved',
+    'Construction Start',
+    'Inspection Passed',
+    'Utility Interconnection',
+    'Energization Date',
+]
+
+
+class SiteCostEstimate(db.Model):
+    """Detailed per-site cost breakdown (C-1). One row per site+project."""
+    __tablename__ = 'site_cost_estimates'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    site_id = db.Column(db.Integer, db.ForeignKey('sites.id', ondelete='CASCADE'), nullable=False, index=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='SET NULL'), nullable=True, index=True)
+    charger_hardware = db.Column(db.Numeric, nullable=False, default=0.0)
+    electrical_upgrade = db.Column(db.Numeric, nullable=False, default=0.0)
+    construction_civil = db.Column(db.Numeric, nullable=False, default=0.0)
+    utility_interconnection = db.Column(db.Numeric, nullable=False, default=0.0)
+    design_engineering = db.Column(db.Numeric, nullable=False, default=0.0)
+    contingency = db.Column(db.Numeric, nullable=False, default=0.0)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    site = relationship('Site', backref=db.backref('cost_estimates', cascade='all, delete-orphan'))
+    project = relationship('Project', backref=db.backref('cost_estimates', lazy='dynamic'))
+
+    __table_args__ = (
+        db.UniqueConstraint('site_id', 'project_id', name='uq_cost_estimate_site_project'),
+    )
+
+    @property
+    def total(self):
+        return (self.charger_hardware or 0) + (self.electrical_upgrade or 0) + \
+               (self.construction_civil or 0) + (self.utility_interconnection or 0) + \
+               (self.design_engineering or 0) + (self.contingency or 0)
+
+    def to_dict(self):
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        data['total'] = self.total
+        if self.site:
+            data['site_name'] = self.site.name
+        if self.project:
+            data['project_name'] = self.project.name
+        return data
+
+
+class Milestone(db.Model):
+    """Construction milestone per project+site (C-3)."""
+    __tablename__ = 'milestones'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+    site_id = db.Column(db.Integer, db.ForeignKey('sites.id', ondelete='CASCADE'), nullable=False, index=True)
+    milestone_type = db.Column(db.String(64), nullable=False)
+    target_date = db.Column(db.Date)
+    actual_date = db.Column(db.Date)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship('Project', backref=db.backref('milestones', lazy='dynamic'))
+    site = relationship('Site', backref=db.backref('milestones', lazy='dynamic'))
+
+    __table_args__ = (
+        db.UniqueConstraint('project_id', 'site_id', 'milestone_type', name='uq_milestone_project_site_type'),
+    )
+
+    def to_dict(self):
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        for k in ('target_date', 'actual_date'):
+            if data.get(k) is not None:
+                data[k] = data[k].isoformat()
+        if self.site:
+            data['site_name'] = self.site.name
+        if self.project:
+            data['project_name'] = self.project.name
         return data
 
 

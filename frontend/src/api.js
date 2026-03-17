@@ -378,3 +378,36 @@ export const mcpTriggerFullSync = () => axios.post(`${API_BASE_URL}/mcp/sync`);
 export const mcpSyncSite = (siteId) => axios.post(`${API_BASE_URL}/mcp/sync/site/${siteId}`);
 export const mcpSyncProject = (projectId) => axios.post(`${API_BASE_URL}/mcp/sync/project/${projectId}`);
 export const mcpGetStatus = () => axios.get(`${API_BASE_URL}/mcp/status`);
+
+// ── Phase 5: Financial & Milestone Tracking endpoints ─────────────────
+
+// Cost Estimates (C-1)
+export const getCostEstimates = ({ siteId, projectId } = {}) => {
+	const params = new URLSearchParams();
+	if (siteId) params.append('site_id', String(siteId));
+	if (projectId != null) params.append('project_id', String(projectId));
+	return axios.get(`${API_BASE_URL}/financials/cost-estimates?${params.toString()}`);
+};
+export const getCostEstimate = (id) => axios.get(`${API_BASE_URL}/financials/cost-estimates/${id}`);
+export const createCostEstimate = (payload) => axios.post(`${API_BASE_URL}/financials/cost-estimates`, payload);
+export const updateCostEstimate = (id, payload) => axios.put(`${API_BASE_URL}/financials/cost-estimates/${id}`, payload);
+export const deleteCostEstimate = (id) => axios.delete(`${API_BASE_URL}/financials/cost-estimates/${id}`);
+
+// Milestones (C-3)
+export const getMilestones = ({ projectId, siteId } = {}) => {
+	const params = new URLSearchParams();
+	if (projectId) params.append('project_id', String(projectId));
+	if (siteId) params.append('site_id', String(siteId));
+	return axios.get(`${API_BASE_URL}/financials/milestones?${params.toString()}`);
+};
+export const initializeMilestones = (projectId, siteId) =>
+	axios.post(`${API_BASE_URL}/financials/milestones/initialize`, { project_id: projectId, site_id: siteId });
+export const createMilestone = (payload) => axios.post(`${API_BASE_URL}/financials/milestones`, payload);
+export const updateMilestone = (id, payload) => axios.put(`${API_BASE_URL}/financials/milestones/${id}`, payload);
+export const deleteMilestone = (id) => axios.delete(`${API_BASE_URL}/financials/milestones/${id}`);
+export const getMilestoneTypes = () => axios.get(`${API_BASE_URL}/financials/milestone-types`);
+
+// Budget Summary (C-2)
+export const getBudgetSummary = () => axios.get(`${API_BASE_URL}/financials/budget-summary`);
+export const updateProjectBudget = (projectId, payload) =>
+	axios.put(`${API_BASE_URL}/financials/projects/${projectId}/budget`, payload);

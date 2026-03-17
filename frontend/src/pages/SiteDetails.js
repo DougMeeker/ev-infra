@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { updateSite, deleteSite, getSiteMetrics, getSite, getEquipmentEnergy, getVehicleCountsBySite, getSiteDepartments, getSiteScore } from "../api";
+import { updateSite, deleteSite, getSiteMetrics, getSite, getEquipmentEnergy, getVehicleCountsBySite, getSiteDepartments, getSiteScore, getCostEstimates, createCostEstimate, updateCostEstimate, deleteCostEstimate, getProjects, getMilestones, initializeMilestones, updateMilestone } from "../api";
 import EquipmentSection from "../components/EquipmentSection";
 import BillsSection from "../components/BillsSection";
 import SiteProjectsSection from "../components/SiteProjectsSection";
 import ChargersSection from "../components/ChargersSection";
 import FilesSection from "../components/FilesSection";
 import ServicesSection from "../components/ServicesSection";
+import SiteCostsSection from "../components/SiteCostsSection";
 
 const SiteDetails = () => {
     const { id } = useParams();
@@ -27,6 +28,7 @@ const SiteDetails = () => {
     const [showDepartments, setShowDepartments] = useState(() => JSON.parse(localStorage.getItem("showDepartments") ?? "true"));
     const [departments, setDepartments] = useState([]);
     const [priorityScore, setPriorityScore] = useState(null);
+    const [showCosts, setShowCosts] = useState(() => JSON.parse(localStorage.getItem("showCosts") ?? "false"));
 
     useEffect(() => {
         getSite(id)
@@ -314,6 +316,15 @@ const SiteDetails = () => {
             </h3>
             {showFiles && (
                 <FilesSection siteId={id} />
+            )}
+
+            {/* Cost Estimates & Milestones Section */}
+            <hr />
+            <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => { setShowCosts(v => !v); localStorage.setItem('showCosts', JSON.stringify(!showCosts)); }}>
+                {showCosts ? '▼' : '▶'} Cost Estimates &amp; Milestones
+            </h3>
+            {showCosts && (
+                <SiteCostsSection siteId={id} />
             )}
         </div>
     );
