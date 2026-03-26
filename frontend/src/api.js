@@ -183,6 +183,7 @@ export const uploadCatalogFile = (file) => {
 	formData.append('file', file);
 	return axios.post(`${API_BASE_URL}/catalog/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 };
+export const createCatalogEntry = (payload) => axios.post(`${API_BASE_URL}/catalog/`, payload);
 export const deleteCatalogEntry = (mcCode) => axios.delete(`${API_BASE_URL}/catalog/${mcCode}`);
 export const mapMcCategories = () => axios.post(`${API_BASE_URL}/catalog/map-mc-categories`);
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { getCatalog, updateCatalogEntry, uploadCatalogFile, refreshCatalog, deleteCatalogEntry } from '../api';
+import { getCatalog, createCatalogEntry, updateCatalogEntry, uploadCatalogFile, refreshCatalog, deleteCatalogEntry } from '../api';
 
 const CatalogManager = () => {
   const [rows, setRows] = useState([]);
@@ -7,12 +7,39 @@ const CatalogManager = () => {
   const [filter, setFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [savingMC, setSavingMC] = useState(null);
+  const [editingMC, setEditingMC] = useState(null);
+  const [editDraft, setEditDraft] = useState({});
   const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState(null);
   const fileInputRef = useRef(null);
   const [sortField, setSortField] = useState('mc_code');
   const [sortDir, setSortDir] = useState('asc');
   const [categoryOptions, setCategoryOptions] = useState([]);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newRecord, setNewRecord] = useState({ mc_code: '', description: '', status: 'A', equipment_category_code: '' });
+  const [creating, setCreating] = useState(false);
+
+  const handleCreate = () => {
+    if (!newRecord.mc_code.trim()) { alert('MC code is required'); return; }
+    setCreating(true);
+    const payload = {
+      mc_code: newRecord.mc_code.trim(),
+      description: newRecord.description.trim() || null,
+      status: newRecord.status.trim() || null,
+      equipment_category_code: newRecord.equipment_category_code || null,
+    };
+    createCatalogEntry(payload)
+      .then(() => {
+        setNewRecord({ mc_code: '', description: '', status: 'A', equipment_category_code: '' });
+        setShowCreateForm(false);
+        load();
+      })
+      .catch(err => {
+        const msg = err.response?.data?.error || 'Create failed';
+        alert(msg);
+      })
+      .finally(() => setCreating(false));
+  };
 
   const load = () => {
     setLoading(true);
@@ -24,48 +51,48 @@ const CatalogManager = () => {
   useEffect(() => { load(); }, []);
   useEffect(() => {
     // Build category options from loaded rows (category.code or equipment_category_code)
-    const codes = new Set();
+    const map = new Map();
     rows.forEach(r => {
-      const c1 = (r.category && r.category.code) ? String(r.category.code).trim() : null;
-      const c2 = r.equipment_category_code ? String(r.equipment_category_code).trim() : null;
-      if (c1) codes.add(c1);
-      if (c2) codes.add(c2);
+      if (r.category && r.category.code) {
+        const code = String(r.category.code).trim();
+        if (!map.has(code)) map.set(code, r.category.description || code);
+      }
+      if (r.equipment_category_code) {
+        const code = String(r.equipment_category_code).trim();
+        if (!map.has(code)) map.set(code, code);
+      }
     });
     // Provide common defaults if none yet
-    if (codes.size === 0) {
-      ['PV','LC','LDU','LDT','MD','HD','SN','OT','TR','LM','IN','CO','RM'].forEach(c => codes.add(c));
+    if (map.size === 0) {
+      ['PV','LC','LDU','LDT','MD','HD','SN','OT','TR','LM','IN','CO','RM'].forEach(c => map.set(c, c));
     }
-    setCategoryOptions(Array.from(codes).sort());
+    setCategoryOptions(Array.from(map.entries()).map(([code, description]) => ({ code, description })).sort((a, b) => a.code.localeCompare(b.code)));
   }, [rows]);
 
-  const handleEnergyChange = (mc, value) => {
-    setRows(prev => prev.map(r => r.mc_code === mc ? { ...r, energy_per_mile: value } : r));
-  };
-  const handleDescChange = (mc, value) => {
-    setRows(prev => prev.map(r => r.mc_code === mc ? { ...r, description: value } : r));
-  };
-  const handleStatusChange = (mc, value) => {
-    setRows(prev => prev.map(r => r.mc_code === mc ? { ...r, status: value } : r));
-  };
-  const handleCategoryChange = (mc, value) => {
-    const v = value === '' ? null : value;
-    setRows(prev => prev.map(r => r.mc_code === mc ? { ...r, equipment_category_code: v } : r));
+  const startEdit = (row) => {
+    setEditingMC(row.mc_code);
+    setEditDraft({
+      description: row.description || '',
+      status: row.status || '',
+      equipment_category_code: row.equipment_category_code || '',
+      energy_per_mile: row.energy_per_mile ?? '',
+    });
   };
 
-  const saveEntry = (row) => {
-    setSavingMC(row.mc_code);
-    const payload = {};
-    if (row.energy_per_mile !== '' && row.energy_per_mile != null) {
-      const num = parseFloat(row.energy_per_mile);
-      if (!Number.isNaN(num)) payload.energy_per_mile = num; else alert('Energy per mile must be numeric');
+  const cancelEdit = () => { setEditingMC(null); setEditDraft({}); };
+
+  const saveEntry = (mc_code) => {
+    setSavingMC(mc_code);
+    const payload = { description: editDraft.description, status: editDraft.status, equipment_category_code: editDraft.equipment_category_code || null };
+    if (editDraft.energy_per_mile !== '' && editDraft.energy_per_mile != null) {
+      const num = parseFloat(editDraft.energy_per_mile);
+      if (!Number.isNaN(num)) payload.energy_per_mile = num;
+      else { alert('Energy per mile must be numeric'); setSavingMC(null); return; }
     } else {
       payload.energy_per_mile = null;
     }
-    payload.description = row.description;
-    payload.status = row.status;
-    payload.equipment_category_code = row.equipment_category_code ?? null;
-    updateCatalogEntry(row.mc_code, payload)
-      .then(() => load())
+    updateCatalogEntry(mc_code, payload)
+      .then(() => { setEditingMC(null); setEditDraft({}); load(); })
       .catch(err => { console.error('Save failed', err); alert('Save failed'); })
       .finally(() => setSavingMC(null));
   };
@@ -148,7 +175,44 @@ const CatalogManager = () => {
     <div className="container" style={{ paddingTop: '24px' }}>
       <h2 className="page-header">Catalog Manager</h2>
       <div className="card" style={{ marginBottom: '16px' }}>
-        <h4 style={{ marginTop:0 }}>Import / Refresh</h4>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h4 style={{ marginTop: 0, marginBottom: 0 }}>Import / Refresh</h4>
+          <button className="btn" onClick={() => setShowCreateForm(f => !f)}>
+            {showCreateForm ? 'Cancel' : '+ New MC Record'}
+          </button>
+        </div>
+        {showCreateForm && (
+          <div style={{ marginTop: 16, padding: 16, background: '#f8f9fa', borderRadius: 6, border: '1px solid #dee2e6' }}>
+            <h5 style={{ marginTop: 0 }}>Create New MC Record</h5>
+            <div className="flex-row gap-sm" style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>MC Code *</label>
+                <input className="input" style={{ width: 120 }} placeholder="e.g. 12345" value={newRecord.mc_code} onChange={e => setNewRecord(r => ({ ...r, mc_code: e.target.value }))} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>Description</label>
+                <input className="input" style={{ width: 260 }} placeholder="Equipment description" value={newRecord.description} onChange={e => setNewRecord(r => ({ ...r, description: e.target.value }))} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>Status</label>
+                <input className="input" style={{ width: 80 }} placeholder="A" value={newRecord.status} onChange={e => setNewRecord(r => ({ ...r, status: e.target.value }))} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>Equipment Category</label>
+                <select className="input" style={{ width: 160 }} value={newRecord.equipment_category_code} onChange={e => setNewRecord(r => ({ ...r, equipment_category_code: e.target.value }))}>
+                  <option value="">(none)</option>
+                  {categoryOptions.map(({ code, description }) => (
+                    <option key={code} value={code}>{description && description !== code ? `${code} - ${description}` : code}</option>
+                  ))}
+                </select>
+              </div>
+              <button className="btn" disabled={creating} onClick={handleCreate}>
+                {creating ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          </div>
+        )}
+        <div style={{ marginTop: 16 }}>
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
           <input
             ref={fileInputRef}
@@ -162,12 +226,13 @@ const CatalogManager = () => {
           <input className="input" style={{ width:'220px' }} placeholder="Filter MC / description" value={filter} onChange={e=>setFilter(e.target.value)} />
           <select className="input" style={{ width:'180px' }} value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)}>
             <option value="">Filter by category</option>
-            {categoryOptions.map(code => (
-              <option key={code} value={code}>{code}</option>
+            {categoryOptions.map(({ code, description }) => (
+              <option key={code} value={code}>{description && description !== code ? `${code} - ${description}` : code}</option>
             ))}
           </select>
         </div>
         <small style={{ display:'block', marginTop:'8px' }}>Upload replaces description/status/revised_date; if CSV includes an Energy Use column, energy_per_mile is updated as well (kWh/mile).</small>
+        </div>
       </div>
       {loading ? <p>Loading...</p> : (
         <table className="table">
@@ -180,43 +245,65 @@ const CatalogManager = () => {
               <th onClick={()=>toggleSort('revised_date')} style={{ cursor:'pointer' }}>Revised {sortField==='revised_date' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
               <th>Category Description</th>
               <th onClick={()=>toggleSort('energy_per_mile')} style={{ width:'130px', cursor:'pointer' }}>Energy / Mile (kWh) {sortField==='energy_per_mile' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
-              <th style={{ width:'110px' }}>Actions</th>
+              <th style={{ width:'140px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map(r => (
-              <tr key={r.mc_code}>
-                <td>{r.mc_code}</td>
-                <td>
-                  <input className="input" value={r.description || ''} onChange={e=>handleDescChange(r.mc_code, e.target.value)} />
-                </td>
-                <td>
-                  <input className="input" value={r.status || ''} onChange={e=>handleStatusChange(r.mc_code, e.target.value)} />
-                </td>
-                <td>
-                  <select className="input" value={r.equipment_category_code ?? ''} onChange={e=>handleCategoryChange(r.mc_code, e.target.value)}>
-                    <option value="">(none)</option>
-                    {categoryOptions.map(code => (
-                      <option key={code} value={code}>{code}</option>
-                    ))}
-                  </select>
-                </td>
-                <td>{r.revised_date || '—'}</td>
-                <td>{(r.category && r.category.description) || '—'}</td>
-                <td>
-                  <input className="input" style={{ width:'120px' }} value={r.energy_per_mile ?? ''} onChange={e=>handleEnergyChange(r.mc_code, e.target.value)} />
-                </td>
-                <td style={{ display:'flex', gap:'4px' }}>
-                  <button className="btn" disabled={savingMC===r.mc_code} onClick={()=>saveEntry(r)}>{savingMC===r.mc_code?'Saving...':'Save'}</button>
-                  <button className="btn btn-danger" onClick={() => {
-                    if (!window.confirm(`Delete MC ${r.mc_code}? (Must not be in use)`)) return;
-                    deleteCatalogEntry(r.mc_code)
-                      .then(res => { alert(res.data.message || 'Deleted'); load(); })
-                      .catch(err => { console.error('Delete failed', err); alert(err.response?.data?.error || 'Delete failed'); });
-                  }}>Delete</button>
-                </td>
-              </tr>
-            ))}
+            {sorted.map(r => {
+              const isEditing = editingMC === r.mc_code;
+              return (
+                <tr key={r.mc_code}>
+                  <td>{r.mc_code}</td>
+                  <td>
+                    {isEditing
+                      ? <input className="input" value={editDraft.description} onChange={e => setEditDraft(d => ({ ...d, description: e.target.value }))} />
+                      : (r.description || '—')}
+                  </td>
+                  <td>
+                    {isEditing
+                      ? <input className="input" style={{ width: 60 }} value={editDraft.status} onChange={e => setEditDraft(d => ({ ...d, status: e.target.value }))} />
+                      : (r.status || '—')}
+                  </td>
+                  <td>
+                    {isEditing
+                      ? (
+                        <select className="input" value={editDraft.equipment_category_code} onChange={e => setEditDraft(d => ({ ...d, equipment_category_code: e.target.value }))}>
+                          <option value="">(none)</option>
+                          {categoryOptions.map(({ code, description }) => (
+                            <option key={code} value={code}>{description && description !== code ? `${code} - ${description}` : code}</option>
+                          ))}
+                        </select>
+                      )
+                      : (r.equipment_category_code || '—')}
+                  </td>
+                  <td>{r.revised_date || '—'}</td>
+                  <td>{(r.category && r.category.description) || '—'}</td>
+                  <td>
+                    {isEditing
+                      ? <input className="input" style={{ width: 110 }} value={editDraft.energy_per_mile} onChange={e => setEditDraft(d => ({ ...d, energy_per_mile: e.target.value }))} />
+                      : (r.energy_per_mile != null ? r.energy_per_mile : '—')}
+                  </td>
+                  <td style={{ display: 'flex', gap: '4px' }}>
+                    {isEditing ? (
+                      <>
+                        <button className="btn" disabled={savingMC === r.mc_code} onClick={() => saveEntry(r.mc_code)}>{savingMC === r.mc_code ? 'Saving...' : 'Save'}</button>
+                        <button className="btn btn-secondary" onClick={cancelEdit}>Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn btn-secondary" onClick={() => startEdit(r)}>Edit</button>
+                        <button className="btn btn-danger" onClick={() => {
+                          if (!window.confirm(`Delete MC ${r.mc_code}? (Must not be in use)`)) return;
+                          deleteCatalogEntry(r.mc_code)
+                            .then(res => { alert(res.data.message || 'Deleted'); load(); })
+                            .catch(err => { console.error('Delete failed', err); alert(err.response?.data?.error || 'Delete failed'); });
+                        }}>Delete</button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

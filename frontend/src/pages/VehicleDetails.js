@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getEquipmentDetails, updateEquipmentDetails, getEquipmentUsage, upsertEquipmentUsage, deleteEquipmentItem, getCatalog } from '../api';
+import { getEquipmentDetails, updateEquipmentDetails, getEquipmentUsage, upsertEquipmentUsage, deleteEquipmentItem } from '../api';
 import SiteSelector from '../components/SiteSelector';
 
 const lastYear = new Date().getFullYear() - 1;
@@ -9,7 +9,6 @@ const VehicleDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [vehicle, setVehicle] = useState(null);
-  const setCatalog = useState([]);
   const [editing, setEditing] = useState({ equipment_id: '', site_id: '', mc_code: '', department_id: '', annual_miles: '', driving_hours: '' });
   const [usage, setUsage] = useState([]);
   const [newUsage, setNewUsage] = useState({ year: String(lastYear), month: '12', miles: '', driving_hours: '', days_utilized: '' });
@@ -17,13 +16,8 @@ const VehicleDetails = () => {
 
   const load = async () => {
     try {
-      // Load metadata and reference data immediately
-      const [vehRes, catRes] = await Promise.all([
-        getEquipmentDetails(id),
-        getCatalog(),
-      ]);
+      const vehRes = await getEquipmentDetails(id);
       setVehicle(vehRes.data);
-      setCatalog(catRes.data || []);
       setEditing({
         equipment_id: vehRes.data.equipment_id ?? '',
         site_id: vehRes.data.site_id ?? '',

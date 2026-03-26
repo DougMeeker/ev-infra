@@ -58,6 +58,29 @@ def get_catalog_entry(mc_code):
         return {"error": "MC code not found"}, 404
     return entry.to_dict(), 200
 
+@catalog_bp.route("/", methods=["POST"])
+def create_catalog_entry():
+    data = request.get_json() or {}
+    mc_code = str(data.get('mc_code') or '').strip()
+    if not mc_code:
+        return {"error": "mc_code is required"}, 400
+    if EquipmentCatalog.query.get(mc_code):
+        return {"error": f"MC code '{mc_code}' already exists"}, 409
+    cat_code = (data.get('equipment_category_code') or '').strip() or None
+    if cat_code:
+        cat = EquipmentCategory.query.get(cat_code)
+        if not cat:
+            db.session.add(EquipmentCategory(code=cat_code, description=cat_code))
+    entry = EquipmentCatalog(
+        mc_code=mc_code,
+        description=(data.get('description') or '').strip() or None,
+        status=(data.get('status') or '').strip() or None,
+        equipment_category_code=cat_code,
+    )
+    db.session.add(entry)
+    db.session.commit()
+    return entry.to_dict(), 201
+
 @catalog_bp.route("/<mc_code>", methods=["PUT"])
 def update_catalog_entry(mc_code):
     entry = EquipmentCatalog.query.get(mc_code)
