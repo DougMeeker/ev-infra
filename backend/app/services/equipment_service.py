@@ -1,13 +1,20 @@
+import calendar as _calendar
 from datetime import datetime
 from flask import jsonify
 from ..models import Site, Equipment, EquipmentUsage, EquipmentCatalog
 from ..extensions import db
 
 
-def list_equipment(site_id, target_year, page=1, per_page=25):
+def list_equipment(site_id, end_year, end_month, page=1, per_page=25):
     site = Site.query.get(site_id)
     if not site or site.is_deleted:
         return {"error": "Site not found"}, 404
+    # Compute trailing 12-month window (0-based month ordinal: year*12 + month - 1)
+    end_ordinal = end_year * 12 + end_month - 1
+    start_ordinal = end_ordinal - 11
+    start_year = start_ordinal // 12
+    start_month = (start_ordinal % 12) + 1
+    period_label = f"{_calendar.month_abbr[start_month]} {start_year} \u2013 {_calendar.month_abbr[end_month]} {end_year}"
     base_query = Equipment.query.filter_by(site_id=site_id)
     total = base_query.count()
     if page is None or page <= 0:
@@ -18,8 +25,12 @@ def list_equipment(site_id, target_year, page=1, per_page=25):
     equipment_rows = base_query.order_by(Equipment.id.asc()).offset(offset).limit(per_page).all()
     results = []
     for eq in equipment_rows:
-        # Aggregate monthly usage for the target year
-        yearly_usage = EquipmentUsage.query.filter_by(equipment_id=eq.id, year=target_year).all()
+        # Aggregate monthly usage for the trailing 12-month window
+        yearly_usage = EquipmentUsage.query.filter(
+            EquipmentUsage.equipment_id == eq.id,
+            EquipmentUsage.year * 12 + EquipmentUsage.month - 1 >= start_ordinal,
+            EquipmentUsage.year * 12 + EquipmentUsage.month - 1 <= end_ordinal
+        ).all()
         usage_miles = sum([u.miles or 0.0 for u in yearly_usage]) if yearly_usage else None
         usage_hours = sum([u.driving_hours or 0.0 for u in yearly_usage]) if yearly_usage else None
         usage_days = sum([u.days_utilized or 0 for u in yearly_usage]) if yearly_usage else 0
@@ -55,7 +66,7 @@ def list_equipment(site_id, target_year, page=1, per_page=25):
             else:
                 average_power_kw = energy_kwh / operating_hours
         data = eq.to_dict()
-        data['year'] = target_year
+        data['period_label'] = period_label
         data['miles_source'] = miles_source
         data['last_year_miles'] = usage_miles
         data['last_year_driving_hours'] = usage_hours
@@ -126,7 +137,69 @@ def get_equipment(equipment_id):
     eq = Equipment.query.get(equipment_id)
     if not eq:
         return {"error": "Equipment not found"}, 404
-    return eq.to_dict(), 200
+    # Compute trailing 12-month window from the latest available usage for this equipment
+    latest_ordinal = db.session.query(
+        db.func.max(EquipmentUsage.year * 12 + EquipmentUsage.month - 1)
+    ).filter(EquipmentUsage.equipment_id == eq.id).scalar()
+    data = eq.to_dict()
+    if latest_ordinal is not None:
+        end_ordinal   = latest_ordinal
+        start_ordinal = end_ordinal - 11
+        start_year  = start_ordinal // 12
+        start_month = (start_ordinal % 12) + 1
+        end_year    = end_ordinal // 12
+        end_month   = (end_ordinal % 12) + 1
+        period_label = (
+            f"{_calendar.month_abbr[start_month]} {start_year}"
+            f" \u2013 {_calendar.month_abbr[end_month]} {end_year}"
+        )
+        window_usage = EquipmentUsage.query.filter(
+            EquipmentUsage.equipment_id == eq.id,
+            EquipmentUsage.year * 12 + EquipmentUsage.month - 1 >= start_ordinal,
+            EquipmentUsage.year * 12 + EquipmentUsage.month - 1 <= end_ordinal
+        ).all()
+        usage_miles = sum(u.miles or 0.0 for u in window_usage) if window_usage else None
+        usage_hours = sum(u.driving_hours or 0.0 for u in window_usage) if window_usage else None
+        usage_days  = sum(u.days_utilized or 0 for u in window_usage) if window_usage else 0
+        miles_source = 'usage'
+        miles = usage_miles
+        if eq.annual_miles is not None:
+            miles = eq.annual_miles
+            miles_source = 'annual'
+        energy_factor_kwh_per_mile = None
+        try:
+            if eq.catalog and eq.catalog.category:
+                cat = eq.catalog.category
+                if cat.energy_per_mile is not None and cat.energy_per_mile > 0:
+                    energy_factor_kwh_per_mile = cat.energy_per_mile
+                elif hasattr(cat, 'miles_per_kwh') and cat.miles_per_kwh is not None and cat.miles_per_kwh > 0:
+                    energy_factor_kwh_per_mile = 1.0 / cat.miles_per_kwh
+        except Exception:
+            pass
+        energy_kwh = miles * energy_factor_kwh_per_mile if (miles is not None and energy_factor_kwh_per_mile is not None) else None
+        driving_hours = eq.driving_hours if eq.driving_hours is not None else (usage_hours if usage_hours and usage_hours > 0 else None)
+        average_power_kw = None
+        if energy_kwh is not None:
+            average_power_kw = energy_kwh / max(driving_hours, 1.0) if driving_hours else energy_kwh / 8760.0
+        daily_avg_kwh = (energy_kwh / float(max(usage_days, 1))) if (energy_kwh is not None and usage_days) else None
+        daily_max_kwh = None
+        if window_usage and energy_factor_kwh_per_mile:
+            per_month = [
+                (u.miles or 0.0) * energy_factor_kwh_per_mile / float(u.days_utilized)
+                for u in window_usage if (u.days_utilized or 0) > 0
+            ]
+            if per_month:
+                daily_max_kwh = max(per_month)
+        data['period_label']          = period_label
+        data['miles_source']          = miles_source
+        data['last_year_miles']       = usage_miles
+        data['last_year_driving_hours'] = usage_hours
+        data['effective_miles']       = miles
+        data['last_year_energy_kwh']  = energy_kwh
+        data['avg_power_kw']          = average_power_kw
+        data['daily_avg_kwh']         = daily_avg_kwh
+        data['daily_max_kwh']         = daily_max_kwh
+    return data, 200
 
 
 def update_equipment(equipment_id, data):
@@ -207,18 +280,29 @@ def upsert_equipment_usage(equipment_id, data):
     return usage.to_dict(), 200
 
 
-def site_equipment_energy(site_id, target_year):
+def site_equipment_energy(site_id, end_year, end_month):
     site = Site.query.get(site_id)
     if not site or site.is_deleted:
         return {"error": "Site not found"}, 404
+    # Compute trailing 12-month window
+    end_ordinal = end_year * 12 + end_month - 1
+    start_ordinal = end_ordinal - 11
+    start_year = start_ordinal // 12
+    start_month = (start_ordinal % 12) + 1
+    period_label = f"{_calendar.month_abbr[start_month]} {start_year} \u2013 {_calendar.month_abbr[end_month]} {end_year}"
     equipment_rows = Equipment.query.filter_by(site_id=site_id).all()
     total_miles = 0.0
     total_energy = 0.0
     site_days_total = 0
     site_daily_values = []
+    site_peak_concurrent_kwh = 0.0
     items = []
     for eq in equipment_rows:
-        yearly_usage = EquipmentUsage.query.filter_by(equipment_id=eq.id, year=target_year).all()
+        yearly_usage = EquipmentUsage.query.filter(
+            EquipmentUsage.equipment_id == eq.id,
+            EquipmentUsage.year * 12 + EquipmentUsage.month - 1 >= start_ordinal,
+            EquipmentUsage.year * 12 + EquipmentUsage.month - 1 <= end_ordinal
+        ).all()
         usage_miles = sum([u.miles or 0.0 for u in yearly_usage]) if yearly_usage else 0.0
         usage_hours = sum([u.driving_hours or 0.0 for u in yearly_usage]) if yearly_usage else 0.0
         usage_days = sum([u.days_utilized or 0 for u in yearly_usage]) if yearly_usage else 0
@@ -269,6 +353,8 @@ def site_equipment_energy(site_id, target_year):
         if energy_kwh:
             total_energy += energy_kwh
         # Accumulate site-level daily metrics
+        if item_daily_max_kwh is not None:
+            site_peak_concurrent_kwh += item_daily_max_kwh
         if usage_days and usage_days > 0 and energy_factor_kwh_per_mile is not None:
             site_days_total += usage_days
             for u in yearly_usage:
@@ -293,10 +379,11 @@ def site_equipment_energy(site_id, target_year):
         })
     return {
         'site_id': site_id,
-        'year': target_year,
+        'period_label': period_label,
         'total_miles': round(total_miles, 3),
         'total_energy_kwh': round(total_energy, 3),
         'items': items,
         'site_daily_avg_kwh': (round(total_energy / float(max(site_days_total, 1)), 3) if site_days_total > 0 else None),
-        'site_daily_max_kwh': (round(max(site_daily_values), 3) if site_daily_values else None)
+        'site_daily_max_kwh': (round(max(site_daily_values), 3) if site_daily_values else None),
+        'site_peak_concurrent_kwh': (round(site_peak_concurrent_kwh, 3) if site_peak_concurrent_kwh > 0 else None)
     }, 200

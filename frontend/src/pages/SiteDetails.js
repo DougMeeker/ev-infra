@@ -213,12 +213,13 @@ const SiteDetails = () => {
                                 </div>
                                 {energySummary && (
                                     <div className="details-section" >
-                                        <h4>Equipment Energy ({energySummary.year})</h4>
+                                        <h4>Equipment Energy ({energySummary.period_label || energySummary.year})</h4>
                                         <div className="detail-pairs">
                                             <div><span>Vehicles:</span><strong> {vehicleCount?.["counts"] != null ? vehicleCount["counts"]?.[id] != null ? vehicleCount["counts"][id]: "—" : "—"}</strong></div>
                                             <div><span>Total Miles:</span><strong> {energySummary.total_miles != null ? Number(energySummary.total_miles).toLocaleString(undefined) : '—'}</strong></div>
                                             <div><span>Daily Avg kWh:</span><strong> {energySummary.site_daily_avg_kwh != null ? Number(energySummary.site_daily_avg_kwh).toFixed(2) : '—'}</strong></div>
                                             <div><span title="Max daily energy in any single month across vehicles">Daily Max kWh:</span><strong> {energySummary.site_daily_max_kwh != null ? Number(energySummary.site_daily_max_kwh).toFixed(2) : '—'}</strong></div>
+                                            <div><span title="Sum of each vehicle's peak-month daily energy — conservative basis for charger capacity sizing">Peak Concurrent kWh:</span><strong> {energySummary.site_peak_concurrent_kwh != null ? Number(energySummary.site_peak_concurrent_kwh).toFixed(2) : '—'}</strong></div>
                                         </div>
                                     </div>
                                 )}

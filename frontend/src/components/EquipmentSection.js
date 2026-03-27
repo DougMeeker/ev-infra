@@ -7,7 +7,7 @@ import { getEquipment, createEquipment, getEquipmentEnergy } from '../api';
 const EquipmentSection = ({ siteId }) => {
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [displayYear, setDisplayYear] = useState(null);
+  const [displayLabel, setDisplayLabel] = useState(null);
   const [newEq, setNewEq] = useState({ mc_code: '', equipment_id: '', department_id: '', annual_miles: '', driving_hours: '' });
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
@@ -29,8 +29,8 @@ const EquipmentSection = ({ siteId }) => {
         setReturned(meta.returned || (Array.isArray(data.items) ? data.items.length : 0));
         setPage(meta.page || page);
         setPerPage(meta.per_page || perPage);
-        const yr = (energyRes.data && energyRes.data.year) || (Array.isArray(data.items) && data.items.length > 0 && data.items[0].year) || null;
-        setDisplayYear(yr);
+        const lbl = (energyRes.data && energyRes.data.period_label) || (Array.isArray(data.items) && data.items.length > 0 && data.items[0].period_label) || null;
+        setDisplayLabel(lbl);
       })
       .catch(err => console.error('Error loading equipment', err))
       .finally(() => setLoading(false));
@@ -100,7 +100,7 @@ const EquipmentSection = ({ siteId }) => {
               <th style={{ borderBottom: '1px solid #ddd' }}>MC Code</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Description</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Department</th>
-              <th style={{ borderBottom: '1px solid #ddd' }}>Miles ({displayYear ?? '—'})</th>
+              <th style={{ borderBottom: '1px solid #ddd' }}>Miles ({displayLabel ?? '—'})</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Energy/mi</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Miles Source</th>
               <th style={{ borderBottom: '1px solid #ddd' }}>Daily Avg kWh</th>

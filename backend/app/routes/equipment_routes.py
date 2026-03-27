@@ -19,18 +19,29 @@ from ..services.equipment_service import (
 @site_bp.route("/<int:site_id>/equipment", methods=["GET"])
 def list_equipment(site_id):
     year = request.args.get('year')
+    month = request.args.get('month')
     try:
-        if year:
-            target_year = int(year)
+        if year and month:
+            end_year = int(year)
+            end_month = int(month)
         else:
-            # Use latest available usage year for this site's equipment
-            latest_year = db.session.query(func.max(EquipmentUsage.year))\
-                .join(Equipment, Equipment.id == EquipmentUsage.equipment_id)\
+            # Use latest available (year, month) for this site's equipment via ordinal
+            latest_ordinal = db.session.query(
+                func.max(EquipmentUsage.year * 12 + EquipmentUsage.month - 1)
+            ).join(Equipment, Equipment.id == EquipmentUsage.equipment_id)\
                 .filter(Equipment.site_id == site_id)\
                 .scalar()
-            target_year = int(latest_year) if latest_year is not None else (datetime.utcnow().year - 1)
+            if latest_ordinal is not None:
+                end_year = latest_ordinal // 12
+                end_month = (latest_ordinal % 12) + 1
+            else:
+                now = datetime.utcnow()
+                end_year = now.year - 1
+                end_month = 12
     except ValueError:
-        target_year = datetime.utcnow().year - 1
+        now = datetime.utcnow()
+        end_year = now.year - 1
+        end_month = 12
     # Optional pagination
     def to_int(val, default=None):
         try:
@@ -43,7 +54,7 @@ def list_equipment(site_id):
         page = 1
     if per_page is None or per_page <= 0:
         per_page = 25
-    return svc_list_equipment(site_id, target_year, page=page, per_page=per_page)
+    return svc_list_equipment(site_id, end_year, end_month, page=page, per_page=per_page)
 
 
 @site_bp.route("/<int:site_id>/equipment", methods=["POST"])
@@ -89,15 +100,26 @@ def upsert_equipment_usage(equipment_id):
 @site_bp.route("/<int:site_id>/equipment/energy", methods=["GET"])
 def site_equipment_energy(site_id):
     year_param = request.args.get('year')
+    month_param = request.args.get('month')
     try:
-        if year_param:
-            target_year = int(year_param)
+        if year_param and month_param:
+            end_year = int(year_param)
+            end_month = int(month_param)
         else:
-            latest_year = db.session.query(func.max(EquipmentUsage.year))\
-                .join(Equipment, Equipment.id == EquipmentUsage.equipment_id)\
+            latest_ordinal = db.session.query(
+                func.max(EquipmentUsage.year * 12 + EquipmentUsage.month - 1)
+            ).join(Equipment, Equipment.id == EquipmentUsage.equipment_id)\
                 .filter(Equipment.site_id == site_id)\
                 .scalar()
-            target_year = int(latest_year) if latest_year is not None else (datetime.utcnow().year - 1)
+            if latest_ordinal is not None:
+                end_year = latest_ordinal // 12
+                end_month = (latest_ordinal % 12) + 1
+            else:
+                now = datetime.utcnow()
+                end_year = now.year - 1
+                end_month = 12
     except ValueError:
-        target_year = datetime.utcnow().year - 1
-    return svc_site_equipment_energy(site_id, target_year)
+        now = datetime.utcnow()
+        end_year = now.year - 1
+        end_month = 12
+    return svc_site_equipment_energy(site_id, end_year, end_month)
