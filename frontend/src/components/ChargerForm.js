@@ -55,10 +55,10 @@ export default function ChargerForm({ initial, onCancel, onSubmit, projects = []
           <label>Manufacturer
             <select className="input" value={form.manufacturer || ''} onChange={e=>update('manufacturer', e.target.value)}>
               <option value="">Select</option>
-              {['KemPower','ABB','ChargePoint','Enphase/Clipper Creek','XOS','ChargePodX','BTC','Other'].map(m => (
+              {['ABB','BTC','ChargePodX','ChargePoint','Enphase/Clipper Creek','KemPower','XOS','Other'].map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
-              {form.manufacturer && !['KemPower','ABB','ChargePoint','Enphase/Clipper Creek','XOS','ChargePodX','BTC','Other'].includes(form.manufacturer) && (
+              {form.manufacturer && !['ABB','BTC','ChargePodX','ChargePoint','Enphase/Clipper Creek','KemPower','XOS','Other'].includes(form.manufacturer) && (
                 <option value={form.manufacturer}>{form.manufacturer}</option>
               )}
             </select>

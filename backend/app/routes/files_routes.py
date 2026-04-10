@@ -80,7 +80,13 @@ def update_file(file_id: int):
 
 @files_bp.route('/<int:file_id>/download', methods=['GET'])
 def download_file(file_id: int):
-    f = File.query.get_or_404(file_id)
+    try:
+        f = File.query.get_or_404(file_id)
+    except SQLAlchemyError as e:
+        current_app.logger.error(f"Database error fetching file {file_id}: {e}")
+        db.session.rollback()
+        return jsonify({'error': 'Database connection error', 'detail': str(e)}), 500
+    
     storage = get_storage_provider()
     # Let provider decide whether to stream locally or redirect to signed URL
     try:
@@ -94,7 +100,13 @@ def download_file(file_id: int):
 
 @files_bp.route('/<int:file_id>/view', methods=['GET'])
 def view_file(file_id: int):
-    f = File.query.get_or_404(file_id)
+    try:
+        f = File.query.get_or_404(file_id)
+    except SQLAlchemyError as e:
+        current_app.logger.error(f"Database error fetching file {file_id}: {e}")
+        db.session.rollback()
+        return jsonify({'error': 'Database connection error', 'detail': str(e)}), 500
+    
     storage = get_storage_provider()
     # Serve file with inline content-disposition for viewing in browser/iframe
     return storage.make_view_response(f.stored_name)

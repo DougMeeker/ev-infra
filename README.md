@@ -258,6 +258,58 @@ For publicly accessible servers:
 - Use Let's Encrypt with certbot (automated renewal)
 - See `deploy/README.md` for complete SSL setup instructions
 
+## Equipment Energy & Peak Concurrent kWh
+
+The application computes energy metrics for each vehicle and rolls them up to a site-level summary via the `site_equipment_energy` service. The most important metric for charger infrastructure sizing is **Peak Concurrent kWh**.
+
+### Trailing 12-Month Window
+
+All energy calculations use a trailing 12-month window rather than a fixed calendar year. The window end is auto-detected from the latest `equipment_usage` record using month ordinals (`year × 12 + month − 1`). For example, if the latest data is January 2026, the window covers **Feb 2025 – Jan 2026**.
+
+### Per-Vehicle Metrics
+
+For each vehicle at a site, the service computes:
+
+| Metric | Formula |
+|---|---|
+| **Usage Miles** | Sum of `miles` across all months in the window |
+| **Effective Miles** | `annual_miles` override if set, otherwise usage miles |
+| **Energy (kWh)** | `effective_miles × energy_per_mile` (from the vehicle's equipment category) |
+| **Daily Avg kWh** | `energy_kwh / total_days_utilized` |
+| **Daily Max kWh** (`item_daily_max_kwh`) | `max` over all months of `(month_miles × energy_per_mile / days_utilized)` |
+| **Avg Power (kW)** | `energy_kwh / driving_hours` (falls back to 8760 hrs if unknown) |
+
+The energy factor (`energy_per_mile`) is resolved from the vehicle's `EquipmentCategory`. If `energy_per_mile` is set, it is used directly; otherwise `1 / miles_per_kwh` is used. Months with zero or null `days_utilized` are excluded from daily calculations.
+
+### Site-Level Rollup
+
+| Metric | Formula |
+|---|---|
+| **Total Miles** | Sum of each vehicle's effective miles |
+| **Total Energy (kWh)** | Sum of each vehicle's energy |
+| **Site Daily Avg kWh** | `total_energy / total_days_utilized` across all vehicles |
+| **Site Daily Max kWh** | Max single-vehicle single-month daily energy observed at the site |
+| **Peak Concurrent kWh** | **Sum of each vehicle's `item_daily_max_kwh`** |
+
+### Peak Concurrent kWh — Charger Sizing Metric
+
+`site_peak_concurrent_kwh` answers: *"If every vehicle at this site hit its worst-case daily energy demand on the same day, how many kWh would the site need?"*
+
+**Calculation:**
+1. For each vehicle, find the month with the highest daily energy: `max(month_miles × energy_per_mile / days_utilized)`
+2. Sum those per-vehicle peaks across all vehicles at the site
+
+This is deliberately conservative — it assumes all vehicles peak simultaneously. To convert to required charger capacity in kW, divide by the number of hours in the charging window (e.g., `peak_concurrent_kwh / 10` for a 10-hour overnight window).
+
+**Edge cases handled:**
+- Months with `days_utilized = 0` or `NULL` are excluded
+- Vehicles without a valid energy factor (no `energy_per_mile` or `miles_per_kwh`) are excluded
+- `annual_miles` override affects total energy but **not** `item_daily_max_kwh` (which always uses actual monthly usage)
+- Usage outside the 12-month window is excluded
+- Sites with no equipment or no qualifying usage return `null`
+
+**Tests:** `backend/tests/test_peak_concurrent_kwh.py` — 17 tests covering single/multi-vehicle scenarios, window boundaries, edge cases, and the inverse `miles_per_kwh` path.
+
 ## Recent Features (March 2026)
 
 ### Phase 1 — Site Prioritization Model
@@ -356,6 +408,57 @@ ev-infra-app (PostgreSQL)
 - Sync is disabled by default — zero performance impact until opted in
 - All sync hooks are fire-and-forget — failures are logged but never break the primary API
 - Documents use `evinfra://` URI scheme for scoped semantic search in MCP tools
+
+## Recent Features (April 2026)
+
+### Charger Capacity Analysis
+
+A dual-scenario charger capacity analysis tool that helps determine infrastructure readiness by comparing available charging capacity against fleet energy demands for both overnight and fast-charging scenarios.
+
+**Features:**
+- **Dual Scenario Analysis** — Two side-by-side boxes in Site Details:
+  - **8-Hour Charging** (Overnight): Evaluates slow/medium chargers (≤19 kW) for overnight charging use
+  - **2-Hour Charging** (Fast): Evaluates fast chargers (>19 kW) for rapid turnover scenarios
+- **Intelligent Charger Filtering** — Each scenario only counts relevant charger types:
+  - 8-hour box filters to chargers ≤19 kW (e.g., 6.7, 11, 19 kW Level 2 chargers)
+  - 2-hour box filters to chargers >19 kW (e.g., 50, 150, 350 kW DC fast chargers)
+- **Port-Level Metrics** — Counts individual charging ports (not just chargers) since many fast chargers have multiple ports:
+  - Installed Charger Ports / Vehicles ratio
+  - Planned Charger Ports / Vehicles ratio
+  - Per-vehicle port ratios for capacity planning
+- **Capacity Gap Analysis**:
+  - Required kW capacity calculated from `Peak Concurrent kWh / hours`
+  - Installed vs Required comparison with percentage progress
+  - Planned Total vs Required comparison
+  - Color-coded surplus (green) or deficit (red) indicators
+  - Visual progress bars showing installed capacity readiness
+- **Integration with Equipment Energy** — Uses the existing `Peak Concurrent kWh` metric (sum of each vehicle's peak-month daily energy) as the basis for capacity requirements
+
+**Display:**
+- Located in Site Details page immediately after Equipment Energy section
+- Side-by-side layout matching other site metric boxes
+- Responsive design stacks vertically on smaller screens
+- Only appears when Peak Concurrent kWh data is available
+
+**Component:** `frontend/src/components/ChargerCapacitySection.js`
+- Reusable component accepts `hours` prop (8 or 2) to configure scenario
+- Fetches charger data and filters based on power rating
+- Calculates installed vs planned capacity metrics
+- Displays vehicle count ratios when available
+
+**Use Cases:**
+- Determine if existing slow chargers can support overnight fleet charging (8-hour scenario)
+- Assess need for fast charging infrastructure for rapid vehicle turnover (2-hour scenario)
+- Identify capacity gaps before they impact operations
+- Plan infrastructure upgrades with clear surplus/deficit visibility
+- Compare charger port availability against fleet size
+
+**Calculation Example:**
+- Site has 18 vehicles with Peak Concurrent kWh = 450 kWh
+- 8-hour scenario: Requires 450/8 = 56.25 kW of slow charger capacity
+- 2-hour scenario: Requires 450/2 = 225 kW of fast charger capacity
+- If site has 6 × 6.7kW chargers installed = 40.2 kW (71% of 8-hour requirement)
+- Shows deficit of 16.05 kW needed for full 8-hour coverage
 
 ## Recent Features (January 2026)
 

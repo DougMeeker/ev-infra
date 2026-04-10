@@ -72,7 +72,7 @@ export default function ChargersSection({ siteId }) {
                 </select>
                 <select className="input" value={chargerNew.manufacturer} onChange={e=>setChargerNew(prev=>({ ...prev, manufacturer: e.target.value }))}>
                   <option value="">Manufacturer</option>
-                  {['KemPower','ABB','ChargePoint','Enphase/Clipper Creek','XOS','ChargePodX','BTC','Other'].map(m => (
+                  {['ABB','BTC','ChargePodX','ChargePoint','Enphase/Clipper Creek','KemPower','XOS','Other'].map(m => (
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
@@ -144,7 +144,7 @@ export default function ChargersSection({ siteId }) {
                         </select>
                         <select className="input" value={chargerEdit.manufacturer ?? ''} onChange={e=>setChargerEdit(prev=>({ ...prev, manufacturer: e.target.value }))}>
                           <option value="">Manufacturer</option>
-                          {['KemPower','ABB','ChargePoint','Enphase/Clipper Creek','XOS','ChargePodX','BTC','Other'].map(m => (
+                          {['ABB','BTC','ChargePodX','ChargePoint','Enphase/Clipper Creek','KemPower','XOS','Other'].map(m => (
                             <option key={m} value={m}>{m}</option>
                           ))}
                         </select>

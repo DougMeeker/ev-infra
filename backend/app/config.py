@@ -6,6 +6,14 @@ load_dotenv()
 class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///evinfra.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Database connection pool settings to handle stale connections
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,  # Test connections before using them
+        "pool_recycle": 3600,   # Recycle connections after 1 hour
+        "pool_size": 10,         # Maximum number of permanent connections
+        "max_overflow": 20,      # Maximum number of temporary connections
+        "pool_timeout": 30,      # Timeout for getting a connection from pool
+    }
     # File uploads
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", os.path.join(os.getcwd(), "uploads"))
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(100 * 1024 * 1024)))  # 100 MB

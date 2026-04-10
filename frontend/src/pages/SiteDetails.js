@@ -8,6 +8,7 @@ import ChargersSection from "../components/ChargersSection";
 import FilesSection from "../components/FilesSection";
 import ServicesSection from "../components/ServicesSection";
 import SiteCostsSection from "../components/SiteCostsSection";
+import ChargerCapacitySection from "../components/ChargerCapacitySection";
 
 const SiteDetails = () => {
     const { id } = useParams();
@@ -137,6 +138,27 @@ const SiteDetails = () => {
                     </div>
                 </div>
             )}
+            {energySummary && 
+                <div className="card">
+                    <div className="form-grid">
+                    {energySummary && (
+                                    <ChargerCapacitySection 
+                                        siteId={id} 
+                                        peakConcurrentKwh={energySummary.site_peak_concurrent_kwh}
+                                        vehicleCount={vehicleCount?.["counts"] != null ? vehicleCount["counts"]?.[id] != null ? vehicleCount["counts"][id]: null : null}
+                                        hours={8}
+                                    />
+                                )}
+                                {energySummary && (
+                                    <ChargerCapacitySection 
+                                        siteId={id} 
+                                        peakConcurrentKwh={energySummary.site_peak_concurrent_kwh} 
+                                        vehicleCount={vehicleCount?.["counts"] != null ? vehicleCount["counts"]?.[id] != null ? vehicleCount["counts"][id]: null : null}
+                                        hours={2}
+                                    />
+                                )}
+                    </div></div>
+            }
             {editing ? (
                 <div className="card">
                     <div className="form-sections">
@@ -218,7 +240,6 @@ const SiteDetails = () => {
                                             <div><span>Vehicles:</span><strong> {vehicleCount?.["counts"] != null ? vehicleCount["counts"]?.[id] != null ? vehicleCount["counts"][id]: "—" : "—"}</strong></div>
                                             <div><span>Total Miles:</span><strong> {energySummary.total_miles != null ? Number(energySummary.total_miles).toLocaleString(undefined) : '—'}</strong></div>
                                             <div><span>Daily Avg kWh:</span><strong> {energySummary.site_daily_avg_kwh != null ? Number(energySummary.site_daily_avg_kwh).toFixed(2) : '—'}</strong></div>
-                                            <div><span title="Max daily energy in any single month across vehicles">Daily Max kWh:</span><strong> {energySummary.site_daily_max_kwh != null ? Number(energySummary.site_daily_max_kwh).toFixed(2) : '—'}</strong></div>
                                             <div><span title="Sum of each vehicle's peak-month daily energy — conservative basis for charger capacity sizing">Peak Concurrent kWh:</span><strong> {energySummary.site_peak_concurrent_kwh != null ? Number(energySummary.site_peak_concurrent_kwh).toFixed(2) : '—'}</strong></div>
                                         </div>
                                     </div>
