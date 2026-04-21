@@ -1,11 +1,43 @@
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from "react-leaflet";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
 import { createSite, getSite, getSiteMetrics, getChargers } from "../api";
 import { ratioFrom, getStatusShade } from "../utils/statusShading";
 import "./MapView.css";
+
+const BASE_LAYERS = [
+  {
+    id: 'osm',
+    name: 'OpenStreetMap',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  },
+  {
+    id: 'esri-streets',
+    name: 'ESRI Streets (Route #s)',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom',
+    maxZoom: 20,
+  },
+  {
+    id: 'carto-voyager',
+    name: 'Carto Voyager',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, &copy; <a href="https://carto.com/">CARTO</a>',
+    maxZoom: 19,
+  },
+  {
+    id: 'esri-topo',
+    name: 'ESRI Topo',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), swisstopo',
+    maxZoom: 18,
+  },
+];
 
 // Fix Leaflet icon issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -166,8 +198,76 @@ const LocationButton = () => {
   );
 };
 
+const LayerSelectorControl = ({ selectedLayer, onLayerChange }) => {
+  const map = useMap();
+  const [isOpen, setIsOpen] = useState(false);
+  const [portalContainer, setPortalContainer] = useState(null);
+
+  useEffect(() => {
+    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control layer-selector-control');
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    const ControlClass = L.Control.extend({
+      options: { position: 'bottomleft' },
+      onAdd: () => container,
+    });
+    const control = new ControlClass();
+    control.addTo(map);
+    setPortalContainer(container);
+
+    return () => {
+      try { map.removeControl(control); } catch (e) { /* already removed */ }
+      setPortalContainer(null);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
+
+  if (!portalContainer) return null;
+
+  return createPortal(
+    <div className="layer-selector-inner">
+      <button
+        className="layer-selector-toggle"
+        title="Switch base map"
+        aria-label="Switch base map"
+        onClick={() => setIsOpen(o => !o)}
+      >
+        &#9783;
+      </button>
+      {isOpen && (
+        <div className="layer-selector-dropdown">
+          <div className="layer-selector-title">Base Map</div>
+          {BASE_LAYERS.map(layer => (
+            <button
+              key={layer.id}
+              className={`layer-option${selectedLayer.id === layer.id ? ' active' : ''}`}
+              onClick={() => { onLayerChange(layer); setIsOpen(false); }}
+            >
+              {layer.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>,
+    portalContainer
+  );
+};
+
 const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, selectedProjectId, latestStatuses = [], project, colorMode = 'capacity' }) => {
   const center = [37.5, -120];
+  const [selectedLayer, setSelectedLayer] = useState(() => {
+    try {
+      const saved = localStorage.getItem('mapBaseLayer');
+      return BASE_LAYERS.find(l => l.id === saved) || BASE_LAYERS[0];
+    } catch {
+      return BASE_LAYERS[0];
+    }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('mapBaseLayer', selectedLayer.id); } catch { /* ignore */ }
+  }, [selectedLayer]);
   const [newMarker, setNewMarker] = useState(null);
   const [popupDetails, setPopupDetails] = useState({}); // Cache for site details: { siteId: data }
   const [loadingPopup, setLoadingPopup] = useState(null); // Track which site is loading
@@ -289,13 +389,16 @@ const MapView = ({ sites = [], focusSiteId, onClearFocus, enableAddSites, select
   return (
     <MapContainer center={center} zoom={6} style={{ height: "500px", width: "100%", borderRadius: 'var(--radius)', border: '1px solid var(--card-border)' }}>
       <TileLayer
-        attribution='&copy; https://www.openstreetmap.org/ contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        key={selectedLayer.id}
+        attribution={selectedLayer.attribution}
+        url={selectedLayer.url}
+        maxZoom={selectedLayer.maxZoom}
       />
 
   {enableAddSites && <ClickHandler onMapClick={handleMapClick} />}
   <FocusHelper focusSite={focusSite} onClearFocus={onClearFocus} />
   <LocationButton />
+  <LayerSelectorControl selectedLayer={selectedLayer} onLayerChange={setSelectedLayer} />
 
       {list.filter(s => s.latitude !== null && s.latitude !== undefined && s.longitude !== null && s.longitude !== undefined)
             .filter(s => !selectedProjectId || projectSiteIdSet.has(s.id))

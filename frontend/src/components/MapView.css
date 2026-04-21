@@ -1,3 +1,76 @@
+/* Layer selector control */
+.layer-selector-control {
+  background: white;
+  cursor: pointer;
+}
+
+.layer-selector-inner {
+  position: relative;
+}
+
+.layer-selector-toggle {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: white;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 30px;
+  text-align: center;
+  transition: background-color 0.2s ease;
+}
+
+.layer-selector-toggle:hover {
+  background-color: #f4f4f4;
+}
+
+.layer-selector-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  min-width: 170px;
+  margin-bottom: 4px;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.layer-selector-title {
+  padding: 5px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #666;
+  border-bottom: 1px solid #eee;
+}
+
+.layer-option {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: white;
+  text-align: left;
+  font-size: 0.82rem;
+  cursor: pointer;
+  color: #333;
+  transition: background-color 0.15s ease;
+}
+
+.layer-option:hover {
+  background-color: #f4f4f4;
+}
+
+.layer-option.active {
+  background-color: #e8f0fe;
+  font-weight: 600;
+  color: #1a56db;
+}
+
 /* Location control button */
 .location-control {
   background: white;
