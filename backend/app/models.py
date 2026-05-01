@@ -541,3 +541,127 @@ class McpSyncLog(db.Model):
             if data.get(k):
                 data[k] = data[k].isoformat()
         return data
+
+
+# ── Fuel Card Data ────────────────────────────────────────────────────────────
+
+# Product classes that represent actual fuel/energy consumed by the vehicle.
+# Rows with other product classes (DEF, car washes, etc.) are stored with
+# is_fuel=False and excluded from energy calculations.
+FUEL_PRODUCT_CLASSES = {
+    'Diesel', 'Unleaded', 'Unleaded Mid-Grade', 'Unleaded Premium', 'E-85', 'Electricity',
+}
+
+# Product descriptions (within 'Other Fuel') that count as fuel.
+FUEL_OTHER_DESCRIPTIONS = {
+    'Compressed Natural Gas', 'Liquid Propane Gas', 'Bottled Propane',
+    'Hydrogen H70', 'Ultra Low Sulfur Premium Diesel #2',
+    'Liquid Natural Gas', 'Kerosene - Low Sulfur',
+}
+
+
+class FuelConversionFactor(db.Model):
+    """Lookup table mapping a fuel product_class (and optional product_description
+    substring) to the EV-equivalent kWh consumed per unit of that fuel.
+
+    For electricity rows the factor is 1.0 (units are already kWh).
+    For liquid fuels the factor represents:
+        (fuel energy density kWh/gal) × (ICE drivetrain efficiency)
+        ÷ (EV drivetrain efficiency)
+    so that: ev_kwh = gallons × ev_kwh_per_unit
+
+    Rows are matched by (product_class, product_description_contains) in
+    priority order; the first match wins.  A row with product_description_contains
+    NULL matches any description for that product_class.
+    """
+    __tablename__ = 'fuel_conversion_factors'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    product_class = db.Column(db.String(64), nullable=False)
+    # Optional substring match against Product Description for 'Other Fuel' rows
+    product_description_contains = db.Column(db.String(128), nullable=True)
+    ev_kwh_per_unit = db.Column(db.Float, nullable=False)
+    unit_of_measure = db.Column(db.String(16), nullable=False, default='GA')  # GA, KG, KWH, etc.
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('product_class', 'product_description_contains',
+                            name='uq_fuel_factor_class_desc'),
+    )
+
+    def to_dict(self):
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        for k in ('created_at', 'updated_at'):
+            if data.get(k):
+                data[k] = data[k].isoformat()
+        return data
+
+
+class FuelCardRecord(db.Model):
+    """One row per fuel card transaction line.
+
+    The vehicle is matched to Equipment via raw_vehicle_id == Equipment.equipment_id.
+    Unmatched rows are stored with equipment_fk=NULL for later reconciliation.
+
+    energy_kwh is computed on import using FuelConversionFactor and stored
+    denormalized for fast aggregation.  It is NULL for non-fuel rows (is_fuel=False).
+    """
+    __tablename__ = 'fuel_card_records'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
+    # Raw vehicle identifier from the CSV ('Custom Vehicle/Asset ID')
+    raw_vehicle_id = db.Column(db.String(32), nullable=False, index=True)
+    # FK to equipment.id (NULL if no match found at import time)
+    equipment_fk = db.Column(db.Integer, db.ForeignKey('equipment.id', ondelete='SET NULL'),
+                             nullable=True, index=True)
+
+    transaction_date = db.Column(db.Date, nullable=False)
+    transaction_time = db.Column(db.String(8))  # HH:MM:SS string; not worth a full Time column
+
+    # Fuel / product information (stored verbatim from CSV)
+    product_class = db.Column(db.String(64))          # e.g. 'Diesel', 'Unleaded', 'Electricity'
+    product = db.Column(db.String(32))                 # short code e.g. 'DSL', 'UNL'
+    product_description = db.Column(db.String(128))   # full description
+
+    # Quantity
+    units = db.Column(db.Float)                       # gallons, kWh, kg, etc.
+    unit_of_measure = db.Column(db.String(16))        # 'GA', 'KWH', 'KG', etc.
+
+    # Cost columns (all from the CSV)
+    unit_cost = db.Column(db.Float)
+    total_fuel_cost = db.Column(db.Float)
+    net_cost = db.Column(db.Float)
+
+    # Odometer / mileage from the card reader
+    current_odometer = db.Column(db.Float, nullable=True)
+    distance_driven = db.Column(db.Float, nullable=True)  # delta miles from card reader
+
+    # Computed EV equivalent energy (NULL for non-fuel rows)
+    energy_kwh = db.Column(db.Float, nullable=True)
+
+    # Whether this row counts as fuel/energy (False for DEF, car washes, etc.)
+    is_fuel = db.Column(db.Boolean, nullable=False, default=True)
+
+    # Source file name for audit traceability
+    source_file = db.Column(db.String(256), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    equipment = relationship('Equipment', backref=db.backref('fuel_card_records', lazy='dynamic'))
+
+    __table_args__ = (
+        # Idempotent re-import guard: same vehicle + date + time = same transaction
+        db.UniqueConstraint('raw_vehicle_id', 'transaction_date', 'transaction_time',
+                            name='uq_fuel_record_vehicle_datetime'),
+    )
+
+    def to_dict(self):
+        data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        if data.get('transaction_date') is not None:
+            data['transaction_date'] = data['transaction_date'].isoformat()
+        if data.get('created_at') is not None:
+            data['created_at'] = data['created_at'].isoformat()
+        return data

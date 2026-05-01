@@ -19,7 +19,7 @@ def create_app(config_name="default"):
     # Initialize extensions
     db.init_app(app)
 
-    # Authentication (Microsoft Entra ID / Azure AD)
+    # Authentication (OIDC – Authelia)
     init_auth(app)
 
     # Register blueprints

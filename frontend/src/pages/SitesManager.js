@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getSites } from '../api';
 import { Link, useSearchParams } from 'react-router-dom';
 
@@ -7,11 +7,21 @@ const SitesManager = () => {
   const [loading, setLoading] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const search = searchParams.get('q') || '';
   const sortKey = searchParams.get('sort') || 'name';
   const sortDir = searchParams.get('dir') || 'asc';
 
-  const setSearch = (value) => {
+  // Use local state so the input is never reset mid-edit by a URL re-render.
+  // The URL is updated as a side effect for bookmarking/sharing.
+  const [searchInput, setSearchInput] = useState(searchParams.get('q') || '');
+  const searchRef = useRef(null);
+
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchInput(value);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       if (value) next.set('q', value); else next.delete('q');
@@ -50,7 +60,7 @@ const SitesManager = () => {
   useEffect(() => { load(); }, []);
 
   const filtered = sites.filter(s => {
-    const q = search.trim().toLowerCase();
+    const q = searchInput.trim().toLowerCase();
     if (!q) return true;
     const deptStr = (s.departments || []).map(d => `${d.code} ${d.unit_name}`).join(' ').toLowerCase();
     return (
@@ -79,7 +89,7 @@ const SitesManager = () => {
       <div className="card" style={{ marginBottom: 16 }}>
         <h4 style={{ marginTop: 0 }}>Search</h4>
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
-          <input className="input" placeholder="Search by name, address, city, or department" value={search} onChange={e => setSearch(e.target.value)} style={{ width: 320 }} />
+          <input ref={searchRef} className="input" placeholder="Search by name, address, city, or department" value={searchInput} onChange={handleSearchChange} style={{ width: 320 }} />
         </div>
       </div>
 

@@ -1,12 +1,15 @@
 """
-Microsoft Entra ID (Azure AD) JWT validation for Flask.
+OIDC JWT validation for Flask.
+
+Compatible with Authelia and any standards-compliant OIDC provider that
+issues RS256-signed access tokens.
 
 Provides:
 - `require_auth` – decorator to protect individual routes
 - `init_auth(app)` – registers a `before_request` hook on all /api/ routes
 
-When AZURE_AD_ENABLED is False (default for local dev), authentication is
-completely bypassed so the app keeps working without any Azure setup.
+When OIDC_ENABLED is False (default for local dev), authentication is
+completely bypassed so the app keeps working without any OIDC setup.
 """
 
 import functools
@@ -25,12 +28,12 @@ _JWKS_TTL = 3600  # re-fetch signing keys every hour
 
 
 def _get_signing_keys() -> list[dict]:
-    """Fetch (and cache) the JSON Web Key Set from Microsoft."""
+    """Fetch (and cache) the JSON Web Key Set from the OIDC provider."""
     now = time.time()
     if _jwks_cache["keys"] and now - _jwks_cache["fetched_at"] < _JWKS_TTL:
         return _jwks_cache["keys"]
 
-    jwks_uri = current_app.config["AZURE_AD_JWKS_URI"]
+    jwks_uri = current_app.config["OIDC_JWKS_URI"]
     resp = requests.get(jwks_uri, timeout=10)
     resp.raise_for_status()
     keys = resp.json().get("keys", [])
@@ -58,7 +61,7 @@ def _get_public_key(token: str):
 
 def _validate_token(token: str) -> Optional[dict]:
     """
-    Validate a Microsoft Entra ID access token.
+    Validate an OIDC access token (RS256).
 
     Returns the decoded claims dict on success, or None on failure.
     """
@@ -66,8 +69,8 @@ def _validate_token(token: str) -> Optional[dict]:
     if public_key is None:
         return None
 
-    audience = current_app.config["AZURE_AD_AUDIENCE"]
-    issuer = current_app.config["AZURE_AD_ISSUER"]
+    audience = current_app.config["OIDC_AUDIENCE"]
+    issuer = current_app.config["OIDC_ISSUER"]
 
     try:
         claims = jwt.decode(
@@ -96,7 +99,7 @@ def require_auth(fn):
     """Decorator: reject the request with 401 if there is no valid token."""
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        if not current_app.config.get("AZURE_AD_ENABLED"):
+        if not current_app.config.get("OIDC_ENABLED"):
             return fn(*args, **kwargs)
 
         if not getattr(g, "user_claims", None):
@@ -117,7 +120,7 @@ def _before_api_request():
     - Health / root endpoints are always public.
     """
     # Skip if auth is not turned on
-    if not current_app.config.get("AZURE_AD_ENABLED"):
+    if not current_app.config.get("OIDC_ENABLED"):
         return None
 
     # Allow health-check endpoints without auth

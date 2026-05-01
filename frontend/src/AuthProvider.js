@@ -1,8 +1,11 @@
 /**
- * AuthProvider – wraps the app with MSAL authentication when enabled.
+ * AuthProvider – wraps the app with OIDC authentication when enabled.
  *
- * When REACT_APP_AZURE_AD_CLIENT_ID is not set, the provider simply renders
- * children without any auth gate (local dev / auth-off mode).
+ * Uses react-oidc-context (built on oidc-client-ts) for the Authorization
+ * Code + PKCE flow, compatible with Authelia and any OIDC-compliant provider.
+ *
+ * When REACT_APP_OIDC_AUTHORITY / REACT_APP_OIDC_CLIENT_ID are not set, the
+ * provider simply renders children without any auth gate (local dev / auth-off).
  *
  * Exports:
  *   <AuthProvider>       – wrap around <App /> in index.js
@@ -10,14 +13,9 @@
  *   <RequireAuth>        – component that gates its children behind authentication
  */
 
-import React, { createContext, useContext, useCallback, useMemo, useEffect, useState } from "react";
-import {
-	MsalProvider,
-	useMsal,
-	useIsAuthenticated,
-} from "@azure/msal-react";
-import { InteractionRequiredAuthError, InteractionStatus } from "@azure/msal-browser";
-import { msalInstance, loginRequest, AUTH_ENABLED } from "./authConfig";
+import React, { createContext, useContext, useCallback, useMemo } from "react";
+import { AuthProvider as OidcAuthProvider, useAuth as useOidcAuth } from "react-oidc-context";
+import { userManager, AUTH_ENABLED } from "./authConfig";
 
 // ── Internal context (for auth-disabled fallback) ───────────────────
 
@@ -27,78 +25,58 @@ const AuthContext = createContext(null);
 
 export function useAuth() {
 	const ctx = useContext(AuthContext);
-	if (ctx) return ctx; // auth-disabled shortcut
+	if (ctx) return ctx;
 	throw new Error("useAuth must be used inside <AuthProvider>");
 }
 
 // ── Provider when auth IS enabled ───────────────────────────────────
+// Adapts react-oidc-context's useAuth to the internal API used by this app.
 
-function MsalAuthInner({ children }) {
-	const { instance, accounts, inProgress } = useMsal();
-	const isAuthenticated = useIsAuthenticated();
-	const [ready, setReady] = useState(false);
+function OidcAuthInner({ children }) {
+	const oidc = useOidcAuth();
 
-	const account = accounts[0] ?? null;
+	const login = useCallback(() => {
+		oidc.signinRedirect().catch((err) => console.error("Login failed", err));
+	}, [oidc]);
 
-	// On first load, try to silently log in with a cached session
-	useEffect(() => {
-		if (inProgress !== InteractionStatus.None) return;
-		if (!isAuthenticated && accounts.length === 0) {
-			// No cached account – we'll prompt via the login button
-			setReady(true);
-			return;
-		}
-		setReady(true);
-	}, [inProgress, isAuthenticated, accounts]);
-
-	const login = useCallback(async () => {
-		try {
-			await instance.loginRedirect(loginRequest);
-		} catch (err) {
-			console.error("Login failed", err);
-		}
-	}, [instance]);
-
-	const logout = useCallback(async () => {
-		try {
-			await instance.logoutRedirect({ postLogoutRedirectUri: window.location.origin });
-		} catch (err) {
-			console.error("Logout failed", err);
-		}
-	}, [instance]);
+	const logout = useCallback(() => {
+		oidc.signoutRedirect().catch((err) => console.error("Logout failed", err));
+	}, [oidc]);
 
 	const getToken = useCallback(async () => {
-		if (!account) return null;
-		try {
-			const resp = await instance.acquireTokenSilent({
-				...loginRequest,
-				account,
-			});
-			return resp.accessToken;
-		} catch (err) {
-			if (err instanceof InteractionRequiredAuthError) {
-				await instance.acquireTokenRedirect(loginRequest);
-			}
-			return null;
-		}
-	}, [instance, account]);
+		if (!oidc.user || oidc.user.expired) return null;
+		return oidc.user.access_token || null;
+	}, [oidc.user]);
 
 	const user = useMemo(() => {
-		if (!account) return null;
+		if (!oidc.user) return null;
+		const profile = oidc.user.profile || {};
 		return {
-			name: account.name || account.username,
-			email: account.username,
-			oid: account.localAccountId,
+			name: profile.name || profile.preferred_username || "",
+			email: profile.email || profile.preferred_username || "",
+			sub: profile.sub,
 		};
-	}, [account]);
+	}, [oidc.user]);
 
 	const value = useMemo(
-		() => ({ isAuthenticated, user, login, logout, getToken, ready, authEnabled: true }),
-		[isAuthenticated, user, login, logout, getToken, ready],
+		() => ({
+			isAuthenticated: oidc.isAuthenticated,
+			user,
+			login,
+			logout,
+			getToken,
+			ready: !oidc.isLoading,
+			authEnabled: true,
+		}),
+		[oidc.isAuthenticated, oidc.isLoading, user, login, logout, getToken],
 	);
 
-	if (!ready) {
+	if (oidc.isLoading) {
 		return <div style={{ padding: "2rem", textAlign: "center" }}>Loading…</div>;
+	}
+
+	if (oidc.error) {
+		console.error("OIDC error:", oidc.error);
 	}
 
 	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -125,13 +103,20 @@ function NoAuthProvider({ children }) {
 // ── Exported <AuthProvider> ─────────────────────────────────────────
 
 export function AuthProvider({ children }) {
-	if (!AUTH_ENABLED || !msalInstance) {
+	if (!AUTH_ENABLED || !userManager) {
 		return <NoAuthProvider>{children}</NoAuthProvider>;
 	}
 	return (
-		<MsalProvider instance={msalInstance}>
-			<MsalAuthInner>{children}</MsalAuthInner>
-		</MsalProvider>
+		<OidcAuthProvider
+			userManager={userManager}
+			onSigninCallback={() => {
+				// Clean up the auth code / state params from the URL after the
+				// callback is processed so they don't linger in browser history.
+				window.history.replaceState({}, document.title, window.location.pathname);
+			}}
+		>
+			<OidcAuthInner>{children}</OidcAuthInner>
+		</OidcAuthProvider>
 	);
 }
 
@@ -147,7 +132,7 @@ export function RequireAuth({ children }) {
 		return (
 			<div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: "1rem" }}>
 				<h2>EV Infrastructure App</h2>
-				<p>Sign in with your Caltrans Microsoft account to continue.</p>
+				<p>Sign in to continue.</p>
 				<button
 					onClick={login}
 					style={{
@@ -160,7 +145,7 @@ export function RequireAuth({ children }) {
 						cursor: "pointer",
 					}}
 				>
-					Sign in with Microsoft
+					Sign In
 				</button>
 			</div>
 		);

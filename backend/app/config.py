@@ -34,24 +34,21 @@ class Config:
     S3_USE_SSL = os.getenv("S3_USE_SSL", "false").lower() == "true"
     SIGNED_URL_TTL = int(os.getenv("SIGNED_URL_TTL", "3600"))
 
-    # ── Microsoft Entra ID (Azure AD) authentication ──────────────────
-    # Set AZURE_AD_ENABLED=true to enforce JWT validation on API routes.
+    # ── OIDC Authentication (Authelia or any standards-compliant provider) ─
+    # Set OIDC_ENABLED=true to enforce JWT validation on all /api/ routes.
     # When disabled (default for local dev), all routes are open.
-    AZURE_AD_ENABLED = os.getenv("AZURE_AD_ENABLED", "false").lower() == "true"
-    # Tenant ID – use Caltrans tenant; set to "common" for multi-tenant later
-    AZURE_AD_TENANT_ID = os.getenv("AZURE_AD_TENANT_ID", "")
-    # Application (client) ID registered in Entra ID
-    AZURE_AD_CLIENT_ID = os.getenv("AZURE_AD_CLIENT_ID", "")
-    # Optional: allowed audience(s); defaults to client ID
-    AZURE_AD_AUDIENCE = os.getenv("AZURE_AD_AUDIENCE", "") or os.getenv("AZURE_AD_CLIENT_ID", "")
-    # JWKS URI is auto-derived but can be overridden
-    AZURE_AD_JWKS_URI = os.getenv(
-        "AZURE_AD_JWKS_URI",
-        f"https://login.microsoftonline.com/{os.getenv('AZURE_AD_TENANT_ID', 'common')}/discovery/v2.0/keys",
-    )
-    AZURE_AD_ISSUER = os.getenv(
-        "AZURE_AD_ISSUER",
-        f"https://login.microsoftonline.com/{os.getenv('AZURE_AD_TENANT_ID', 'common')}/v2.0",
+    OIDC_ENABLED = os.getenv("OIDC_ENABLED", "false").lower() == "true"
+    # Base URL of the OIDC issuer (e.g. https://auth.example.com)
+    OIDC_ISSUER = os.getenv("OIDC_ISSUER", "")
+    # Client ID registered with the OIDC provider
+    OIDC_CLIENT_ID = os.getenv("OIDC_CLIENT_ID", "")
+    # Audience claim to validate – defaults to client ID
+    OIDC_AUDIENCE = os.getenv("OIDC_AUDIENCE", "") or os.getenv("OIDC_CLIENT_ID", "")
+    # JWKS URI is auto-derived from issuer but can be overridden
+    _oidc_issuer = os.getenv("OIDC_ISSUER", "").rstrip("/")
+    OIDC_JWKS_URI = os.getenv(
+        "OIDC_JWKS_URI",
+        f"{_oidc_issuer}/.well-known/jwks.json" if _oidc_issuer else "",
     )
 
     # ── MCP Knowledge Base Sync ──────────────────────────────────────
@@ -70,7 +67,7 @@ class TestingConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
-    AZURE_AD_ENABLED = False  # auth always off in tests
+    OIDC_ENABLED = False  # auth always off in tests
     MCP_SYNC_ENABLED = False   # sync off in tests
 
 def get_config(env):

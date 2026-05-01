@@ -1,0 +1,128 @@
+theme: auto
+
+server:
+  address: "tcp://0.0.0.0:9091/"
+
+log:
+  level: info
+
+identity_validation:
+  reset_password:
+    jwt_secret: "CHANGE_ME_RUN: authelia crypto rand --length 64"
+
+authentication_backend:
+  # ── TEMPORARY: file backend while awaiting LDAP bind credentials from IT ──
+  # To switch to AD/LDAP: fill in the password below and swap the comments.
+  file:
+    path: /etc/authelia/users_database.yml
+    password:
+      algorithm: argon2
+      argon2:
+        memory: 131072
+        iterations: 3
+        parallelism: 4
+        key_length: 32
+        salt_length: 16
+
+  # ldap:
+  #   implementation: activedirectory
+  #   address: "ldaps://SVGCCTDC1.ct.dot.ca.gov:636"
+  #   timeout: 5s
+  #   start_tls: false
+  #   user: "CN=authelia-bind,OU=Service Accounts,DC=ct,DC=dot,DC=ca,DC=gov"
+  #   password: "CHANGE_ME_BIND_PASSWORD"
+  #   base_dn: "DC=ct,DC=dot,DC=ca,DC=gov"
+  #   users_filter: "(&({username_attribute}={input})(objectClass=user))"
+  #   attributes:
+  #     username: "sAMAccountName"
+  #     display_name: "displayName"
+  #     mail: "mail"
+  #     group_name: "cn"
+
+    tls:
+      server_name: SVGCCTDC1.ct.dot.ca.gov
+      skip_verify: false
+      minimum_version: TLS1.2
+      trusted_cert: /etc/pki/ca-trust/source/anchors/ct-root-ca.crt
+
+session:
+  name: authelia_session
+  secret: "CHANGE_ME_RUN: authelia crypto rand --length 64"
+  expiration: 1h
+  inactivity: 30m
+  cookies:
+    - domain: svgc32zevi.dot.ca.gov
+      authelia_url: "https://svgc32zevi.dot.ca.gov/authelia"
+      default_redirection_url: "https://svgc32zevi.dot.ca.gov/"
+
+storage:
+  encryption_key: "CHANGE_ME_RUN: authelia crypto rand --length 64"
+  postgres:
+    address: "tcp://127.0.0.1:5432"
+    database: authelia
+    schema: public
+    username: authelia
+    password: "CHANGE_ME"
+
+notifier:
+  filesystem:
+    filename: /etc/authelia/notification.txt
+
+access_control:
+  # All authenticated users can obtain OIDC tokens.
+  # Fine-grained authorization is enforced by the Flask API via JWT claims.
+  default_policy: one_factor
+
+password_policy:
+  standard:
+    enabled: true
+    min_length: 10
+
+totp:
+  issuer: "svgc32zevi.dot.ca.gov"
+
+regulation:
+  max_retries: 5
+  find_time: 2m
+  ban_time: 10m
+
+# ------------------------------------------------------------
+# OIDC Provider – issues tokens to the EV Infrastructure App
+# ------------------------------------------------------------
+# Before starting Authelia, generate the RSA signing key:
+#   authelia crypto certificate rsa generate --bits 4096 \
+#     --file.private-key /etc/authelia/oidc.key
+# Then set OIDC_HMAC_SECRET to a long random string:
+#   authelia crypto rand --length 64
+# ------------------------------------------------------------
+identity_providers:
+  oidc:
+    # HMAC secret for token signing – CHANGE THIS
+    hmac_secret: "CHANGE_ME_RUN: authelia crypto rand --length 64"
+
+    jwks:
+      - key_id: 'ev-infra-key'
+        algorithm: 'RS256'
+        use: 'sig'
+        # Path to the private key generated above
+        key: {{ secret "/etc/authelia/oidc.key" | mindent 10 "|" | msquote }}
+
+    clients:
+      - client_id: 'evinfra'
+        client_name: 'EV Infrastructure App'
+        # Public client (React SPA) – uses PKCE, no client secret
+        public: true
+        authorization_policy: 'one_factor'
+        pkce_challenge_method: 'S256'
+        token_endpoint_auth_method: 'none'
+        redirect_uris:
+          - 'https://svgc32zevi.dot.ca.gov'
+        scopes:
+          - 'openid'
+          - 'profile'
+          - 'email'
+        response_types:
+          - 'code'
+        grant_types:
+          - 'authorization_code'
+        userinfo_signing_algorithm: 'none'
