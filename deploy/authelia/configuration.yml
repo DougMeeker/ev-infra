@@ -1,7 +1,7 @@
 theme: auto
 
 server:
-  address: "tcp://0.0.0.0:9091/"
+  address: "tcp://0.0.0.0:9091/authelia"
 
 log:
   level: info
@@ -38,12 +38,11 @@ authentication_backend:
   #     display_name: "displayName"
   #     mail: "mail"
   #     group_name: "cn"
-
-    tls:
-      server_name: SVGCCTDC1.ct.dot.ca.gov
-      skip_verify: false
-      minimum_version: TLS1.2
-      trusted_cert: /etc/pki/ca-trust/source/anchors/ct-root-ca.crt
+  #   tls:
+  #     server_name: SVGCCTDC1.ct.dot.ca.gov
+  #     skip_verify: false
+  #     minimum_version: TLS1.2
+  #     trusted_cert: /etc/pki/ca-trust/source/anchors/ct-root-ca.crt
 
 session:
   name: authelia_session
@@ -89,10 +88,19 @@ regulation:
 # ------------------------------------------------------------
 # OIDC Provider – issues tokens to the EV Infrastructure App
 # ------------------------------------------------------------
+# IMPORTANT: The {{ secret }} template below requires the template filter.
+# All authelia commands must include: --config.experimental.filters template
+#
+# systemd unit override (/etc/systemd/system/authelia.service.d/override.conf):
+#   [Service]
+#   ExecStart=
+#   ExecStart=/usr/local/bin/authelia --config /etc/authelia/configuration.yml --config.experimental.filters template
+#
 # Before starting Authelia, generate the RSA signing key:
 #   authelia crypto certificate rsa generate --bits 4096 \
 #     --file.private-key /etc/authelia/oidc.key
-# Then set OIDC_HMAC_SECRET to a long random string:
+#   chmod 600 /etc/authelia/oidc.key
+# Then generate an HMAC secret:
 #   authelia crypto rand --length 64
 # ------------------------------------------------------------
 identity_providers:
@@ -125,4 +133,4 @@ identity_providers:
           - 'code'
         grant_types:
           - 'authorization_code'
-        userinfo_signing_algorithm: 'none'
+        userinfo_signed_response_alg: 'none'
