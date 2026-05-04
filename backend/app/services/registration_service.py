@@ -72,9 +72,21 @@ def _load_users(path: str) -> dict:
 
 
 def _save_users(path: str, users: dict) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        yaml.safe_dump({"users": users}, f, default_flow_style=False, allow_unicode=True)
+    import subprocess
+    content = yaml.safe_dump({"users": users}, default_flow_style=False, allow_unicode=True)
+    # Write via sudo tee so the file stays owned by authelia regardless of
+    # which OS user the Flask process runs as.  Requires the sudoers rule:
+    #   evinfra ALL=(authelia) NOPASSWD: /usr/bin/tee /etc/authelia/users_database.yml
+    result = subprocess.run(
+        ["sudo", "-u", "authelia", "/usr/bin/tee", path],
+        input=content,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise PermissionError(
+            f"Failed to write {path} via sudo tee: {result.stderr.strip()}"
+        )
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
