@@ -19,6 +19,7 @@ import FinancialTracker from './pages/FinancialTracker';
 import Settings from './pages/Settings';
 import Register from './pages/Register';
 import VerifyEmail from './pages/VerifyEmail';
+import AdminPanel from './pages/AdminPanel';
 
 function App() {
   return (
@@ -47,6 +48,7 @@ function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/admin" element={<AdminPanel />} />
       </Routes>
     </Router>
   );

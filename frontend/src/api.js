@@ -401,3 +401,10 @@ export const getMilestoneTypes = () => axios.get(`${API_BASE_URL}/financials/mil
 export const getBudgetSummary = () => axios.get(`${API_BASE_URL}/financials/budget-summary`);
 export const updateProjectBudget = (projectId, payload) =>
 	axios.put(`${API_BASE_URL}/financials/projects/${projectId}/budget`, payload);
+
+// ── Admin: user & role management ────────────────────────────────────
+export const adminListUsers  = ()             => axios.get(`${API_BASE_URL}/admin/users`);
+export const adminListRoles  = ()             => axios.get(`${API_BASE_URL}/admin/roles`);
+export const adminCreateRole = (payload)      => axios.post(`${API_BASE_URL}/admin/roles`, payload);
+export const adminUpdateRole = (id, payload)  => axios.put(`${API_BASE_URL}/admin/roles/${id}`, payload);
+export const adminDeleteRole = (id)           => axios.delete(`${API_BASE_URL}/admin/roles/${id}`);

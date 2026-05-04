@@ -16,6 +16,7 @@ from flask import Blueprint, jsonify, request
 from ..auth import require_role
 from ..extensions import db
 from ..models import UserRole, Site
+from ..services.registration_service import _load_users, _users_file
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -164,3 +165,31 @@ def delete_role(role_id):
         db.session.rollback()
         return jsonify({"error": f"Failed to delete role: {e}"}), 500
     return jsonify({"message": "Role assignment deleted", "id": role_id})
+
+
+@admin_bp.route("/users", methods=["GET"])
+@require_role("admin")
+def list_authelia_users():
+    """
+    Return the list of users from Authelia's user database.
+
+    Response: [ { username, displayname, email, groups, has_role } ]
+    """
+    try:
+        users = _load_users(_users_file())
+    except Exception as exc:
+        return jsonify({"error": f"Could not read user database: {exc}"}), 500
+
+    # Build a set of usernames that already have a role assignment
+    assigned = {r.username for r in UserRole.query.all()}
+
+    result = []
+    for username, info in sorted(users.items()):
+        result.append({
+            "username": username,
+            "displayname": info.get("displayname", ""),
+            "email": info.get("email", ""),
+            "groups": info.get("groups", []),
+            "has_role": username in assigned,
+        })
+    return jsonify(result)

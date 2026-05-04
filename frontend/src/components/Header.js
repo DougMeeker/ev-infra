@@ -78,6 +78,8 @@ const MENU_LINKS = [
   { to: "/priorities", label: "Priorities" },
   { to: "/financials", label: "Financials" },
   { to: "/settings",   label: "Settings" },
+  { to: "/register",   label: "Register new account" },
+  { to: "/admin",      label: "Admin: User Roles" },
 ];
 
 const Header = () => {

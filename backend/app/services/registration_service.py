@@ -70,9 +70,14 @@ def _load_users(path: str) -> dict:
         text=True,
     )
     if result.returncode != 0:
-        # File may not exist yet or sudo rule not set up — return empty dict
-        logger.warning("Could not read Authelia users file %s: %s", path, result.stderr.strip())
-        return {}
+        stderr = result.stderr.strip()
+        if "No such file or directory" in stderr:
+            return {}  # Fresh install – file not yet created
+        # Any other failure is an error we must NOT silently swallow;
+        # returning {} would cause _save_users to wipe all existing accounts.
+        raise PermissionError(
+            f"Could not read Authelia users file {path}: {stderr}"
+        )
     data = yaml.safe_load(result.stdout) or {}
     return data.get("users", {})
 
@@ -93,6 +98,15 @@ def _save_users(path: str, users: dict) -> None:
         raise PermissionError(
             f"Failed to write {path} via sudo tee: {result.stderr.strip()}"
         )
+    # Signal Authelia to reload its user database.
+    # Requires: evinfra ALL=(root) NOPASSWD: /usr/bin/systemctl reload authelia
+    reload = subprocess.run(
+        ["sudo", "/usr/bin/systemctl", "reload", "authelia"],
+        capture_output=True,
+        text=True,
+    )
+    if reload.returncode != 0:
+        logger.warning("Authelia reload signal failed (login may not work until restart): %s", reload.stderr.strip())
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
