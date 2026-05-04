@@ -4,12 +4,12 @@ from sqlalchemy import and_, func
 from datetime import datetime, timedelta
 
 
-def get_all_services(include_site_info=True):
+def get_all_services(include_site_info=True, redact_sensitive=False):
     """Retrieve all active services, optionally with site information."""
     services = Service.query.filter(Service.is_deleted == False).all()
     result = []
     for service in services:
-        service_dict = service.to_dict()
+        service_dict = service.to_dict(redact_sensitive=redact_sensitive)
         if include_site_info and service.site:
             service_dict['site_name'] = service.site.name
             service_dict['site_address'] = service.site.address

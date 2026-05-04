@@ -25,122 +25,104 @@ export FLASK_APP=run.py
 flask run
 ```
 
-## Authentication (Microsoft Entra ID / Azure AD)
+## Authentication (Authelia OIDC)
 
-The app uses **Microsoft Entra ID** (formerly Azure AD) for authentication via the MSAL library
-on the frontend and JWT token validation on the backend.
+The app uses **Authelia** as the identity provider via OpenID Connect (OIDC). The frontend
+uses `oidc-client-ts` / `react-oidc-context` for the authorization code + PKCE flow; the
+Flask backend validates the resulting JWT against Authelia's JWKS endpoint.
 
-Authentication is **opt-in** — it is completely disabled by default so the app works
-out of the box for local development with no Azure setup required. Turn it on by setting a
-few environment variables.
+Authentication is **opt-in** — disabled by default so the app works out of the box for local
+development with no Authelia setup required.
 
 ### How It Works
 
 ```
-Browser  →  MSAL login redirect  →  Microsoft login page
-                                           ↓
-                              Access token (JWT) issued
-                                           ↓
-Browser  →  GET /api/...  →  Flask validates token via Microsoft's public JWKS
+Browser  →  signinRedirect (prompt:login)  →  Authelia login page
+                                                      ↓
+                                         Authorization code returned
+                                                      ↓
+Browser  →  Token exchange (PKCE)  →  Authelia /api/oidc/token
+                                                      ↓
+                                         Access token (JWT) cached in sessionStorage
+                                                      ↓
+Browser  →  GET /api/...  →  Flask validates token via Authelia JWKS
 ```
 
-1. The frontend (MSAL) redirects the user to Microsoft's login page.
-2. After sign-in, an access token is returned and cached in `sessionStorage`.
-3. Every API request automatically attaches the token as `Authorization: Bearer <token>`.
+1. The frontend redirects the user to Authelia's login page (`prompt: 'login'` is always
+   passed so credentials are required even if an Authelia session cookie exists).
+2. After sign-in, an authorization code is exchanged for tokens via PKCE — no client secret
+   is needed or used.
+3. Every API request attaches the access token as `Authorization: Bearer <token>`.
 4. The Flask backend validates the token's signature, expiry, issuer, and audience before
    serving any `/api/` response. Unauthenticated requests receive `401`.
+5. Sign-out calls `removeUser()` to clear the local token. Because this version of Authelia
+   does not publish an `end_session_endpoint`, the Authelia session cookie is cleared by
+   the browser when it expires; `prompt: 'login'` on the next sign-in prevents silent reuse
+   of any lingering session.
 
-### Step 1 — Register the App in Entra ID
+### Step 1 — Authelia OIDC Client Registration
 
-You need an app registration in the Caltrans Microsoft Entra ID tenant. Most users
-will **not** have admin access to do this themselves — submit a request to your IT
-department / identity team with the details below.
+In `deploy/authelia/configuration.yml`, register the app as an OIDC client:
 
-#### What to request from IT
+```yaml
+identity_providers:
+  oidc:
+    clients:
+      - client_id: ev-infra-app
+        client_name: EV Infrastructure App
+        public: true          # no client_secret — PKCE only
+        authorization_policy: one_factor
+        redirect_uris:
+          - https://<production-hostname>
+          - https://<production-hostname>/
+          - http://localhost:3000
+          - http://localhost:3000/
+        scopes:
+          - openid
+          - profile
+          - email
+        response_types:
+          - code
+        grant_types:
+          - authorization_code
+        pkce_challenge_method: S256
+    cors:
+      endpoints:
+        - authorization
+        - pushed-authorization-request
+        - token
+        - revocation
+        - introspection
+        - userinfo
+      allowed_origins:
+        - 'https://<production-hostname>'
+        - 'http://localhost:3000'
+      allowed_origins_from_client_redirect_uris: true
+```
 
-Ask them to create an **App registration** in Entra ID with these settings:
-
-| Setting | Value |
-|---|---|
-| **Name** | `EV Infrastructure App` (or similar) |
-| **Supported account types** | *Accounts in this organizational directory only (Single tenant)* |
-| **Platform** | Single-page application (SPA) |
-| **Redirect URIs** | `http://localhost:3000` (dev) and `https://<your-production-hostname>` |
-| **Expose an API scope** | `access_as_user` (or similar; URI like `api://<client-id>/access_as_user`) |
-
-Once created, ask IT to provide:
-- **Application (client) ID**
-- **Directory (tenant) ID**
-- **API scope string** (e.g., `api://<client-id>/access_as_user`)
-
-> **Tip — free dev tenant for testing:** If you want to test auth before IT processes
-> the request, you can create a free [Microsoft 365 Developer Program](https://developer.microsoft.com/en-us/microsoft-365/dev-program)
-> tenant (no Visual Studio subscription required). This gives you a sandbox Entra ID
-> directory where you can register apps and create test users. Once the real Caltrans
-> registration is ready, just swap the tenant/client IDs in your `.env` files.
-
-#### If you do have admin access
-
-1. Go to the [Microsoft Entra admin center](https://entra.microsoft.com) and sign in.
-2. Navigate to **Applications → App registrations → New registration**.
-3. Fill in the settings from the table above.
-4. Click **Register**.
-5. Copy the **Application (client) ID** and **Directory (tenant) ID**.
-
-#### Expose an API Scope
-
-1. In the app registration, go to **Expose an API**.
-2. Set the **Application ID URI** (e.g., `api://<client-id>`).
-3. Click **Add a scope** and create `access_as_user` (or any name you prefer).
-4. Note the full scope string: `api://<client-id>/access_as_user`.
+> **CORS note:** `allowed_origins_from_client_redirect_uris: true` alone is not sufficient
+> for cross-origin token exchange. The `allowed_origins` list must be explicit.
 
 ### Step 2 — Configure the Backend
 
-Copy `.env.example` to `.env` inside the `backend/` folder and fill in the values:
-
-```bash
-cd backend
-cp .env.example .env
-```
-
-Edit `backend/.env`:
+Copy `.env.example` to `.env` inside the `backend/` folder and fill in:
 
 ```dotenv
-AZURE_AD_ENABLED=true
-AZURE_AD_TENANT_ID=<your-directory-tenant-id>
-AZURE_AD_CLIENT_ID=<your-application-client-id>
-# AZURE_AD_AUDIENCE defaults to AZURE_AD_CLIENT_ID — only set if different
-```
-
-Install the new dependencies:
-
-```bash
-pip install -r requirements.txt
+OIDC_ENABLED=true
+OIDC_ISSUER=https://<authelia-hostname>
+OIDC_CLIENT_ID=ev-infra-app
+OIDC_AUDIENCE=ev-infra-app
+# OIDC_JWKS_URI defaults to <OIDC_ISSUER>/jwks.json
 ```
 
 ### Step 3 — Configure the Frontend
 
-Copy `.env.example` to `.env.local` inside the `frontend/` folder:
-
-```bash
-cd frontend
-cp .env.example .env.local
-```
-
-Edit `frontend/.env.local`:
+Copy `.env.example` to `.env.local` inside the `frontend/` folder and fill in:
 
 ```dotenv
-REACT_APP_AZURE_AD_CLIENT_ID=<your-application-client-id>
-REACT_APP_AZURE_AD_TENANT_ID=<your-directory-tenant-id>
-# If you created a custom scope, set it here:
-REACT_APP_AZURE_AD_SCOPE=api://<client-id>/access_as_user
-```
-
-Install the new MSAL packages:
-
-```bash
-cd frontend
-npm install
+REACT_APP_OIDC_AUTHORITY=https://<authelia-hostname>
+REACT_APP_OIDC_CLIENT_ID=ev-infra-app
+REACT_APP_OIDC_REDIRECT_URI=http://localhost:3000
 ```
 
 ### Step 4 — Run With Auth Enabled
@@ -156,59 +138,36 @@ cd frontend
 npm start
 ```
 
-Open `http://localhost:3000` — you will be redirected to the Microsoft login page.
-After signing in with your Caltrans account, you are returned to the app with full access.
+Open `http://localhost:3000` — you will be redirected to the Authelia login page.
+After signing in, you are returned to the app with full access.
 
-The header shows your account name and a **Sign out** button.
+The header shows your display name and **Sign out** / **Register** buttons.
 
 ### Turning Auth Off (Local Development)
 
-Simply leave `AZURE_AD_CLIENT_ID` unset in both env files (or set `AZURE_AD_ENABLED=false`
-in the backend). The app runs exactly as it did before — no login required.
-
-The backend's `TestingConfig` also hard-disables auth so the existing test suite is
-unaffected.
+Leave `OIDC_CLIENT_ID` unset (or set `OIDC_ENABLED=false` in the backend). The app runs
+with no login required. The backend's `TestingConfig` also hard-disables auth so the test
+suite is unaffected.
 
 ### API Endpoint — Current User
-
-When auth is enabled, a convenience endpoint is available:
 
 ```
 GET /api/auth/me
 ```
 
-Returns the signed-in user's profile:
+Returns the signed-in user's claims:
 
 ```json
 {
   "authenticated": true,
   "auth_enabled": true,
-  "oid": "...",
+  "sub": "jsmith",
   "name": "Jane Smith",
-  "email": "jsmith@caltrans.ca.gov",
-  "roles": [],
-  "tenant_id": "..."
+  "email": "jsmith@example.com"
 }
 ```
 
-When auth is disabled it returns `"authenticated": false` and a stub name, so the
-frontend can call it safely in either mode.
-
-### Future: External Users
-
-If people outside Caltrans ever need access:
-
-1. In Entra ID, change the app registration's **Supported account types** to
-   *Accounts in any organizational directory (Any Microsoft Entra ID tenant — Multitenant)*.
-2. Set both env vars to use the `common` endpoint:
-   - Backend: `AZURE_AD_TENANT_ID=common` (and update `AZURE_AD_ISSUER` / `AZURE_AD_JWKS_URI`
-     if you have them overridden)
-   - Frontend: `REACT_APP_AZURE_AD_TENANT_ID=common`
-3. External users can then log in with any Microsoft work or school account and be
-   directed to the standard Microsoft consent page before accessing the app.
-
-For guest user (B2B) invitations you can also invite external accounts directly into
-the Caltrans tenant from the Entra ID admin center without changing the tenant mode.
+Returns `"authenticated": false` with a stub name when auth is disabled.
 
 ### Configuration Reference
 
@@ -216,21 +175,92 @@ the Caltrans tenant from the Entra ID admin center without changing the tenant m
 
 | Variable | Default | Description |
 |---|---|---|
-| `AZURE_AD_ENABLED` | `false` | Set `true` to enforce auth on all `/api/` routes |
-| `AZURE_AD_TENANT_ID` | `""` | Directory (tenant) ID from Entra ID |
-| `AZURE_AD_CLIENT_ID` | `""` | Application (client) ID from Entra ID |
-| `AZURE_AD_AUDIENCE` | *(client ID)* | Token audience; defaults to client ID |
-| `AZURE_AD_ISSUER` | *(auto)* | Override issuer URL (auto-derived from tenant) |
-| `AZURE_AD_JWKS_URI` | *(auto)* | Override JWKS endpoint (auto-derived from tenant) |
+| `OIDC_ENABLED` | `false` | Set `true` to enforce auth on all `/api/` routes |
+| `OIDC_ISSUER` | `""` | Authelia base URL (e.g. `https://auth.example.com`) |
+| `OIDC_CLIENT_ID` | `""` | Client ID registered in Authelia |
+| `OIDC_AUDIENCE` | *(client ID)* | Token audience; defaults to `OIDC_CLIENT_ID` |
+| `OIDC_JWKS_URI` | *(auto)* | Override JWKS endpoint (auto-derived from issuer) |
+| `AUTHELIA_USERS_FILE` | `/etc/authelia/users_database.yml` | Path to Authelia users file (write access required for self-service registration) |
+| `FRONTEND_URL` | `https://svgc32zevi.dot.ca.gov` | Base URL for email verification links |
+| `SMTP_HOST` | `""` | SMTP server host (leave empty to log verification links instead) |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USERNAME` | `""` | SMTP credentials |
+| `SMTP_PASSWORD` | `""` | SMTP credentials |
+| `SMTP_FROM` | `""` | From address for verification emails |
+| `SMTP_USE_TLS` | `true` | Use STARTTLS (`true`) or plain SMTP (`false`) |
 
 #### Frontend (`frontend/.env.local`)
 
 | Variable | Default | Description |
 |---|---|---|
-| `REACT_APP_AZURE_AD_CLIENT_ID` | `""` | Client ID — leave blank to disable auth |
-| `REACT_APP_AZURE_AD_TENANT_ID` | `common` | Tenant ID |
-| `REACT_APP_AZURE_AD_REDIRECT_URI` | *(origin)* | Override OAuth redirect URI |
-| `REACT_APP_AZURE_AD_SCOPE` | `api://<clientId>/.default` | API scope for access token |
+| `REACT_APP_OIDC_AUTHORITY` | `""` | Authelia base URL — leave blank to disable auth |
+| `REACT_APP_OIDC_CLIENT_ID` | `""` | Client ID |
+| `REACT_APP_OIDC_REDIRECT_URI` | `http://localhost:3000` | OAuth redirect URI |
+
+## Self-Service User Registration
+
+Users can create their own accounts without administrator intervention. Accounts are created
+directly in Authelia's `users_database.yml` after email verification.
+
+### Flow
+
+```
+/register form  →  POST /api/auth/register
+                         │
+                   Validate input
+                   Hash password (argon2id — same params as Authelia)
+                   Insert into pending_registrations table
+                         │
+                   Send verification email  →  User clicks link
+                         │
+                   GET /api/auth/verify-email?token=…
+                         │
+                   Write user to users_database.yml
+                   Delete pending record
+                         │
+                   User can now log in via Authelia
+```
+
+### Setup
+
+1. **Grant Flask write access to the Authelia users file** (run on the server):
+   ```bash
+   sudo chown authelia:<flask-process-user> /etc/authelia/users_database.yml
+   sudo chmod 660 /etc/authelia/users_database.yml
+   ```
+
+2. **Run the database migration** to create the `pending_registrations` table:
+   ```bash
+   export FLASK_APP=run.py
+   flask db migrate -m "add pending registrations"
+   flask db upgrade
+   ```
+
+3. **Set `FRONTEND_URL`** in `backend/.env` to the production hostname so verification
+   links in emails point to the right server.
+
+4. **Optionally configure SMTP** (see `SMTP_*` vars above). Without SMTP, the verification
+   link is printed to the Flask/gunicorn log (`journalctl -u evinfra`) — useful for testing.
+
+### Password Requirements
+
+- Minimum 10 characters
+- Hashed with **argon2id** using the same parameters Authelia uses:
+  `memory=131072, iterations=3, parallelism=4, hash_len=32, salt_len=16`
+- The hash written to `users_database.yml` is immediately usable by Authelia with no
+  rehashing required.
+
+### Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/auth/register` | Submit registration (username, display_name, email, password) |
+| `GET` | `/api/auth/verify-email?token=…` | Confirm email and activate account |
+
+### Token Expiry
+
+Pending registrations expire after 24 hours by default. Override with
+`REGISTRATION_TOKEN_TTL=<seconds>` in `backend/.env`.
 
 ## Browser & Deployment Requirements
 

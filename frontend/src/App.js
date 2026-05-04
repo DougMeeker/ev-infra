@@ -17,12 +17,12 @@ import DepartmentsManager from './pages/DepartmentsManager';
 import PriorityDashboard from './pages/PriorityDashboard';
 import FinancialTracker from './pages/FinancialTracker';
 import Settings from './pages/Settings';
-import { RequireAuth } from './AuthProvider';
+import Register from './pages/Register';
+import VerifyEmail from './pages/VerifyEmail';
 
 function App() {
   return (
     <Router>
-      <RequireAuth>
       <Header />
       <Routes>
         <Route path="/" element={<Home />} />
@@ -45,8 +45,9 @@ function App() {
         <Route path="/priorities" element={<PriorityDashboard />} />
         <Route path="/financials" element={<FinancialTracker />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
       </Routes>
-      </RequireAuth>
     </Router>
   );
 }

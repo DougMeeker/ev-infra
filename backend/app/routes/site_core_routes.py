@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import math
 from .site_routes import site_bp
 from ..models import Site, UtilityBill, Charger, Equipment, EquipmentUsage, EquipmentCatalog, EquipmentCategory, Department
+from ..auth import can_edit_site, require_role
 from ..extensions import db
 from ..models import project_sites
 
@@ -228,6 +229,8 @@ def get_site_metrics(site_id):
 
 @site_bp.route("/<int:site_id>", methods=["PUT"])
 def update_site(site_id):
+    if not can_edit_site(site_id):
+        return {"error": "Insufficient permissions"}, 403
     site = Site.query.get(site_id)
     if not site or site.is_deleted:
         return {"error": "Site not found"}, 404
@@ -258,6 +261,7 @@ def update_site(site_id):
 
 
 @site_bp.route("/", methods=["POST"])
+@require_role("admin", "hq")
 def create_site():
     data = request.get_json(silent=True) or {}
     name = (data.get('name') or '').strip()
@@ -291,6 +295,7 @@ def create_site():
 
 
 @site_bp.route("/<int:site_id>", methods=["DELETE"])
+@require_role("admin", "hq")
 def delete_site(site_id):
     site = Site.query.get(site_id)
     if not site:

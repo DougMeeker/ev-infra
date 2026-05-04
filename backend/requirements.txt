@@ -11,7 +11,11 @@ Flask-Migrate>=4.0.0
 # Storage (S3/MinIO)
 boto3>=1.34.0
 
-# Authentication – Microsoft Entra ID (Azure AD) JWT validation
+# Authentication – OIDC JWT validation
 PyJWT[crypto]>=2.8.0
 cryptography>=42.0.0
 requests>=2.31.0
+
+# Registration – password hashing and YAML user store
+argon2-cffi>=23.1.0
+PyYAML>=6.0

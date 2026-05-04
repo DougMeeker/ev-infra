@@ -1,6 +1,10 @@
 """API routes for managing services (meters)."""
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from app.services import services_service
+
+
+def _is_authenticated():
+    return bool(getattr(g, 'user_claims', None))
 
 bp = Blueprint('services', __name__, url_prefix='/api/services')
 
@@ -14,15 +18,17 @@ def list_all_services():
         - include_site_info: bool (default true) - include site name/address
     """
     include_site_info = request.args.get('include_site_info', 'true').lower() == 'true'
-    services = services_service.get_all_services(include_site_info=include_site_info)
+    redact = not _is_authenticated()
+    services = services_service.get_all_services(include_site_info=include_site_info, redact_sensitive=redact)
     return jsonify(services), 200
 
 
 @bp.route('/site/<int:site_id>', methods=['GET'])
 def list_services_for_site(site_id):
     """Get all services for a specific site."""
+    redact = not _is_authenticated()
     services = services_service.get_services_by_site(site_id)
-    return jsonify([service.to_dict() for service in services]), 200
+    return jsonify([service.to_dict(redact_sensitive=redact) for service in services]), 200
 
 
 @bp.route('/<int:service_id>', methods=['GET'])
@@ -31,7 +37,7 @@ def get_service(service_id):
     service = services_service.get_service_by_id(service_id)
     if not service:
         return jsonify({'error': 'Service not found'}), 404
-    return jsonify(service.to_dict()), 200
+    return jsonify(service.to_dict(redact_sensitive=not _is_authenticated())), 200
 
 
 @bp.route('/site/<int:site_id>', methods=['POST'])

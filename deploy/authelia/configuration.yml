@@ -108,6 +108,21 @@ identity_providers:
     # HMAC secret for token signing – CHANGE THIS
     hmac_secret: "CHANGE_ME_RUN: authelia crypto rand --length 64"
 
+    # Allow CORS from the registered redirect origins so local dev (localhost:3000)
+    # and the production SPA can both exchange authorization codes for tokens.
+    cors:
+      endpoints:
+        - authorization
+        - pushed-authorization-request
+        - token
+        - revocation
+        - introspection
+        - userinfo
+      allowed_origins:
+        - 'https://svgc32zevi.dot.ca.gov'
+        - 'http://localhost:3000'
+      allowed_origins_from_client_redirect_uris: true
+
     jwks:
       - key_id: 'ev-infra-key'
         algorithm: 'RS256'
@@ -121,10 +136,15 @@ identity_providers:
         # Public client (React SPA) – uses PKCE, no client secret
         public: true
         authorization_policy: 'one_factor'
+        consent_mode: 'pre-configured'
+        pre_configured_consent_duration: '1y'
         pkce_challenge_method: 'S256'
         token_endpoint_auth_method: 'none'
         redirect_uris:
           - 'https://svgc32zevi.dot.ca.gov'
+          - 'https://svgc32zevi.dot.ca.gov/'
+          - 'http://localhost:3000'
+          - 'http://localhost:3000/'
         scopes:
           - 'openid'
           - 'profile'

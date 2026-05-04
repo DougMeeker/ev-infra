@@ -18,8 +18,10 @@ export const AUTH_ENABLED = Boolean(
 	process.env.REACT_APP_OIDC_AUTHORITY && process.env.REACT_APP_OIDC_CLIENT_ID,
 );
 
+const authority = process.env.REACT_APP_OIDC_AUTHORITY || "";
+
 export const oidcConfig = {
-	authority: process.env.REACT_APP_OIDC_AUTHORITY || "",
+	authority,
 	client_id: process.env.REACT_APP_OIDC_CLIENT_ID || "",
 	redirect_uri: process.env.REACT_APP_OIDC_REDIRECT_URI || window.location.origin,
 	post_logout_redirect_uri: window.location.origin,

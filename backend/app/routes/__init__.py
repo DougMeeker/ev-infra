@@ -15,6 +15,7 @@ from .service_routes import bp as service_bp
 from .priority_routes import priority_bp
 from .mcp_routes import mcp_bp
 from .financial_routes import financial_bp
+from .admin_routes import admin_bp
 
 def register_routes(app: Flask):
     # site_bp already has url_prefix in its declaration
@@ -28,6 +29,7 @@ def register_routes(app: Flask):
     app.register_blueprint(priority_bp)
     app.register_blueprint(mcp_bp)
     app.register_blueprint(financial_bp)
+    app.register_blueprint(admin_bp)
 
     # Provide a simple API root/health response to avoid 404 on /api/
     def _api_root():

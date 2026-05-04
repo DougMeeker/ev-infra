@@ -40,13 +40,12 @@ axios.interceptors.request.use(async (config) => {
 });
 
 // ── Axios interceptor: handle 401 responses ─────────────────────────
-// If the backend returns 401, redirect to the OIDC provider for re-login.
+// When unauthenticated, simply reject — read-only requests are allowed
+// without a token. Callers that need auth should check isAuthenticated
+// before making mutating requests.
 axios.interceptors.response.use(
 	(response) => response,
 	(error) => {
-		if (AUTH_ENABLED && error?.response?.status === 401 && userManager) {
-			userManager.signinRedirect().catch(() => {});
-		}
 		return Promise.reject(error);
 	}
 );

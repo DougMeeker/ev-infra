@@ -85,6 +85,9 @@ class Service(db.Model):
     # Optional notes for differentiating services
     notes = db.Column(db.Text)
 
+    # Fields redacted from guest (unauthenticated) responses
+    SENSITIVE_FIELDS = {'utility_account', 'utility_name'}
+
     # C-4: Utility interconnection tracking (Phase 5)
     interconnection_application_date = db.Column(db.Date)
     interconnection_agreement_date = db.Column(db.Date)
@@ -99,8 +102,11 @@ class Service(db.Model):
     site = relationship('Site', back_populates='services')
     bills = relationship('UtilityBill', back_populates='service', cascade='all, delete-orphan')
 
-    def to_dict(self):
+    def to_dict(self, redact_sensitive: bool = False):
         data = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        if redact_sensitive:
+            for field in self.SENSITIVE_FIELDS:
+                data.pop(field, None)
         # Serialize date fields
         for k in ('interconnection_application_date', 'interconnection_agreement_date', 'meter_install_date'):
             if data.get(k) is not None:
@@ -665,3 +671,62 @@ class FuelCardRecord(db.Model):
         if data.get('created_at') is not None:
             data['created_at'] = data['created_at'].isoformat()
         return data
+
+
+class PendingRegistration(db.Model):
+    """Stores unverified self-service registrations until the email is confirmed."""
+    __tablename__ = 'pending_registrations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, nullable=False)
+    email = db.Column(db.String(256), unique=True, nullable=False)
+    display_name = db.Column(db.String(128), nullable=False)
+    # argon2id hash – ready to write directly to Authelia users_database.yml
+    password_hash = db.Column(db.Text, nullable=False)
+    # Cryptographically random URL-safe token for email verification
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class UserRole(db.Model):
+    """
+    Role assignment for an Authelia user.
+
+    Roles
+    -----
+    admin    - full read/write access to everything
+    hq       - full read/write access to everything (HQ staff)
+    district - can edit any site whose departments include their district number
+    site     - can edit only the single site they are assigned to
+
+    A user with no UserRole row is read-only (GET requests only).
+    """
+    __tablename__ = 'user_roles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Matches the `sub` claim in the Authelia-issued JWT (the Authelia username).
+    username = db.Column(db.String(64), nullable=False, index=True)
+    role = db.Column(db.String(16), nullable=False)   # admin | hq | district | site
+    # Populated for role='district'; the Caltrans district number (e.g. 7).
+    district = db.Column(db.Integer, nullable=True)
+    # Populated for role='site'; FK to the one site this user may edit.
+    site_id = db.Column(db.Integer, db.ForeignKey('sites.id', ondelete='SET NULL'), nullable=True)
+
+    site = relationship('Site', foreign_keys=[site_id])
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "role IN ('admin', 'hq', 'district', 'site')",
+            name='ck_user_role_valid',
+        ),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'role': self.role,
+            'district': self.district,
+            'site_id': self.site_id,
+            'site_name': self.site.name if self.site else None,
+        }

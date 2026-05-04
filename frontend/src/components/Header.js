@@ -81,7 +81,7 @@ const MENU_LINKS = [
 ];
 
 const Header = () => {
-  const { user, logout, authEnabled } = useAuth();
+  const { user, login, logout, authEnabled, isAuthenticated } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -126,7 +126,7 @@ const Header = () => {
         {/* Right side: hamburger + auth */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto' }}>
 
-          {authEnabled && user && (
+          {authEnabled && isAuthenticated && user && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
               <span style={{ color: 'var(--text-secondary, #666)', whiteSpace: 'nowrap', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {user.name || user.email}
@@ -145,6 +145,43 @@ const Header = () => {
                 }}
               >
                 Sign out
+              </button>
+            </div>
+          )}
+
+          {authEnabled && !isAuthenticated && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Link
+                to="/register"
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--primary, #1a73e8)',
+                  borderRadius: '4px',
+                  padding: '5px 12px',
+                  color: 'var(--primary, #1a73e8)',
+                  fontSize: '0.85rem',
+                  fontWeight: '500',
+                  whiteSpace: 'nowrap',
+                  textDecoration: 'none',
+                }}
+              >
+                Register
+              </Link>
+              <button
+                onClick={login}
+                style={{
+                  background: 'var(--primary, #1a73e8)',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '6px 14px',
+                  cursor: 'pointer',
+                  color: '#fff',
+                  fontSize: '0.85rem',
+                  fontWeight: '500',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Sign in
               </button>
             </div>
           )}

@@ -36,11 +36,16 @@ function OidcAuthInner({ children }) {
 	const oidc = useOidcAuth();
 
 	const login = useCallback(() => {
-		oidc.signinRedirect().catch((err) => console.error("Login failed", err));
+		// prompt:'login' forces Authelia to show the login form even if a
+		// server-side session cookie is still valid (Authelia does not support
+		// RP-initiated logout / end_session_endpoint in this version).
+		oidc.signinRedirect({ prompt: 'login' }).catch((err) => console.error("Login failed", err));
 	}, [oidc]);
 
-	const logout = useCallback(() => {
-		oidc.signoutRedirect().catch((err) => console.error("Logout failed", err));
+	const logout = useCallback(async () => {
+		// Authelia has no end_session_endpoint; just clear the local token.
+		// The next sign-in uses prompt:'login' to force re-authentication.
+		await oidc.removeUser();
 	}, [oidc]);
 
 	const getToken = useCallback(async () => {
@@ -77,6 +82,14 @@ function OidcAuthInner({ children }) {
 
 	if (oidc.error) {
 		console.error("OIDC error:", oidc.error);
+		return (
+			<div style={{ padding: "2rem", textAlign: "center", color: "red" }}>
+				<p>Authentication error: {oidc.error.message}</p>
+				<button onClick={() => oidc.removeUser().then(() => oidc.signinRedirect())}>
+					Try again
+				</button>
+			</div>
+		);
 	}
 
 	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

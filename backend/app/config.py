@@ -56,6 +56,24 @@ class Config:
     MCP_API_KEY = os.getenv("MCP_API_KEY", "")
     MCP_SYNC_ENABLED = os.getenv("MCP_SYNC_ENABLED", "false").lower() == "true"
 
+    # ── Self-service Registration ─────────────────────────────────────
+    # Path to Authelia's file user store. The Flask process must have write access.
+    # On the server: sudo chown authelia:evinfra /etc/authelia/users_database.yml
+    #                sudo chmod 660 /etc/authelia/users_database.yml
+    AUTHELIA_USERS_FILE = os.getenv("AUTHELIA_USERS_FILE", "/etc/authelia/users_database.yml")
+    # Frontend base URL used to build the email verification link
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "https://svgc32zevi.dot.ca.gov")
+    # How long a verification token is valid (seconds). Default: 24 hours.
+    REGISTRATION_TOKEN_TTL = int(os.getenv("REGISTRATION_TOKEN_TTL", str(24 * 3600)))
+    # SMTP settings for sending verification emails.
+    # When SMTP_HOST is empty, the verification link is written to the Flask log instead.
+    SMTP_HOST = os.getenv("SMTP_HOST", "")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    SMTP_FROM = os.getenv("SMTP_FROM", "noreply@svgc32zevi.dot.ca.gov")
+    SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+
 class DevelopmentConfig(Config):
     DEBUG = True
     

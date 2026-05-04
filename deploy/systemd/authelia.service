@@ -1,0 +1,23 @@
+[Unit]
+Description=Authelia authentication and authorization server
+Documentation=https://www.authelia.com
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=authelia
+Group=authelia
+ExecStart=/usr/local/bin/authelia \
+    --config /etc/authelia/configuration.yml \
+    --config.experimental.filters template
+Restart=on-failure
+RestartSec=5s
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/etc/authelia /var/log/authelia
+
+[Install]
+WantedBy=multi-user.target
