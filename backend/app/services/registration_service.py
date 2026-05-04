@@ -204,3 +204,22 @@ def verify_registration(token: str) -> tuple[bool, str]:
     db.session.commit()
     logger.info("New user verified and added to Authelia: %s (%s)", record.username, record.email)
     return True, ""
+
+
+def resend_verification_token(email: str) -> tuple[bool, str]:
+    """
+    Regenerate the verification token for a pending registration.
+
+    Returns (True, token) on success, or (False, error_message) if no pending
+    registration exists for that email.
+    """
+    email = email.strip().lower()
+    record = PendingRegistration.query.filter_by(email=email).first()
+    if not record:
+        # Don't reveal whether the email exists — generic message
+        return False, "No pending registration found for that email address"
+
+    record.token = secrets.token_urlsafe(32)
+    record.created_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return True, record.token

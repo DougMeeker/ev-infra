@@ -5,7 +5,7 @@ Auth routes – user profile and self-service registration.
 from flask import Blueprint, g, jsonify, request, current_app
 from ..auth import require_auth
 from ..email_utils import send_verification_email
-from ..services.registration_service import register_user, verify_registration
+from ..services.registration_service import register_user, verify_registration, resend_verification_token
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -63,7 +63,13 @@ def register():
     frontend_url = current_app.config.get("FRONTEND_URL", "").rstrip("/")
     verify_url = f"{frontend_url}/verify-email?token={token}"
 
-    send_verification_email(current_app._get_current_object(), email, display_name, verify_url)
+    sent = send_verification_email(current_app._get_current_object(), email, display_name, verify_url)
+    if not sent:
+        # Email delivery failed — log the URL so an admin can retrieve it from journalctl
+        import logging
+        logging.getLogger(__name__).warning(
+            "Verification email failed for %s. Manual verify URL: %s", email, verify_url
+        )
 
     return jsonify({
         "message": "Registration submitted. Please check your email to verify your account."
@@ -86,3 +92,40 @@ def verify_email():
         return jsonify({"error": error}), 400
 
     return jsonify({"message": "Email verified. You can now sign in."}), 200
+
+
+@auth_bp.route("/resend-verification", methods=["POST"])
+def resend_verification():
+    """
+    Re-send the account verification email for a pending registration.
+
+    Body (JSON): { email }
+    Always returns 200 to avoid leaking whether an email is registered.
+    """
+    data = request.get_json(silent=True) or {}
+    email = data.get("email", "").strip()
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    ok, result = resend_verification_token(email)
+    if ok:
+        token = result
+        frontend_url = current_app.config.get("FRONTEND_URL", "").rstrip("/")
+        verify_url = f"{frontend_url}/verify-email?token={token}"
+
+        # Look up display name for the email
+        from ..models import PendingRegistration
+        record = PendingRegistration.query.filter_by(email=email).first()
+        display_name = record.display_name if record else email
+
+        sent = send_verification_email(current_app._get_current_object(), email, display_name, verify_url)
+        if not sent:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Resend verification email failed for %s. Manual verify URL: %s", email, verify_url
+            )
+
+    # Always return the same response (no enumeration)
+    return jsonify({
+        "message": "If that email has a pending registration, a new verification link has been sent."
+    }), 200

@@ -34,6 +34,10 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState(""); // "" | "sent" | "error"
+  // email to use for resend — may differ from form if we land here via "already pending" path
+  const [resendEmail, setResendEmail] = useState("");
 
   const handleChange = (e) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -55,11 +59,31 @@ export default function Register() {
         email: form.email,
         password: form.password,
       });
+      setResendEmail(form.email);
       setSuccess(true);
     } catch (err) {
-      setError(err.response?.data?.error || "Registration failed. Please try again.");
+      const msg = err.response?.data?.error || "Registration failed. Please try again.";
+      setError(msg);
+      // If already pending, surface the resend option inline
+      if (msg.toLowerCase().includes("already pending")) {
+        setResendEmail(form.email);
+      }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!resendEmail) return;
+    setResending(true);
+    setResendStatus("");
+    try {
+      await axios.post(`${API_BASE}/api/auth/resend-verification`, { email: resendEmail });
+      setResendStatus("sent");
+    } catch {
+      setResendStatus("error");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -68,10 +92,40 @@ export default function Register() {
       <div style={{ maxWidth: 420, margin: "80px auto", padding: "2rem", textAlign: "center" }}>
         <h2 style={{ marginBottom: "1rem" }}>Check your email</h2>
         <p style={{ color: "var(--text-secondary, #555)", lineHeight: 1.6 }}>
-          A verification link has been sent to <strong>{form.email}</strong>.
+          A verification link has been sent to <strong>{resendEmail}</strong>.
           Click the link in that email to activate your account.
         </p>
-        <p style={{ marginTop: "1.5rem" }}>
+
+        {resendStatus === "sent" && (
+          <p style={{ color: "#1a7340", marginTop: "1rem", fontSize: "0.9rem" }}>
+            Verification email resent.
+          </p>
+        )}
+        {resendStatus === "error" && (
+          <p style={{ color: "#b00020", marginTop: "1rem", fontSize: "0.9rem" }}>
+            Could not resend — please try again or contact an administrator.
+          </p>
+        )}
+
+        <p style={{ marginTop: "1.5rem", fontSize: "0.88rem", color: "var(--text-secondary, #555)" }}>
+          Didn't receive the email?{" "}
+          <button
+            onClick={handleResend}
+            disabled={resending}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--link, #1a73e8)",
+              cursor: resending ? "not-allowed" : "pointer",
+              padding: 0,
+              fontSize: "inherit",
+              textDecoration: "underline",
+            }}
+          >
+            {resending ? "Resending…" : "Resend verification email"}
+          </button>
+        </p>
+        <p style={{ marginTop: "1rem" }}>
           <Link to="/" style={{ color: "var(--link)" }}>Return to home</Link>
         </p>
       </div>
@@ -95,6 +149,29 @@ export default function Register() {
           }}
         >
           {error}
+          {resendEmail && (
+            <div style={{ marginTop: "8px" }}>
+              {resendStatus === "sent" ? (
+                <span style={{ color: "#1a7340" }}>Verification email resent.</span>
+              ) : (
+                <button
+                  onClick={handleResend}
+                  disabled={resending}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#b00020",
+                    cursor: resending ? "not-allowed" : "pointer",
+                    padding: 0,
+                    fontSize: "inherit",
+                    textDecoration: "underline",
+                  }}
+                >
+                  {resending ? "Resending…" : "Resend verification email"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
