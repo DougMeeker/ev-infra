@@ -63,12 +63,18 @@ def _users_file() -> str:
 
 
 def _load_users(path: str) -> dict:
-    p = Path(path)
-    if p.exists():
-        with open(p) as f:
-            data = yaml.safe_load(f) or {}
-        return data.get("users", {})
-    return {}
+    import subprocess
+    result = subprocess.run(
+        ["sudo", "-u", "authelia", "/usr/bin/cat", path],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        # File may not exist yet or sudo rule not set up — return empty dict
+        logger.warning("Could not read Authelia users file %s: %s", path, result.stderr.strip())
+        return {}
+    data = yaml.safe_load(result.stdout) or {}
+    return data.get("users", {})
 
 
 def _save_users(path: str, users: dict) -> None:
