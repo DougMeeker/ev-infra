@@ -186,11 +186,11 @@ export default function Register() {
             value={form.username}
             onChange={handleChange}
             required
-            placeholder="e.g. jsmith"
+            placeholder="e.g. s123456"
             style={inputStyle}
           />
           <small style={{ color: "var(--text-secondary, #777)", fontSize: "0.78rem" }}>
-            3–32 chars, lowercase letters, digits, _ . -
+            3-32 chars, lowercase letters, digits, _ . -
           </small>
         </div>
 

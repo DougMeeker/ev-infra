@@ -88,8 +88,8 @@ def create_bill(service_id, data):
     except Exception as e:
         db.session.rollback()
         import traceback
-        error_details = traceback.format_exc()
-        print(f"Error creating bill: {error_details}")
+        from flask import current_app
+        current_app.logger.error("Error creating bill: %s", traceback.format_exc())
         return {"error": f"Failed to save bill: {str(e)}"}, 400
 
 

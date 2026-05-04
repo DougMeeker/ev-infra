@@ -13,7 +13,7 @@
  *   <RequireAuth>        – component that gates its children behind authentication
  */
 
-import React, { createContext, useContext, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useCallback, useMemo, useState, useEffect } from "react";
 import { AuthProvider as OidcAuthProvider, useAuth as useOidcAuth } from "react-oidc-context";
 import { userManager, AUTH_ENABLED } from "./authConfig";
 
@@ -63,17 +63,27 @@ function OidcAuthInner({ children }) {
 		};
 	}, [oidc.user]);
 
+	// Fetch role from backend after authentication
+	const [role, setRole] = useState(null);
+	useEffect(() => {
+		if (!oidc.isAuthenticated) { setRole(null); return; }
+		import("./api").then(({ getMe }) =>
+			getMe().then((res) => setRole(res.data?.role || null)).catch(() => setRole(null))
+		);
+	}, [oidc.isAuthenticated]);
+
 	const value = useMemo(
 		() => ({
 			isAuthenticated: oidc.isAuthenticated,
 			user,
+			role,
 			login,
 			logout,
 			getToken,
 			ready: !oidc.isLoading,
 			authEnabled: true,
 		}),
-		[oidc.isAuthenticated, oidc.isLoading, user, login, logout, getToken],
+		[oidc.isAuthenticated, oidc.isLoading, user, role, login, logout, getToken],
 	);
 
 	if (oidc.isLoading) {
@@ -102,6 +112,7 @@ function NoAuthProvider({ children }) {
 		() => ({
 			isAuthenticated: true,
 			user: { name: "Local Developer", email: "dev@localhost" },
+			role: 'admin',
 			login: () => {},
 			logout: () => {},
 			getToken: async () => null,

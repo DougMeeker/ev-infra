@@ -79,11 +79,14 @@ const MENU_LINKS = [
   { to: "/financials", label: "Financials" },
   { to: "/settings",   label: "Settings" },
   { to: "/register",   label: "Register new account" },
+];
+
+const ADMIN_LINKS = [
   { to: "/admin",      label: "Admin: User Roles" },
 ];
 
 const Header = () => {
-  const { user, login, logout, authEnabled, isAuthenticated } = useAuth();
+  const { user, login, logout, authEnabled, isAuthenticated, role } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -223,7 +226,7 @@ const Header = () => {
                   overflow: 'hidden',
                 }}
               >
-                {MENU_LINKS.map(({ to, label }) => (
+                {[...MENU_LINKS, ...(role === 'admin' ? ADMIN_LINKS : [])].map(({ to, label }) => (
                   <NavLink
                     key={to}
                     to={to}

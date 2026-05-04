@@ -402,6 +402,9 @@ export const getBudgetSummary = () => axios.get(`${API_BASE_URL}/financials/budg
 export const updateProjectBudget = (projectId, payload) =>
 	axios.put(`${API_BASE_URL}/financials/projects/${projectId}/budget`, payload);
 
+// ── Current user profile (role from backend) ───────────────────────
+export const getMe = () => axios.get(`${API_BASE_URL}/auth/me`);
+
 // ── Admin: user & role management ────────────────────────────────────
 export const adminListUsers  = ()             => axios.get(`${API_BASE_URL}/admin/users`);
 export const adminListRoles  = ()             => axios.get(`${API_BASE_URL}/admin/roles`);

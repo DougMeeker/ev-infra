@@ -10,13 +10,15 @@
  *   district – read/write sites in their district number
  *   site     – read/write one specific site
  */
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import AsyncCombo from "../components/AsyncCombo";
 import {
   adminListUsers,
   adminListRoles,
   adminCreateRole,
   adminUpdateRole,
   adminDeleteRole,
+  getAggregateMetrics,
   getSites,
 } from "../api";
 
@@ -42,14 +44,14 @@ const badge = (role) => {
   );
 };
 
-const EMPTY_FORM = { username: "", role: "hq", district: "", site_id: "" };
+const EMPTY_FORM = { username: "", role: "hq", district: "", site_id: "", site_name: "" };
 
 export default function AdminPanel() {
   const [users,   setUsers]   = useState([]);   // Authelia users
   const [roles,   setRoles]   = useState([]);   // UserRole rows
-  const [sites,   setSites]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState("");
+  const allSitesCacheRef = useRef(null);
 
   // Form state
   const [form,       setForm]       = useState(EMPTY_FORM);
@@ -63,14 +65,12 @@ export default function AdminPanel() {
     setLoading(true);
     setError("");
     try {
-      const [uRes, rRes, sRes] = await Promise.all([
+      const [uRes, rRes] = await Promise.all([
         adminListUsers(),
         adminListRoles(),
-        getSites(),
       ]);
       setUsers(uRes.data);
       setRoles(rRes.data);
-      setSites(sRes.data?.data || sRes.data || []);
     } catch (e) {
       setError(e.response?.data?.error || "Failed to load admin data");
     } finally {
@@ -91,12 +91,43 @@ export default function AdminPanel() {
     setShowForm(true);
   };
 
+  const loadSiteOptions = useCallback(async (q) => {
+    const query = (q || '').trim();
+    if (!query || query.length < 2) return [];
+    try {
+      const { data } = await getAggregateMetrics({ search: query, limit: 50 });
+      const items = Array.isArray(data?.data) ? data.data : [];
+      let opts = items.map(s => ({ id: s.site_id ?? s.id, name: s.name, address: s.address, city: s.city }));
+      if (opts.length === 0) {
+        if (!allSitesCacheRef.current) {
+          const { data: all } = await getSites();
+          allSitesCacheRef.current = Array.isArray(all) ? all : [];
+        }
+        const qLower = query.toLowerCase();
+        opts = allSitesCacheRef.current
+          .filter(s =>
+            (s.name && s.name.toLowerCase().includes(qLower)) ||
+            (s.address && s.address.toLowerCase().includes(qLower)) ||
+            (s.city && s.city.toLowerCase().includes(qLower)) ||
+            (s.department_id && String(s.department_id).toLowerCase().includes(qLower))
+          )
+          .slice(0, 50)
+          .map(s => ({ id: s.id, name: s.name, address: s.address, city: s.city }));
+      }
+      opts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      return opts;
+    } catch {
+      return [];
+    }
+  }, []);
+
   const openEdit = (row) => {
     setForm({
-      username: row.username,
-      role:     row.role,
-      district: row.district != null ? String(row.district) : "",
-      site_id:  row.site_id  != null ? String(row.site_id)  : "",
+      username:  row.username,
+      role:      row.role,
+      district:  row.district != null ? String(row.district) : "",
+      site_id:   row.site_id  != null ? String(row.site_id)  : "",
+      site_name: row.site_name || "",
     });
     setEditingId(row.id);
     setFormError("");
@@ -112,8 +143,14 @@ export default function AdminPanel() {
     setFormBusy(true);
 
     const payload = { username: form.username.trim(), role: form.role };
-    if (form.role === "district") payload.district = parseInt(form.district, 10);
-    if (form.role === "site")     payload.site_id  = parseInt(form.site_id, 10);
+    if (form.role === "district") {
+      if (!form.district) { setFormError("District number is required"); setFormBusy(false); return; }
+      payload.district = parseInt(form.district, 10);
+    }
+    if (form.role === "site") {
+      if (!form.site_id) { setFormError("Please select a site from the search results"); setFormBusy(false); return; }
+      payload.site_id = parseInt(form.site_id, 10);
+    }
 
     try {
       if (editingId != null) {
@@ -304,17 +341,22 @@ export default function AdminPanel() {
                   <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 500, marginBottom: 4, color: "var(--text-secondary, #555)" }}>
                     Site
                   </label>
-                  <select
-                    value={form.site_id}
-                    onChange={(e) => setForm((f) => ({ ...f, site_id: e.target.value }))}
-                    required
-                    style={inputStyle}
-                  >
-                    <option value="">— select site —</option>
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
+                  <AsyncCombo
+                    value={form.site_name}
+                    onChangeOption={(opt) => setForm((f) => ({ ...f, site_id: String(opt.id), site_name: opt.name }))}
+                    onInputChange={(text) => {
+                      if ((text || '').trim() !== (form.site_name || '').trim()) {
+                        setForm((f) => ({ ...f, site_id: '', site_name: text || '' }));
+                      }
+                    }}
+                    loadOptions={loadSiteOptions}
+                    placeholder="Search by name, address, or dept ID"
+                  />
+                  {!form.site_id && (
+                    <div style={{ fontSize: "0.78rem", color: "var(--text-secondary, #888)", marginTop: 3 }}>
+                      Type at least 2 characters to search
+                    </div>
+                  )}
                 </div>
               )}
 
