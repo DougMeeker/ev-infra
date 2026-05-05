@@ -63,12 +63,28 @@ function OidcAuthInner({ children }) {
 		};
 	}, [oidc.user]);
 
-	// Fetch role from backend after authentication
-	const [role, setRole] = useState(null);
+	// Fetch role + assignment details from backend after authentication
+	const [role,     setRole]     = useState(null);
+	const [district, setDistrict] = useState(null);
+	const [siteId,   setSiteId]   = useState(null);
 	useEffect(() => {
-		if (!oidc.isAuthenticated) { setRole(null); return; }
+		if (!oidc.isAuthenticated) { setRole(null); setDistrict(null); setSiteId(null); return; }
 		import("./api").then(({ getMe }) =>
-			getMe().then((res) => setRole(res.data?.role || null)).catch(() => setRole(null))
+			getMe()
+				.then((res) => {
+					setRole(res.data?.role || null);
+					setDistrict(res.data?.district ?? null);
+					setSiteId(res.data?.site_id ?? null);
+				})
+				.catch((err) => {
+					console.warn(
+						"[AuthProvider] Failed to fetch user role from /api/auth/me.",
+						"Status:", err?.response?.status,
+						"Message:", err?.response?.data?.error || err?.message,
+						"– Check Flask logs for JWT validation details."
+					);
+					setRole(null);
+				})
 		);
 	}, [oidc.isAuthenticated]);
 
@@ -77,13 +93,15 @@ function OidcAuthInner({ children }) {
 			isAuthenticated: oidc.isAuthenticated,
 			user,
 			role,
+			district,
+			siteId,
 			login,
 			logout,
 			getToken,
 			ready: !oidc.isLoading,
 			authEnabled: true,
 		}),
-		[oidc.isAuthenticated, oidc.isLoading, user, role, login, logout, getToken],
+		[oidc.isAuthenticated, oidc.isLoading, user, role, district, siteId, login, logout, getToken],
 	);
 
 	if (oidc.isLoading) {
@@ -113,6 +131,8 @@ function NoAuthProvider({ children }) {
 			isAuthenticated: true,
 			user: { name: "Local Developer", email: "dev@localhost" },
 			role: 'admin',
+			district: null,
+			siteId: null,
 			login: () => {},
 			logout: () => {},
 			getToken: async () => null,

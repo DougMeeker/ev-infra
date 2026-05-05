@@ -13,7 +13,7 @@ const formatDate = (d) => {
   }
 };
 
-export default function ChargersSection({ siteId }) {
+export default function ChargersSection({ siteId, canEdit = false }) {
   const [chargers, setChargers] = useState([]);
   const [chargersLoading, setChargersLoading] = useState(false);
   const [projects, setProjects] = useState([]);
@@ -62,7 +62,7 @@ export default function ChargersSection({ siteId }) {
             })()}
           </div>
           <div style={{marginBottom:12}}>
-            {adding ? (
+            {canEdit && adding ? (
               <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
                 <input className="input" style={{width:90}} placeholder="kW" value={chargerNew.kw} onChange={e=>setChargerNew(prev=>({ ...prev, kw: e.target.value }))} />
                 <input className="input" style={{width:70}} placeholder="Ports" value={chargerNew.port_count} onChange={e=>setChargerNew(prev=>({ ...prev, port_count: e.target.value }))} />
@@ -99,7 +99,7 @@ export default function ChargersSection({ siteId }) {
               </div>
             ) : (
             <div className="flex-row gap-sm" style={{ marginBottom: '12px' }}>
-                <button className="btn" onClick={()=>setAdding(true)}>Add Charger</button>
+                {canEdit && <button className="btn" onClick={()=>setAdding(true)}>Add Charger</button>}
                 <button className="btn" onClick={() => navigate(`/chargers?siteId=${siteId}`)}>Manage Chargers</button>
             </div>
 )}
@@ -193,10 +193,12 @@ export default function ChargersSection({ siteId }) {
                         <button className="btn btn-secondary" onClick={()=>{ setEditingChargerId(null); setChargerEdit({}); }}>Cancel</button>
                       </div>
                     ) : (
-                      <div style={{display:'flex', gap:8}}>
-                        <button className="btn btn-secondary" onClick={()=>{ setEditingChargerId(c.id); setChargerEdit({ kw: c.kw ?? '', port_count: c.port_count ?? '', handle_type: c.handle_type ?? '', manufacturer: c.manufacturer ?? '', model_number: c.model_number ?? '', project_id: c.project_id ?? '', date_installed: formatDate(c.date_installed), description: c.description ?? '' }); }}>Edit</button>
-                        <button className="btn btn-danger" onClick={async ()=>{ if (!window.confirm('Delete this charger?')) return; await deleteCharger(c.id); const res = await getChargers(siteId); setChargers(res.data || []); }}>Delete</button>
-                      </div>
+                      canEdit ? (
+                        <div style={{display:'flex', gap:8}}>
+                          <button className="btn btn-secondary" onClick={()=>{ setEditingChargerId(c.id); setChargerEdit({ kw: c.kw ?? '', port_count: c.port_count ?? '', handle_type: c.handle_type ?? '', manufacturer: c.manufacturer ?? '', model_number: c.model_number ?? '', project_id: c.project_id ?? '', date_installed: formatDate(c.date_installed), description: c.description ?? '' }); }}>Edit</button>
+                          <button className="btn btn-danger" onClick={async ()=>{ if (!window.confirm('Delete this charger?')) return; await deleteCharger(c.id); const res = await getChargers(siteId); setChargers(res.data || []); }}>Delete</button>
+                        </div>
+                      ) : null
                     )}
                   </td>
                 </tr>

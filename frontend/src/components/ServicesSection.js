@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getServices, createService, updateService, deleteService } from "../api";
 
-const ServicesSection = ({ siteId }) => {
+const ServicesSection = ({ siteId, canEdit = false }) => {
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState(null); // service id being edited, or 'new'
@@ -118,7 +118,7 @@ const ServicesSection = ({ siteId }) => {
     return (
         <div className="services-section">
             <div className="flex-row gap-sm" style={{ marginBottom: '12px' }}>
-                <button className="btn" onClick={handleAdd}>Add Service/Meter</button>
+                {canEdit && <button className="btn" onClick={handleAdd}>Add Service/Meter</button>}
             </div>
 
             {services.length === 0 && !editing && (
@@ -219,10 +219,12 @@ const ServicesSection = ({ siteId }) => {
                             </div>
                         </div>
                     </div>
-                    <div className="flex-row gap-sm" style={{ marginTop: '12px' }}>
-                        <button className="btn btn-secondary" onClick={() => handleEdit(service)}>Edit</button>
-                        <button className="btn btn-danger" onClick={() => handleDelete(service.id)}>Delete</button>
-                    </div>
+                    {canEdit && (
+                        <div className="flex-row gap-sm" style={{ marginTop: '12px' }}>
+                            <button className="btn btn-secondary" onClick={() => handleEdit(service)}>Edit</button>
+                            <button className="btn btn-danger" onClick={() => handleDelete(service.id)}>Delete</button>
+                        </div>
+                    )}
                 </div>
             ))}
         </div>

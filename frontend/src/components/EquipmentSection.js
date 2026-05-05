@@ -4,7 +4,7 @@ import { getEquipment, createEquipment, getEquipmentEnergy } from '../api';
 
 // Display year is dynamic based on backend energy summary/items
 
-const EquipmentSection = ({ siteId }) => {
+const EquipmentSection = ({ siteId, canEdit = false }) => {
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(false);
   const [displayLabel, setDisplayLabel] = useState(null);
@@ -58,6 +58,7 @@ const EquipmentSection = ({ siteId }) => {
 
   return (
     <div style={{ marginTop: '32px' }}>
+      {canEdit && (
       <div className="card" style={{ marginBottom: '16px' }}>
         <h4 style={{ marginTop: 0 }}>Add Equipment</h4>
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
@@ -69,6 +70,7 @@ const EquipmentSection = ({ siteId }) => {
           <button className="btn" onClick={handleCreateEquipment}>Add</button>
         </div>
       </div>
+      )}
 
       {/* Pagination controls */}
       <div className="flex-row gap-sm" style={{ alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap' }}>

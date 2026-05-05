@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getSiteFiles, uploadFile, unassignFileSite, updateFile, fileDownloadUrl, fileViewUrl } from '../api';
 import heic2any from 'heic2any';
 
-const FilesSection = ({ siteId }) => {
+const FilesSection = ({ siteId, canEdit = false }) => {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [description, setDescription] = useState('');
@@ -200,19 +200,21 @@ const FilesSection = ({ siteId }) => {
 
   return (
     <div className="card">
-      <form onSubmit={onUpload} className="flex-row gap-sm" style={{marginBottom:'12px'}}>
-        <input 
-          type="file" 
-          multiple
-          accept="image/*,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx" 
-          onChange={e => setFileInputs(Array.from(e.target.files || []))} 
-        />
-        <input className="input" placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} />
-        <button className="btn" disabled={uploading || fileInputs.length === 0} type="submit">
-          {uploading ? 'Uploading...' : (fileInputs.length > 1 ? `Upload ${fileInputs.length} files` : 'Upload')}
-        </button>
-      </form>
-      {fileInputs.length > 0 && (
+      {canEdit && (
+        <form onSubmit={onUpload} className="flex-row gap-sm" style={{marginBottom:'12px'}}>
+          <input 
+            type="file" 
+            multiple
+            accept="image/*,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx" 
+            onChange={e => setFileInputs(Array.from(e.target.files || []))} 
+          />
+          <input className="input" placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} />
+          <button className="btn" disabled={uploading || fileInputs.length === 0} type="submit">
+            {uploading ? 'Uploading...' : (fileInputs.length > 1 ? `Upload ${fileInputs.length} files` : 'Upload')}
+          </button>
+        </form>
+      )}
+      {canEdit && fileInputs.length > 0 && (
         <div style={{marginBottom:'12px', padding:'8px', background:'var(--bg-secondary, #f5f5f5)', borderRadius:'4px'}}>
           <strong>Selected files ({fileInputs.length}):</strong>
           <ul style={{margin:'4px 0 0 0', paddingLeft:'20px'}}>
@@ -282,17 +284,17 @@ const FilesSection = ({ siteId }) => {
                 <td>{formatDate(f.uploaded_at)}</td>
                 <td>
                   <div style={{ display: 'flex', gap: '8px'}}>
-                    {editingFileId === f.id ? (
+                    {canEdit && editingFileId === f.id ? (
                       <>
                         <button className="btn" onClick={() => saveEdit(f.id)}>Save</button>
                         <button className="btn" onClick={cancelEditing}>Cancel</button>
                       </>
-                    ) : (
+                    ) : canEdit ? (
                       <>
                         <button className="btn" onClick={() => startEditing(f)}>Edit</button>
                         <button className="btn btn-danger" onClick={() => onRemove(f.id)}>Remove</button>
                       </>
-                    )}
+                    ) : null}
                   </div>
                 </td>
                 <td>

@@ -18,12 +18,15 @@ role checks are completely bypassed so the app works without any OIDC setup.
 """
 
 import functools
+import logging
 import time
 from typing import Optional
 
 import jwt
 import requests
 from flask import current_app, g, jsonify, request
+
+_log = logging.getLogger(__name__)
 
 
 # ── JWKS key cache (in-memory) ──────────────────────────────────────
@@ -69,25 +72,65 @@ def _validate_token(token: str) -> Optional[dict]:
     Validate an OIDC access token (RS256).
 
     Returns the decoded claims dict on success, or None on failure.
+
+    Authelia compatibility note
+    ---------------------------
+    Authelia access tokens do not always include an ``aud`` claim.
+    We attempt validation with audience first; if it fails due to a
+    missing or mismatched ``aud`` we retry without audience validation
+    so that tokens from a correctly-configured Authelia instance are
+    still accepted.  ``exp`` and ``iss`` are always enforced.
     """
-    public_key = _get_public_key(token)
-    if public_key is None:
+    try:
+        public_key = _get_public_key(token)
+    except Exception as exc:
+        _log.warning("OIDC: failed to retrieve signing key: %s", exc)
         return None
 
-    audience = current_app.config["OIDC_AUDIENCE"]
-    issuer = current_app.config["OIDC_ISSUER"]
+    if public_key is None:
+        _log.warning(
+            "OIDC: no matching signing key found for token – "
+            "the JWKS may be stale or OIDC_JWKS_URI is misconfigured."
+        )
+        return None
+
+    audience = current_app.config.get("OIDC_AUDIENCE") or None
+    issuer = current_app.config.get("OIDC_ISSUER", "")
+
+    base_options = {"require": ["exp", "iss"]}
+    decode_kwargs: dict = {
+        "algorithms": ["RS256"],
+        "issuer": issuer,
+        "options": base_options,
+    }
+    if audience:
+        decode_kwargs["audience"] = audience
+    else:
+        base_options["verify_aud"] = False
 
     try:
-        claims = jwt.decode(
-            token,
-            public_key,
-            algorithms=["RS256"],
-            audience=audience,
-            issuer=issuer,
-            options={"require": ["exp", "iss", "aud"]},
+        return jwt.decode(token, public_key, **decode_kwargs)
+    except (jwt.InvalidAudienceError, jwt.MissingRequiredClaimError) as exc:
+        # Authelia access tokens often omit or differ in the aud claim.
+        # Fall back to validating without audience so the token is still
+        # accepted; iss and exp continue to be enforced.
+        _log.info(
+            "OIDC: audience validation failed (%s) – retrying without "
+            "audience check.  Configure the 'audience' field in your "
+            "Authelia OIDC client to suppress this message.", exc
         )
-        return claims
-    except jwt.PyJWTError:
+        decode_kwargs.pop("audience", None)
+        base_options["verify_aud"] = False
+        try:
+            return jwt.decode(token, public_key, **decode_kwargs)
+        except jwt.PyJWTError as exc2:
+            _log.warning("OIDC: token validation failed (no-aud retry): %s", exc2)
+            return None
+    except jwt.ExpiredSignatureError:
+        _log.debug("OIDC: token has expired.")
+        return None
+    except jwt.PyJWTError as exc:
+        _log.warning("OIDC: token validation failed: %s", exc)
         return None
 
 

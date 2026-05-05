@@ -20,7 +20,7 @@ const EMPTY_ESTIMATE = {
 
 // ─── Cost Estimates Sub-section ──────────────────────────────────────────────
 
-const CostEstimatesPanel = ({ siteId, projects }) => {
+const CostEstimatesPanel = ({ siteId, projects, canEdit = false }) => {
     const [estimates, setEstimates] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState(null); // estimate id or 'new'
@@ -110,7 +110,7 @@ const CostEstimatesPanel = ({ siteId, projects }) => {
         <div style={{ marginBottom: "24px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                 <h4 style={{ margin: 0 }}>Cost Estimates</h4>
-                {editing !== "new" && (
+                {canEdit && editing !== "new" && (
                     <button className="btn btn-sm btn-primary" onClick={startNew}>+ Add Estimate</button>
                 )}
             </div>
@@ -165,8 +165,8 @@ const CostEstimatesPanel = ({ siteId, projects }) => {
                                         <td><strong>{fmt$(est.total)}</strong></td>
                                         <td style={{ maxWidth: "160px", fontSize: "0.8rem", color: "var(--text-secondary)" }}>{est.notes || "—"}</td>
                                         <td>
-                                            <button className="btn btn-sm" onClick={() => startEdit(est)} style={{ marginRight: "4px" }}>Edit</button>
-                                            <button className="btn btn-sm btn-danger" onClick={() => handleDelete(est.id)}>Delete</button>
+                                            {canEdit && <button className="btn btn-sm" onClick={() => startEdit(est)} style={{ marginRight: "4px" }}>Edit</button>}
+                                            {canEdit && <button className="btn btn-sm btn-danger" onClick={() => handleDelete(est.id)}>Delete</button>}
                                         </td>
                                     </tr>
                                 )
@@ -227,7 +227,7 @@ const EstimateForm = ({ form, projects, onChange, onSave, onCancel, moneyFields,
 
 // ─── Milestones Sub-section ───────────────────────────────────────────────────
 
-const MilestonesPanel = ({ siteId, projects }) => {
+const MilestonesPanel = ({ siteId, projects, canEdit = false }) => {
     const [milestones, setMilestones] = useState([]);
     const [milestoneTypes, setMilestoneTypes] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -314,6 +314,7 @@ const MilestonesPanel = ({ siteId, projects }) => {
             </div>
 
             {/* Initialize standard milestones for a project */}
+            {canEdit && (
             <div className="card" style={{ padding: "12px", marginBottom: "16px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ fontSize: "0.875rem", color: "var(--text-secondary)" }}>Initialize standard milestones for:</span>
                 <select
@@ -333,6 +334,7 @@ const MilestonesPanel = ({ siteId, projects }) => {
                     {initBusy ? "Initializing…" : "Initialize"}
                 </button>
             </div>
+            )}
 
             {Object.keys(byProject).length === 0 && (
                 <p style={{ color: "var(--text-secondary)", fontSize: "0.875rem" }}>No milestones for this site yet. Use the Initialize button above.</p>
@@ -410,7 +412,7 @@ const MilestonesPanel = ({ siteId, projects }) => {
                                             </td>
                                             <td style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{m.notes || "—"}</td>
                                             <td>
-                                                <button className="btn btn-sm" onClick={() => startEdit(m)}>Edit</button>
+                                                {canEdit && <button className="btn btn-sm" onClick={() => startEdit(m)}>Edit</button>}
                                             </td>
                                         </tr>
                                     )
@@ -426,7 +428,7 @@ const MilestonesPanel = ({ siteId, projects }) => {
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
-const SiteCostsSection = ({ siteId }) => {
+const SiteCostsSection = ({ siteId, canEdit = false }) => {
     const [projects, setProjects] = useState([]);
 
     useEffect(() => {
@@ -437,9 +439,9 @@ const SiteCostsSection = ({ siteId }) => {
 
     return (
         <div style={{ marginTop: "8px" }}>
-            <CostEstimatesPanel siteId={siteId} projects={projects} />
+            <CostEstimatesPanel siteId={siteId} projects={projects} canEdit={canEdit} />
             <hr />
-            <MilestonesPanel siteId={siteId} projects={projects} />
+            <MilestonesPanel siteId={siteId} projects={projects} canEdit={canEdit} />
         </div>
     );
 };

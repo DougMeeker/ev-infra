@@ -1,9 +1,13 @@
 """API routes for managing services (meters)."""
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from app.services import services_service
 
 
 def _is_authenticated():
+    # When OIDC is disabled (dev/local mode) treat every request as authenticated
+    # so sensitive fields are never redacted during development.
+    if not current_app.config.get("OIDC_ENABLED"):
+        return True
     return bool(getattr(g, 'user_claims', None))
 
 bp = Blueprint('services', __name__, url_prefix='/api/services')

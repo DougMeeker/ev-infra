@@ -3,7 +3,7 @@ import { getSiteProjects, removeSiteFromProject, reassignProjectSite } from '../
 import { useNavigate } from 'react-router-dom';
 import SiteSelector from './SiteSelector';
 
-export default function SiteProjectsSection({ siteId }) {
+export default function SiteProjectsSection({ siteId, canEdit = false }) {
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [reassigning, setReassigning] = useState(null); // { projectId, projectName }
@@ -156,19 +156,23 @@ export default function SiteProjectsSection({ siteId }) {
                             >
                                 View Details
                             </button>
-                            <button 
-                                className="btn btn-warning"
-                                onClick={() => handleReassignClick(project.id, project.name)}
-                                style={{ backgroundColor: '#ff9800', color: 'white' }}
-                            >
-                                Reassign to Different Site
-                            </button>
-                            <button 
-                                className="btn btn-danger"
-                                onClick={() => handleRemoveProject(project.id, project.name)}
-                            >
-                                Remove from Site
-                            </button>
+                            {canEdit && (
+                                <button 
+                                    className="btn btn-warning"
+                                    onClick={() => handleReassignClick(project.id, project.name)}
+                                    style={{ backgroundColor: '#ff9800', color: 'white' }}
+                                >
+                                    Reassign to Different Site
+                                </button>
+                            )}
+                            {canEdit && (
+                                <button 
+                                    className="btn btn-danger"
+                                    onClick={() => handleRemoveProject(project.id, project.name)}
+                                >
+                                    Remove from Site
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

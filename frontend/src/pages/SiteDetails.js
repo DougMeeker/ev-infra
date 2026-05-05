@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { updateSite, deleteSite, getSiteMetrics, getSite, getEquipmentEnergy, getVehicleCountsBySite, getSiteDepartments, getSiteScore, getCostEstimates, createCostEstimate, updateCostEstimate, deleteCostEstimate, getProjects, getMilestones, initializeMilestones, updateMilestone } from "../api";
+import { useAuth } from "../AuthProvider";
 import EquipmentSection from "../components/EquipmentSection";
 import BillsSection from "../components/BillsSection";
 import SiteProjectsSection from "../components/SiteProjectsSection";
@@ -13,6 +14,7 @@ import ChargerCapacitySection from "../components/ChargerCapacitySection";
 const SiteDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { isAuthenticated, role, district, siteId } = useAuth();
     const [site, setSite] = useState(null);
     const [formData, setFormData] = useState({});
     const [editing, setEditing] = useState(false);
@@ -30,6 +32,17 @@ const SiteDetails = () => {
     const [departments, setDepartments] = useState([]);
     const [priorityScore, setPriorityScore] = useState(null);
     const [showCosts, setShowCosts] = useState(() => JSON.parse(localStorage.getItem("showCosts") ?? "false"));
+
+    // Mirror the backend can_edit_site() logic:
+    // admin/hq → always; district → if any department matches; site → exact site match; no role → never
+    const canEdit = useMemo(() => {
+        if (!isAuthenticated) return false;
+        if (!role) return false;
+        if (role === 'admin' || role === 'hq') return true;
+        if (role === 'district') return departments.some(d => d.district === district);
+        if (role === 'site') return String(siteId) === String(id);
+        return false;
+    }, [isAuthenticated, role, district, siteId, departments, id]);
 
     useEffect(() => {
         getSite(id)
@@ -250,8 +263,8 @@ const SiteDetails = () => {
                     <div>
                         <br />
                         <div style={{ display: 'flex', gap: '8px' }}>  
-                            <button className="btn" onClick={() => setEditing(true)}>Edit</button>
-                            <button className="btn btn-danger" onClick={handleDelete}>Delete Site</button>
+                            {canEdit && <button className="btn" onClick={() => setEditing(true)}>Edit</button>}
+                            {canEdit && <button className="btn btn-danger" onClick={handleDelete}>Delete Site</button>}
                         </div>
                     </div>
                 </div>
@@ -297,21 +310,21 @@ const SiteDetails = () => {
             <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowServices(v => !v)}>
                 {showServices ? '▼' : '▶'} Services / Meters
             </h3>
-            {showServices && (<ServicesSection siteId={id} />)}
+            {showServices && (<ServicesSection siteId={id} canEdit={canEdit} />)}
 
             {/* Projects Section */}
             <hr />
             <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowProjects(v => !v)}>
                 {showProjects ? '▼' : '▶'} Projects
             </h3>
-            {showProjects && (<SiteProjectsSection siteId={id} />)}
+            {showProjects && (<SiteProjectsSection siteId={id} canEdit={canEdit} />)}
 
             {/* Chargers Section */}
             <hr />
             <h3 style={{ marginTop: '32px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowChargers(v => !v)}>
                 {showChargers ? '▼' : '▶'} Chargers
             </h3>
-            {showChargers && (<ChargersSection siteId={id} />)}
+            {showChargers && (<ChargersSection siteId={id} canEdit={canEdit} />)}
 
             {/* Equipment Section */}
             <hr />
@@ -319,7 +332,7 @@ const SiteDetails = () => {
                 {showEquipment ? '▼' : '▶'} Equipment
             </h3>
             {showEquipment && (
-                <EquipmentSection siteId={id} />
+                <EquipmentSection siteId={id} canEdit={canEdit} />
             )}
 
             {/* Bills Section */}
@@ -328,7 +341,7 @@ const SiteDetails = () => {
                 {showBills ? '▼' : '▶'} Utility Bills
             </h3>
             {showBills && (
-                <BillsSection siteId={id} />
+                <BillsSection siteId={id} canEdit={canEdit} />
             )}
 
             {/* Files Section */}
@@ -337,7 +350,7 @@ const SiteDetails = () => {
                 {showFiles ? '▼' : '▶'} Files
             </h3>
             {showFiles && (
-                <FilesSection siteId={id} />
+                <FilesSection siteId={id} canEdit={canEdit} />
             )}
 
             {/* Cost Estimates & Milestones Section */}
@@ -346,7 +359,7 @@ const SiteDetails = () => {
                 {showCosts ? '▼' : '▶'} Cost Estimates &amp; Milestones
             </h3>
             {showCosts && (
-                <SiteCostsSection siteId={id} />
+                <SiteCostsSection siteId={id} canEdit={canEdit} />
             )}
         </div>
     );

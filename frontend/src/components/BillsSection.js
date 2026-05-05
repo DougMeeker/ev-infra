@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { getBills, createBill, updateBill, deleteBill, getServices } from '../api';
 
-export default function BillsSection({ siteId, onTotalsChange }) {
+export default function BillsSection({ siteId, onTotalsChange, canEdit = false }) {
   const [bills, setBills] = useState([]);
   const [billsLoading, setBillsLoading] = useState(false);
   const [services, setServices] = useState([]);
@@ -267,7 +267,7 @@ export default function BillsSection({ siteId, onTotalsChange }) {
         </div>
       )}
 
-            {services.length > 0 && (
+            {services.length > 0 && canEdit && (
         <div className="card">
           <h4 style={{ marginTop: 0 }}>Add Bill</h4>
           <div className="flex-row gap-sm" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
@@ -386,8 +386,8 @@ export default function BillsSection({ siteId, onTotalsChange }) {
                     <td>{bill.energy_usage != null ? Number(bill.energy_usage).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
                     <td>{bill.max_power != null ? Number(bill.max_power).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td>
                     <td style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn btn-secondary" onClick={() => startEditBill(bill)}>Edit</button>
-                      <button className="btn btn-danger" onClick={() => handleDeleteBill(bill.id)}>Delete</button>
+                      {canEdit && <button className="btn btn-secondary" onClick={() => startEditBill(bill)}>Edit</button>}
+                      {canEdit && <button className="btn btn-danger" onClick={() => handleDeleteBill(bill.id)}>Delete</button>}
                     </td>
                   </>
                 )}
