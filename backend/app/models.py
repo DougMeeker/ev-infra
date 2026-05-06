@@ -698,6 +698,7 @@ class UserRole(db.Model):
     hq       - full read/write access to everything (HQ staff)
     district - can edit any site whose departments include their district number
     site     - can edit only the single site they are assigned to
+    fom      - Fleet Optimization Manager; can edit vehicles/equipment in their district
 
     A user with no UserRole row is read-only (GET requests only).
     """
@@ -706,8 +707,8 @@ class UserRole(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # Matches the `sub` claim in the Authelia-issued JWT (the Authelia username).
     username = db.Column(db.String(64), nullable=False, index=True)
-    role = db.Column(db.String(16), nullable=False)   # admin | hq | district | site
-    # Populated for role='district'; the Caltrans district number (e.g. 7).
+    role = db.Column(db.String(16), nullable=False)   # admin | hq | district | site | fom
+    # Populated for role='district' and role='fom'; the Caltrans district number (e.g. 7).
     district = db.Column(db.Integer, nullable=True)
     # Populated for role='site'; FK to the one site this user may edit.
     site_id = db.Column(db.Integer, db.ForeignKey('sites.id', ondelete='SET NULL'), nullable=True)
@@ -716,7 +717,7 @@ class UserRole(db.Model):
 
     __table_args__ = (
         db.CheckConstraint(
-            "role IN ('admin', 'hq', 'district', 'site')",
+            "role IN ('admin', 'hq', 'district', 'site', 'fom')",
             name='ck_user_role_valid',
         ),
     )

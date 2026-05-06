@@ -42,7 +42,8 @@ def _get_signing_keys() -> list[dict]:
         return _jwks_cache["keys"]
 
     jwks_uri = current_app.config["OIDC_JWKS_URI"]
-    resp = requests.get(jwks_uri, timeout=10)
+    ssl_verify = current_app.config.get("OIDC_SSL_VERIFY", True)
+    resp = requests.get(jwks_uri, timeout=10, verify=ssl_verify)
     resp.raise_for_status()
     keys = resp.json().get("keys", [])
     _jwks_cache["keys"] = keys
@@ -149,6 +150,13 @@ def _load_user_role():
         return
     from .models import UserRole
     g.user_role = UserRole.query.filter_by(username=username).first()
+    if g.user_role is None:
+        _log.warning(
+            "OIDC: no UserRole row found for sub=%r – "
+            "user will be read-only. Check the Admin → Roles table.", username
+        )
+    else:
+        _log.warning("OIDC: loaded role=%r for sub=%r", g.user_role.role, username)
 
 
 # ── Public helpers ────────────────────────────────────────────────────
@@ -193,6 +201,40 @@ def can_edit_site(site_id: int) -> bool:
 
     if role_row.role == "site":
         return role_row.site_id == site_id
+
+    return False
+
+
+def can_edit_vehicle(vehicle_id: int) -> bool:
+    """
+    Return True if the current user may mutate the given vehicle/equipment record.
+
+    Rules
+    -----
+    - auth disabled  → True  (dev mode)
+    - admin / hq     → True  (unrestricted)
+    - fom            → True  if the vehicle's department is in the user's district
+    - district / site / no role → False  (use site-level edit for equipment in SiteDetails)
+    """
+    if not current_app.config.get("OIDC_ENABLED"):
+        return True
+
+    role_row = get_user_role()
+    if role_row is None:
+        return False
+
+    if role_row.role in ("admin", "hq"):
+        return True
+
+    if role_row.role == "fom":
+        from .models import Equipment, Department
+        eq = Equipment.query.get(vehicle_id)
+        if eq is None or not eq.department_id:
+            return False
+        dept = Department.query.filter_by(department_id=eq.department_id).first()
+        if dept is None:
+            return False
+        return dept.district == role_row.district
 
     return False
 
@@ -263,6 +305,11 @@ def _before_api_request():
         if claims is not None:
             g.user_claims = claims
             _load_user_role()
+        else:
+            _log.warning(
+                "OIDC: Bearer token present but validation returned None "
+                "(check iss/aud/exp). Token prefix: %s...", token[:16]
+            )
 
     if request.method in ("GET", "HEAD"):
         return None

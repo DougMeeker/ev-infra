@@ -12,7 +12,7 @@ const indicator = (col, sortCol, sortDir) => {
   return sortDir === 'asc' ? ' ↑' : ' ↓';
 };
 
-export default function ChargersTable({ chargers = [], onEdit, onDelete, showSite = false }) {
+export default function ChargersTable({ chargers = [], onEdit, onDelete, showSite = false, canEdit = false }) {
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
 
@@ -101,8 +101,8 @@ export default function ChargersTable({ chargers = [], onEdit, onDelete, showSit
             <td>{c.fleet ? '✓' : ''}</td>
             <td>{c.description ?? ''}</td>
             <td style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn" onClick={() => onEdit?.(c)}>Edit</button>
-              <button className="btn btn-danger" onClick={() => onDelete?.(c.id)} style={{marginLeft: 8}}>Delete</button>
+              {canEdit && <button className="btn" onClick={() => onEdit?.(c)}>Edit</button>}
+              {canEdit && <button className="btn btn-danger" onClick={() => onDelete?.(c.id)} style={{marginLeft: 8}}>Delete</button>}
             </td>
           </tr>
         ))}

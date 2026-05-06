@@ -1,7 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { getCatalog, createCatalogEntry, updateCatalogEntry, uploadCatalogFile, refreshCatalog, deleteCatalogEntry } from '../api';
+import { useAuth } from '../AuthProvider';
 
 const CatalogManager = () => {
+  const { isAuthenticated, role } = useAuth();
+  const canEdit = useMemo(() => isAuthenticated && (role === 'admin' || role === 'hq'), [isAuthenticated, role]);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
@@ -177,9 +180,11 @@ const CatalogManager = () => {
       <div className="card" style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h4 style={{ marginTop: 0, marginBottom: 0 }}>Import / Refresh</h4>
+          {canEdit && (
           <button className="btn" onClick={() => setShowCreateForm(f => !f)}>
             {showCreateForm ? 'Cancel' : '+ New MC Record'}
           </button>
+          )}
         </div>
         {showCreateForm && (
           <div style={{ marginTop: 16, padding: 16, background: '#f8f9fa', borderRadius: 6, border: '1px solid #dee2e6' }}>
@@ -213,6 +218,7 @@ const CatalogManager = () => {
           </div>
         )}
         <div style={{ marginTop: 16 }}>
+        {canEdit && (
         <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
           <input
             ref={fileInputRef}
@@ -231,6 +237,18 @@ const CatalogManager = () => {
             ))}
           </select>
         </div>
+        )}
+        {!canEdit && (
+        <div className="flex-row gap-sm" style={{ flexWrap: 'wrap' }}>
+          <input className="input" style={{ width:'220px' }} placeholder="Filter MC / description" value={filter} onChange={e=>setFilter(e.target.value)} />
+          <select className="input" style={{ width:'180px' }} value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)}>
+            <option value="">Filter by category</option>
+            {categoryOptions.map(({ code, description }) => (
+              <option key={code} value={code}>{description && description !== code ? `${code} - ${description}` : code}</option>
+            ))}
+          </select>
+        </div>
+        )}
         <small style={{ display:'block', marginTop:'8px' }}>Upload replaces description/status/revised_date; if CSV includes an Energy Use column, energy_per_mile is updated as well (kWh/mile).</small>
         </div>
       </div>
@@ -289,7 +307,7 @@ const CatalogManager = () => {
                         <button className="btn" disabled={savingMC === r.mc_code} onClick={() => saveEntry(r.mc_code)}>{savingMC === r.mc_code ? 'Saving...' : 'Save'}</button>
                         <button className="btn btn-secondary" onClick={cancelEdit}>Cancel</button>
                       </>
-                    ) : (
+                    ) : canEdit ? (
                       <>
                         <button className="btn btn-secondary" onClick={() => startEdit(r)}>Edit</button>
                         <button className="btn btn-danger" onClick={() => {
@@ -299,7 +317,7 @@ const CatalogManager = () => {
                             .catch(err => { console.error('Delete failed', err); alert(err.response?.data?.error || 'Delete failed'); });
                         }}>Delete</button>
                       </>
-                    )}
+                    ) : null}
                   </td>
                 </tr>
               );

@@ -33,6 +33,7 @@ export default function SitesSection({
   gridRef,
   showSitesSection,
   setShowSitesSection,
+  canEdit = false,
 }) {
   const sps = Array.isArray(sortedProjectSites) ? sortedProjectSites : [];
   const latest = Array.isArray(latestStatuses) ? latestStatuses : [];
@@ -49,6 +50,7 @@ export default function SitesSection({
       {selectedProjectId ? (
         showSitesSection ? (
           <>
+            {canEdit && (
             <form onSubmit={onAssign} style={{ marginBottom: 12, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
               <div style={{ marginRight: 30 }}>
                 <AsyncCombo
@@ -66,6 +68,7 @@ export default function SitesSection({
               </div>
               <button type="submit" className="btn" disabled={!assignment.siteId}>Add to Project</button>
             </form>
+            )}
 
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
               <span>Sort:</span>
@@ -147,6 +150,7 @@ export default function SitesSection({
                       >
                         Site Details
                       </button>
+                      {canEdit && (
                       <button
                         className={`${styles.miniBtn} ${styles.miniBtnDanger}`}
                         onClick={() => onRemove(s.id)}
@@ -154,6 +158,7 @@ export default function SitesSection({
                       >
                         Remove From Project
                       </button>
+                      )}
                     </div>
                   </div>
                 );

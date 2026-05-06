@@ -11,6 +11,7 @@
  *   <AuthProvider>       – wrap around <App /> in index.js
  *   useAuth()            – hook returning { isAuthenticated, user, login, logout, getToken }
  *   <RequireAuth>        – component that gates its children behind authentication
+ *   <RequireRole>        – component that gates children behind one or more roles
  */
 
 import React, { createContext, useContext, useCallback, useMemo, useState, useEffect } from "react";
@@ -191,6 +192,27 @@ export function RequireAuth({ children }) {
 				>
 					Sign In
 				</button>
+			</div>
+		);
+	}
+
+	return <>{children}</>;
+}
+
+// ── <RequireRole> gate component ────────────────────────────────────
+// roles: array of allowed role strings, e.g. ['admin'] or ['admin','hq']
+
+export function RequireRole({ roles, children }) {
+	const { isAuthenticated, role, authEnabled, ready } = useAuth();
+
+	if (!authEnabled) return <>{children}</>;
+	if (!ready) return <div style={{ padding: "2rem", textAlign: "center" }}>Loading…</div>;
+
+	if (!isAuthenticated || !roles.includes(role)) {
+		return (
+			<div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", gap: "1rem" }}>
+				<h2>Access Denied</h2>
+				<p>You do not have permission to view this page.</p>
 			</div>
 		);
 	}

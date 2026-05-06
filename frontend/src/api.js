@@ -20,16 +20,20 @@ function resolveApiBase() {
 const API_BASE_URL = resolveApiBase();
 
 // ── Axios interceptor: attach Bearer token to every request ─────────
-// When OIDC auth is enabled, read the current user's access token from the
-// oidc-client-ts UserManager and add it as an Authorization header.
+// Authelia issues opaque (non-JWT) access tokens. We send the ID token
+// instead — it is always a signed JWT and contains the `sub` claim the
+// backend needs for role lookup.
 axios.interceptors.request.use(async (config) => {
 	if (!AUTH_ENABLED || !userManager) return config;
 
 	try {
 		const user = await userManager.getUser();
-		if (user && !user.expired && user.access_token) {
+		// Prefer id_token (always a JWT). Fall back to access_token in case
+		// the provider issues JWT access tokens directly.
+		const token = (user && !user.expired) ? (user.id_token || user.access_token) : null;
+		if (token) {
 			config.headers = config.headers || {};
-			config.headers.Authorization = `Bearer ${user.access_token}`;
+			config.headers.Authorization = `Bearer ${token}`;
 		}
 	} catch (err) {
 		// If retrieval fails, let the request go through without a token –

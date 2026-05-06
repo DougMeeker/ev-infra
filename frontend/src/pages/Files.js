@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { listFiles, assignFileSites, deleteFile, updateFile, fileDownloadUrl, fileViewUrl } from '../api';
 import SiteMultiSelect from '../components/SiteMultiSelect';
+import { useAuth } from '../AuthProvider';
 
 const FilesPage = () => {
+  const { isAuthenticated, role } = useAuth();
+  const canEdit = useMemo(() => isAuthenticated && (role === 'admin' || role === 'hq'), [isAuthenticated, role]);
   const [files, setFiles] = useState([]);
   const [q, setQ] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -89,9 +92,9 @@ const FilesPage = () => {
                 </td>
                 <td>
                   <div style={{ display: 'flex', gap: '8px'}}>
-                    <button className="btn" onClick={() => onRename(f)}>Rename</button>
-                    <button className="btn btn-secondary" onClick={() => setSelectedFile(f)}>Assign to sites</button>
-                    <button className="btn btn-danger" onClick={() => onDelete(f.id)}>Delete</button>
+                    {canEdit && <button className="btn" onClick={() => onRename(f)}>Rename</button>}
+                    {canEdit && <button className="btn btn-secondary" onClick={() => setSelectedFile(f)}>Assign to sites</button>}
+                    {canEdit && <button className="btn btn-danger" onClick={() => onDelete(f.id)}>Delete</button>}
                   </div>
                 </td>
               </tr>

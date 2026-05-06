@@ -1,9 +1,10 @@
 from datetime import datetime
-from flask import request
+from flask import request, jsonify, current_app
 from sqlalchemy import func
 from ..extensions import db
 from ..models import Equipment, EquipmentUsage
 from .site_routes import site_bp
+from ..auth import can_edit_vehicle
 from ..services.equipment_service import (
     list_equipment as svc_list_equipment,
     create_equipment as svc_create_equipment,
@@ -77,12 +78,16 @@ def get_equipment(equipment_id):
 
 @site_bp.route("/equipment/<int:equipment_id>", methods=["PUT"])
 def update_equipment(equipment_id):
+    if current_app.config.get("OIDC_ENABLED") and not can_edit_vehicle(equipment_id):
+        return jsonify({"error": "Insufficient permissions"}), 403
     data = request.get_json() or {}
     return svc_update_equipment(equipment_id, data)
 
 
 @site_bp.route("/equipment/<int:equipment_id>", methods=["DELETE"])
 def delete_equipment(equipment_id):
+    if current_app.config.get("OIDC_ENABLED") and not can_edit_vehicle(equipment_id):
+        return jsonify({"error": "Insufficient permissions"}), 403
     return svc_delete_equipment(equipment_id)
 
 

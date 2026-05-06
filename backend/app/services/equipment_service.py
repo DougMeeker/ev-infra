@@ -142,6 +142,13 @@ def get_equipment(equipment_id):
         db.func.max(EquipmentUsage.year * 12 + EquipmentUsage.month - 1)
     ).filter(EquipmentUsage.equipment_id == eq.id).scalar()
     data = eq.to_dict()
+    # Include the department's district so the frontend can check FOM permissions
+    if eq.department_id:
+        from ..models import Department
+        dept = Department.query.filter_by(department_id=eq.department_id).first()
+        data['department_district'] = dept.district if dept else None
+    else:
+        data['department_district'] = None
     if latest_ordinal is not None:
         end_ordinal   = latest_ordinal
         start_ordinal = end_ordinal - 11

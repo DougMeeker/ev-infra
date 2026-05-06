@@ -9,6 +9,7 @@
  *   hq       – read/write all sites
  *   district – read/write sites in their district number
  *   site     – read/write one specific site
+ *   fom      – Fleet Optimization Manager; edit vehicles in their district
  */
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import AsyncCombo from "../components/AsyncCombo";
@@ -22,13 +23,14 @@ import {
   getSites,
 } from "../api";
 
-const ROLES = ["admin", "hq", "district", "site"];
+const ROLES = ["admin", "hq", "district", "site", "fom"];
 
 const ROLE_COLORS = {
   admin:    { bg: "#fde8d8", text: "#b94a00" },
   hq:       { bg: "#e8f0fe", text: "#1a56cc" },
   district: { bg: "#e6f4ea", text: "#1a7340" },
   site:     { bg: "#f3e8fd", text: "#6b2fa0" },
+  fom:      { bg: "#fff3cd", text: "#856404" },
 };
 
 const badge = (role) => {
@@ -316,8 +318,8 @@ export default function AdminPanel() {
                 </select>
               </div>
 
-              {/* District (role=district) */}
-              {form.role === "district" && (
+              {/* District (role=district or role=fom) */}
+              {(form.role === "district" || form.role === "fom") && (
                 <div style={{ marginBottom: "1rem" }}>
                   <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 500, marginBottom: 4, color: "var(--text-secondary, #555)" }}>
                     District number

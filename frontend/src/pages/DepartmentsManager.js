@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getDepartments,
@@ -8,6 +8,7 @@ import {
   assignDepartmentSite,
 } from '../api';
 import SiteSelector from '../components/SiteSelector';
+import { useAuth } from '../AuthProvider';
 
 // ─── Create form ─────────────────────────────────────────────────────────────
 function CreateForm({ onCreate }) {
@@ -56,6 +57,9 @@ const DepartmentsManager = () => {
   const [unassigned, setUnassigned] = useState(false);
   const [perPage, setPerPage]   = useState(50);
   const [page, setPage]         = useState(1);
+
+  const { isAuthenticated, role } = useAuth();
+  const canEdit = useMemo(() => isAuthenticated && (role === 'admin' || role === 'hq'), [isAuthenticated, role]);
 
   // Data
   const [rows, setRows]   = useState([]);
@@ -170,9 +174,11 @@ const DepartmentsManager = () => {
     <div className="container" style={{ paddingTop: 24, paddingBottom: 40 }}>
       <div className="flex-row justify-between align-center" style={{ marginBottom: 16 }}>
         <h2 className="page-header" style={{ margin: 0 }}>Departments</h2>
+        {canEdit && (
         <button className="btn" onClick={() => setShowCreate(v => !v)}>
           {showCreate ? 'Cancel' : '+ New Department'}
         </button>
+        )}
       </div>
 
       {/* ── Create card ── */}
@@ -299,25 +305,31 @@ const DepartmentsManager = () => {
                           <Link to={`/site/${row.site_id}`} style={{ fontSize: '0.85rem' }}>
                             {row.site_name || `Site ${row.site_id}`}
                           </Link>
+                          {canEdit && (
                           <button
                             className="btn btn-secondary"
                             style={{ padding: '1px 6px', fontSize: '0.75rem' }}
                             title="Change site"
                             onClick={() => { setAssigningId(row.id); setEditId(null); }}
                           >✎</button>
+                          )}
+                          {canEdit && (
                           <button
                             className="btn btn-danger"
                             style={{ padding: '1px 6px', fontSize: '0.75rem' }}
                             title="Unassign site"
                             onClick={() => handleClearSite(row.id)}
                           >×</button>
+                          )}
                         </span>
                       ) : (
+                        canEdit ? (
                         <button
                           className="btn btn-secondary"
                           style={{ padding: '2px 8px', fontSize: '0.8rem' }}
                           onClick={() => { setAssigningId(row.id); setEditId(null); }}
                         >Assign Site</button>
+                        ) : null
                       )}
                     </td>
 
@@ -331,7 +343,7 @@ const DepartmentsManager = () => {
                             </button>
                             <button className="btn btn-secondary" onClick={cancelEdit}>Cancel</button>
                           </>
-                        ) : (
+                        ) : canEdit ? (
                           <>
                             <button className="btn btn-secondary" onClick={() => startEdit(row)}>Edit</button>
                             <button
@@ -340,7 +352,7 @@ const DepartmentsManager = () => {
                               onClick={() => handleDelete(row.id)}
                             >{isDeleting ? '…' : 'Delete'}</button>
                           </>
-                        )}
+                        ) : null}
                       </span>
                     </td>
                   </tr>

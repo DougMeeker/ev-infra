@@ -1,19 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getEquipmentDetails, updateEquipmentDetails, getEquipmentUsage, upsertEquipmentUsage, deleteEquipmentItem } from '../api';
 import SiteSelector from '../components/SiteSelector';
+import { useAuth } from '../AuthProvider';
 
 const lastYear = new Date().getFullYear() - 1;
 
 const VehicleDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated, role, district } = useAuth();
   const [vehicle, setVehicle] = useState(null);
   const [editingMeta, setEditingMeta] = useState(false);
   const [editing, setEditing] = useState({ equipment_id: '', site_id: '', mc_code: '', department_id: '', annual_miles: '', driving_hours: '' });
   const [usage, setUsage] = useState([]);
   const [newUsage, setNewUsage] = useState({ year: String(lastYear), month: '12', miles: '', driving_hours: '', days_utilized: '' });
   const [loadingUsage, setLoadingUsage] = useState(false);
+
+  // admin/hq → always; fom → if vehicle's department district matches their district
+  const canEdit = useMemo(() => {
+    if (!isAuthenticated || !role) return false;
+    if (role === 'admin' || role === 'hq') return true;
+    if (role === 'fom') return vehicle?.department_district === district;
+    return false;
+  }, [isAuthenticated, role, district, vehicle]);
 
   const load = async () => {
     try {
@@ -111,7 +121,7 @@ const VehicleDetails = () => {
       <div className="flex-row gap-sm" style={{ marginBottom: 12 }}>
         <button className="btn btn-secondary" onClick={() => navigate('/vehicles')}>Back to Vehicles</button>
         <button className="btn btn-secondary" onClick={() => navigate(`/site/${vehicle.site_id}`)}>Go to Site</button>
-        <button className="btn btn-danger" onClick={deleteVehicle}>Delete Vehicle</button>
+        {canEdit && <button className="btn btn-danger" onClick={deleteVehicle}>Delete Vehicle</button>}
       </div>
 
       {/* Details and Summary side by side */}
@@ -169,7 +179,7 @@ const VehicleDetails = () => {
                 <div><span>Annual Driving Hours:</span><strong> {vehicle.driving_hours != null ? Number(vehicle.driving_hours).toFixed(1) : '—'}</strong></div>
               </div>
               <div style={{ marginTop: 12 }}>
-                <button className="btn" onClick={() => setEditingMeta(true)}>Edit</button>
+                {canEdit && <button className="btn" onClick={() => setEditingMeta(true)}>Edit</button>}
               </div>
             </>
           )}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getBudgetSummary,
@@ -14,6 +14,7 @@ import {
   getProjects,
 } from '../api';
 import SiteSelector from '../components/SiteSelector';
+import { useAuth } from '../AuthProvider';
 
 const fmt$ = (v) =>
   v == null ? '—' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -54,6 +55,8 @@ function completionBadge(complete, total) {
 // ── Budget Overview Tab ───────────────────────────────────────────────
 
 function BudgetTab() {
+  const { isAuthenticated, role } = useAuth();
+  const canEdit = useMemo(() => isAuthenticated && (role === 'admin' || role === 'hq'), [isAuthenticated, role]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState(null);
@@ -170,9 +173,9 @@ function BudgetTab() {
                       <button className="btn btn-sm btn-primary" onClick={saveEdit} disabled={saving} style={{ marginRight: 6 }}>{saving ? '…' : 'Save'}</button>
                       <button className="btn btn-sm" onClick={() => setEditId(null)}>Cancel</button>
                     </>
-                  ) : (
+                  ) : canEdit ? (
                     <button className="btn btn-sm" onClick={() => startEdit(p)}>Edit</button>
-                  )}
+                  ) : null}
                 </td>
               </tr>
             ))}
@@ -193,6 +196,8 @@ function BudgetTab() {
 const emptyCost = () => ({ charger_hardware: '', electrical_upgrade: '', construction_civil: '', utility_interconnection: '', design_engineering: '', contingency: '', notes: '' });
 
 function CostEstimatesTab() {
+  const { isAuthenticated, role } = useAuth();
+  const canEdit = useMemo(() => isAuthenticated && (role === 'admin' || role === 'hq'), [isAuthenticated, role]);
   const [estimates, setEstimates] = useState([]);
   const [projects, setProjects] = useState([]);
   const [filterProject, setFilterProject] = useState('');
@@ -289,7 +294,7 @@ function CostEstimatesTab() {
           <option value="">All Projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <button className="btn btn-primary btn-sm" onClick={() => { setShowForm(true); setError(null); }}>+ Add Estimate</button>
+        {canEdit && <button className="btn btn-primary btn-sm" onClick={() => { setShowForm(true); setError(null); }}>+ Add Estimate</button>}
       </div>
 
       {showForm && (
@@ -374,12 +379,12 @@ function CostEstimatesTab() {
                         <button className="btn btn-sm btn-primary" onClick={() => saveEdit(e.id)} disabled={saving} style={{ marginRight: 4 }}>{saving ? '…' : 'Save'}</button>
                         <button className="btn btn-sm" onClick={() => setEditId(null)}>Cancel</button>
                       </>
-                    ) : (
+                    ) : canEdit ? (
                       <>
                         <button className="btn btn-sm" onClick={() => startEdit(e)} style={{ marginRight: 4 }}>Edit</button>
                         <button className="btn btn-sm btn-danger" onClick={() => handleDelete(e.id)}>Del</button>
                       </>
-                    )}
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -408,6 +413,8 @@ function CostEstimatesTab() {
 // ── Milestones Tab ────────────────────────────────────────────────────
 
 function MilestonesTab() {
+  const { isAuthenticated, role } = useAuth();
+  const canEdit = useMemo(() => isAuthenticated && (role === 'admin' || role === 'hq'), [isAuthenticated, role]);
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [milestones, setMilestones] = useState([]);
@@ -512,7 +519,7 @@ function MilestonesTab() {
           </select>
         </div>
 
-        {selectedProjectId && (
+        {selectedProjectId && canEdit && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 4 }}>Initialize milestones for site</label>
@@ -594,12 +601,12 @@ function MilestonesTab() {
                           <button className="btn btn-sm btn-primary" onClick={() => saveEdit(m.id)} disabled={saving} style={{ marginRight: 4 }}>{saving ? '…' : 'Save'}</button>
                           <button className="btn btn-sm" onClick={() => setEditId(null)}>✕</button>
                         </>
-                      ) : (
+                      ) : canEdit ? (
                         <>
                           <button className="btn btn-sm" onClick={() => startEdit(m)} style={{ marginRight: 4 }}>Edit</button>
                           <button className="btn btn-sm btn-danger" onClick={() => handleDelete(m.id)}>Del</button>
                         </>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 ))}

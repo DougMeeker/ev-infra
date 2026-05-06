@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { listVehicles, createVehicle, updateVehicle, deleteVehicle, getSites, getCatalog } from '../api';
 import { useDebounce } from '../hooks';
 import SiteSelector from '../components/SiteSelector';
+import { useAuth } from '../AuthProvider';
 
 const padMC = (code) => code ? String(code).padStart(5, '0') : '';
 
 const VehiclesManager = () => {
+  const { isAuthenticated, role } = useAuth();
+  const canEdit = useMemo(() => isAuthenticated && (role === 'admin' || role === 'hq'), [isAuthenticated, role]);
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
@@ -111,6 +114,7 @@ const VehiclesManager = () => {
         </div>
       </div>
 
+      {canEdit && (
       <div className="card" style={{ marginBottom: '16px' }}>
         <h4 style={{ marginTop: 0 }}>Create Vehicle</h4>
         <div className="flex-row" style={{ flexWrap: 'wrap', alignItems: 'flex-end', gap: 12 }}>
@@ -133,6 +137,7 @@ const VehiclesManager = () => {
           <button className="btn" disabled={creating || !siteId || !mcCode} onClick={doCreate}>{creating ? 'Creating...' : 'Create'}</button>
         </div>
       </div>
+      )}
 
       {loading ? <p>Loading...</p> : (
         <>
@@ -217,16 +222,18 @@ const VehiclesManager = () => {
                           }}>Save</button>
                           <button className="btn btn-secondary" onClick={() => { setEditingId(null); load(); }}>Cancel</button>
                         </>
-                      ) : (
+                      ) : canEdit ? (
                         <button className="btn" onClick={() => setEditingId(e.id)}>Edit</button>
-                      )}
+                      ) : null}
                       <Link className="btn btn-secondary" to={`/vehicle/${e.id}`}>Details</Link>
+                      {canEdit && (
                       <button className="btn btn-danger" onClick={() => {
                         if (!window.confirm('Delete vehicle?')) return;
                         deleteVehicle(e.id)
                           .then(() => load())
                           .catch(err => { console.error('Delete failed', err); alert(err.response?.data?.error || 'Delete failed'); });
                       }}>Delete</button>
+                      )}
                     </td>
                   </tr>
                 );

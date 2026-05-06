@@ -20,6 +20,7 @@ export default function StatusEditor({
   onDeleteStatus,
   error,
   setError,
+  canEdit = false,
 }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
@@ -92,6 +93,7 @@ export default function StatusEditor({
               );
             })}
           </div>
+          {canEdit && (
           <form onSubmit={onSubmitStatus} style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom: 16 }}>
             <input
               placeholder="Status Message"
@@ -109,6 +111,7 @@ export default function StatusEditor({
             />
             <button type="submit" className="btn" disabled={!selectedSiteId}>Add Status</button>
           </form>
+          )}
 
           {/* Status History */}
           {selectedSiteId && statusHistory.length > 0 && (
@@ -234,6 +237,7 @@ export default function StatusEditor({
                           <span style={{ fontSize: '13px', color: '#888' }}>
                             {formatDate(status.status_date)}
                           </span>
+                          {canEdit && (
                           <button
                             className="btn btn-secondary"
                             onClick={() => {
@@ -261,6 +265,8 @@ export default function StatusEditor({
                           >
                             Edit
                           </button>
+                          )}
+                          {canEdit && (
                           <button
                             className="btn btn-danger"
                             onClick={() => {
@@ -272,6 +278,7 @@ export default function StatusEditor({
                           >
                             Delete
                           </button>
+                          )}
                         </div>
                       </div>
                       {status.status_message && (

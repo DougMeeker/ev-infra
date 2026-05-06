@@ -50,6 +50,10 @@ class Config:
         "OIDC_JWKS_URI",
         f"{_oidc_issuer}/.well-known/jwks.json" if _oidc_issuer else "",
     )
+    # Set OIDC_SSL_VERIFY=false to skip TLS certificate verification when
+    # fetching JWKS from an Authelia instance with a self-signed certificate.
+    # Do NOT disable in production with a valid public CA certificate.
+    OIDC_SSL_VERIFY = os.getenv("OIDC_SSL_VERIFY", "true").lower() != "false"
 
     # ── MCP Knowledge Base Sync ──────────────────────────────────────
     MCP_PGVECTOR_URL = os.getenv("MCP_PGVECTOR_URL", "http://127.0.0.1:8000")

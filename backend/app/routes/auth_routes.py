@@ -3,7 +3,6 @@ Auth routes – user profile and self-service registration.
 """
 
 from flask import Blueprint, g, jsonify, request, current_app
-from ..auth import require_auth
 from ..email_utils import send_verification_email
 from ..services.registration_service import register_user, verify_registration, resend_verification_token
 
@@ -11,9 +10,13 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
 @auth_bp.route("/me", methods=["GET"])
-@require_auth
 def me():
-    """Return the current user's claims from the validated token."""
+    """Return the current user's claims from the validated token.
+
+    Does NOT use @require_auth so that it degrades gracefully when the
+    access token is expired or fails validation — the frontend receives
+    role=null rather than a 401 that hides all edit controls.
+    """
     claims = getattr(g, "user_claims", None)
     if claims is None:
         return jsonify({
@@ -22,6 +25,7 @@ def me():
             "name": "Local Developer",
             "email": "dev@localhost",
             "roles": [],
+            "role": None,
         })
 
     from ..auth import get_user_role

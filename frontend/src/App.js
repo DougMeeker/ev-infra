@@ -7,6 +7,7 @@ import SiteImporter from "./pages/SiteImporter";
 import ProjectsManager from "./pages/ProjectsManager";
 // Consolidate status into ProjectsManager; keep legacy /status routes via redirect
 import { useEffect } from "react";
+import { RequireRole } from "./AuthProvider";
 import Header from "./components/Header";
 import Chargers from "./pages/Chargers";
 import VehiclesManager from "./pages/VehiclesManager";
@@ -29,7 +30,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/site/:id" element={<SiteDetails />} />
         <Route path="/catalog" element={<CatalogManager />} />
-        <Route path="/sites/import" element={<SiteImporter />} />
+        <Route path="/sites/import" element={<RequireRole roles={['admin','hq']}><SiteImporter /></RequireRole>} />
         {/* Project Manager routes */}
         <Route path="/project" element={<ProjectsManager />} />
         <Route path="/project/:projectId" element={<ProjectsManager />} />
@@ -45,10 +46,10 @@ function App() {
         <Route path="/departments" element={<DepartmentsManager />} />
         <Route path="/priorities" element={<PriorityDashboard />} />
         <Route path="/financials" element={<FinancialTracker />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/settings" element={<RequireRole roles={['admin','hq']}><Settings /></RequireRole>} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/admin" element={<AdminPanel />} />
+        <Route path="/admin" element={<RequireRole roles={['admin']}><AdminPanel /></RequireRole>} />
       </Routes>
     </Router>
   );

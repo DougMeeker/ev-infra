@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getChargers, createCharger, updateCharger, deleteCharger, getProjects } from '../api';
 import ChargersTable from '../components/ChargersTable';
 import ChargerForm from '../components/ChargerForm';
 import SiteSelector from '../components/SiteSelector';
+import { useAuth } from '../AuthProvider';
 
 const formatDate = (d) => {
     if (!d) return '';
@@ -18,6 +19,8 @@ const formatDate = (d) => {
 export default function Chargers() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { isAuthenticated, role } = useAuth();
+  const canEdit = useMemo(() => isAuthenticated && (role === 'admin' || role === 'hq'), [isAuthenticated, role]);
   const [siteId, setSiteId] = useState(() => {
     const sid = searchParams.get('siteId');
     if (sid) {
@@ -104,6 +107,7 @@ export default function Chargers() {
               placeholder="All sites (or search to filter)..."
             />
           </div>
+          {canEdit && (
           <button 
             className="btn" 
             onClick={() => setEditing({})} 
@@ -112,6 +116,7 @@ export default function Chargers() {
           >
             Add Charger
           </button>
+          )}
         </div>
       </div>
 
@@ -136,6 +141,7 @@ export default function Chargers() {
           onEdit={(c) => setEditing({ ...c, date_installed: formatDate(c.date_installed) })}
           onDelete={onDelete}
           showSite={!siteId}
+          canEdit={canEdit}
         />
       )}
     </div>

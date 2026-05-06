@@ -27,6 +27,7 @@ export default function ProjectsSection({
   newProject,
   setNewProject,
   onCreateProject,
+  canEdit = false,
 }) {
   const list = Array.isArray(projects) ? projects : [];
   const safeEdit = editProject || { name: '', description: '' };
@@ -36,12 +37,14 @@ export default function ProjectsSection({
     <div className="card" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h3 style={{ margin: 0 }}>Projects {loadingProjects && <small style={{ fontWeight:'normal' }}>Loading...</small>}</h3>
+        {canEdit && (
         <button 
           className="btn" 
           onClick={() => setShowCreateForm(!showCreateForm)}
         >
           {showCreateForm ? 'Cancel' : '+ New Project'}
         </button>
+        )}
       </div>
       
       {/* Create New Project Form */}
@@ -151,6 +154,7 @@ export default function ProjectsSection({
                 >
                   Select
                 </button>
+                {canEdit && (
                 <button
                   className={styles.miniBtn}
                   onClick={(e) => {
@@ -166,6 +170,8 @@ export default function ProjectsSection({
                 >
                   {isEditing ? 'Cancel' : 'Edit'}
                 </button>
+                )}
+                {canEdit && (
                 <button
                   className={`${styles.miniBtn} ${styles.miniBtnDanger}`}
                   onClick={(e) => {
@@ -176,6 +182,7 @@ export default function ProjectsSection({
                 >
                   Delete
                 </button>
+                )}
               </div>
               
               {/* Edit Form - shown inline when editing this project */}

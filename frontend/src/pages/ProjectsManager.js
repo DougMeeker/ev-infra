@@ -6,6 +6,7 @@ import StatusEditor from '../components/StatusEditor';
 import ProjectsSection from '../components/ProjectsSection';
 import SitesSection from '../components/SitesSection';
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../AuthProvider';
 import {
   getProjects,
   createProject,
@@ -30,6 +31,8 @@ export default function ProjectsManager() {
   const [searchParams, setSearchParams] = useSearchParams();
   const params = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated, role } = useAuth();
+  const canEdit = useMemo(() => isAuthenticated && (role === 'admin' || role === 'hq'), [isAuthenticated, role]);
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
@@ -543,6 +546,7 @@ export default function ProjectsManager() {
         newProject={newProject}
         setNewProject={setNewProject}
         onCreateProject={handleCreateProject}
+        canEdit={canEdit}
       />
       
       <SitesSection
@@ -589,6 +593,7 @@ export default function ProjectsManager() {
         gridRef={gridRef}
         showSitesSection={showSitesSection}
         setShowSitesSection={setShowSitesSection}
+        canEdit={canEdit}
       />
 
       <StatusEditor
@@ -610,6 +615,7 @@ export default function ProjectsManager() {
         onDeleteStatus={handleDeleteStatus}
         error={statusError}
         setError={setStatusError}
+        canEdit={canEdit}
       />
     </div>
   );
