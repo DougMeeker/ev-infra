@@ -26,6 +26,7 @@ def me():
             "email": "dev@localhost",
             "roles": [],
             "role": None,
+            "_debug": "No valid Bearer token found in request.",
         })
 
     from ..auth import get_user_role
@@ -40,6 +41,7 @@ def me():
         "role": role_row.role if role_row else None,
         "district": role_row.district if role_row else None,
         "site_id": role_row.site_id if role_row else None,
+        "_debug": None if role_row else f"Authenticated as sub='{claims.get('sub')}' but no UserRole row found. Add this sub in Admin → Roles.",
     })
 
 

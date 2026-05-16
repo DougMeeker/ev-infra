@@ -49,7 +49,6 @@ const badge = (role) => {
 const EMPTY_FORM = { username: "", role: "hq", district: "", site_id: "", site_name: "" };
 
 export default function AdminPanel() {
-  const [users,   setUsers]   = useState([]);   // Authelia users
   const [roles,   setRoles]   = useState([]);   // UserRole rows
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState("");
@@ -67,11 +66,7 @@ export default function AdminPanel() {
     setLoading(true);
     setError("");
     try {
-      const [uRes, rRes] = await Promise.all([
-        adminListUsers(),
-        adminListRoles(),
-      ]);
-      setUsers(uRes.data);
+      const rRes = await adminListRoles();
       setRoles(rRes.data);
     } catch (e) {
       setError(e.response?.data?.error || "Failed to load admin data");
@@ -288,19 +283,14 @@ export default function AdminPanel() {
                     {form.username}
                   </div>
                 ) : (
-                  <select
+                  <input
+                    type="text"
                     value={form.username}
                     onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
                     required
+                    placeholder="AD username (sAMAccountName)"
                     style={inputStyle}
-                  >
-                    <option value="">— select user —</option>
-                    {users.map((u) => (
-                      <option key={u.username} value={u.username}>
-                        {u.username}{u.displayname ? ` (${u.displayname})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 )}
               </div>
 

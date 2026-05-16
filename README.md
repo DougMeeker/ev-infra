@@ -31,8 +31,14 @@ The app uses **Authelia** as the identity provider via OpenID Connect (OIDC). Th
 uses `oidc-client-ts` / `react-oidc-context` for the authorization code + PKCE flow; the
 Flask backend validates the resulting JWT against Authelia's JWKS endpoint.
 
-Authentication is **opt-in** — disabled by default so the app works out of the box for local
-development with no Authelia setup required.
+**Authentication backend (production):** Authelia is configured to authenticate against
+**Active Directory / LDAP** (`ct.dot.ca.gov`). Users log in with their Windows `sAMAccountName`
+and domain password. There is no self-service registration — accounts are managed by IT in AD.
+
+**Role-based access control:** After authentication, the Flask API checks a `user_roles`
+table to determine the user's app-level role (`admin`, `hq`, `district`, `site`). An admin
+assigns roles via the **Admin: User Roles** panel (`/admin`). The `username` field must match
+the user's `sAMAccountName` exactly. Roles can be pre-assigned before the user's first login.
 
 ### How It Works
 
@@ -141,7 +147,7 @@ npm start
 Open `http://localhost:3000` — you will be redirected to the Authelia login page.
 After signing in, you are returned to the app with full access.
 
-The header shows your display name and **Sign out** / **Register** buttons.
+The header shows your display name, your assigned role badge, and a **Sign out** button.
 
 ### Turning Auth Off (Local Development)
 
@@ -180,14 +186,6 @@ Returns `"authenticated": false` with a stub name when auth is disabled.
 | `OIDC_CLIENT_ID` | `""` | Client ID registered in Authelia |
 | `OIDC_AUDIENCE` | *(client ID)* | Token audience; defaults to `OIDC_CLIENT_ID` |
 | `OIDC_JWKS_URI` | *(auto)* | Override JWKS endpoint (auto-derived from issuer) |
-| `AUTHELIA_USERS_FILE` | `/etc/authelia/users_database.yml` | Path to Authelia users file (write access required for self-service registration) |
-| `FRONTEND_URL` | `https://svgc32zevi.dot.ca.gov` | Base URL for email verification links |
-| `SMTP_HOST` | `""` | SMTP server host (leave empty to log verification links instead) |
-| `SMTP_PORT` | `587` | SMTP port |
-| `SMTP_USERNAME` | `""` | SMTP credentials |
-| `SMTP_PASSWORD` | `""` | SMTP credentials |
-| `SMTP_FROM` | `""` | From address for verification emails |
-| `SMTP_USE_TLS` | `true` | Use STARTTLS (`true`) or plain SMTP (`false`) |
 
 #### Frontend (`frontend/.env.local`)
 
@@ -198,6 +196,11 @@ Returns `"authenticated": false` with a stub name when auth is disabled.
 | `REACT_APP_OIDC_REDIRECT_URI` | `http://localhost:3000` | OAuth redirect URI |
 
 ## Self-Service User Registration
+
+> **Deprecated (May 2026).** Self-service registration was removed when authentication was
+> migrated to Active Directory / LDAP. User accounts are managed by IT in AD. The Register
+> button and `/register` page have been removed from the UI. The sections below are retained
+> for historical reference only.
 
 Users can create their own accounts without administrator intervention. Accounts are created
 directly in Authelia's `users_database.yml` after email verification.

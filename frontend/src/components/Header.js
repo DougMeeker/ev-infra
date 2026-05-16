@@ -78,7 +78,6 @@ const MENU_LINKS = [
   { to: "/priorities", label: "Priorities" },
   { to: "/financials", label: "Financials" },
   { to: "/settings",   label: "Settings" },
-  { to: "/register",   label: "Register new account" },
 ];
 
 const ADMIN_LINKS = [
@@ -136,6 +135,18 @@ const Header = () => {
               <span style={{ color: 'var(--text-secondary, #666)', whiteSpace: 'nowrap', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {user.name || user.email}
               </span>
+              <span style={{
+                background: role ? 'var(--primary, #2563eb)' : '#e5e7eb',
+                color: role ? '#fff' : '#6b7280',
+                borderRadius: '4px',
+                padding: '1px 7px',
+                fontSize: '0.7rem',
+                fontWeight: '600',
+                letterSpacing: '0.03em',
+                whiteSpace: 'nowrap',
+              }}>
+                {role ?? 'no role'}
+              </span>
               <button
                 onClick={logout}
                 style={{
@@ -156,22 +167,6 @@ const Header = () => {
 
           {authEnabled && !isAuthenticated && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Link
-                to="/register"
-                style={{
-                  background: 'transparent',
-                  border: '1px solid var(--primary, #1a73e8)',
-                  borderRadius: '4px',
-                  padding: '5px 12px',
-                  color: 'var(--primary, #1a73e8)',
-                  fontSize: '0.85rem',
-                  fontWeight: '500',
-                  whiteSpace: 'nowrap',
-                  textDecoration: 'none',
-                }}
-              >
-                Register
-              </Link>
               <button
                 onClick={login}
                 style={{
@@ -243,6 +238,11 @@ const Header = () => {
                     {label}
                   </NavLink>
                 ))}
+                {process.env.REACT_APP_BUILD_DATE && (
+                  <div style={{ padding: '8px 18px', fontSize: '0.7rem', color: 'var(--text-secondary, #888)', textAlign: 'right' }}>
+                    Built {process.env.REACT_APP_BUILD_DATE}
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -2,6 +2,9 @@
 
 This folder contains systemd unit files and an example nginx config to run the backend and frontend behind nginx on a Linux server.
 
+**⚠️ IMPORTANT: HTTPS Required**
+The application requires HTTPS in production for geolocation features and secure browser APIs. See the Nginx section below for SSL certificate setup instructions. For servers behind a firewall, see `SSL_SETUP_BEHIND_FIREWALL.md`.
+
 ## Paths and Users
 - Adjust `/opt/evinfra/...` paths to where you deployed the code.
 - Create a service user (recommended): `useradd -r -s /usr/sbin/nologin evinfra`.
@@ -100,10 +103,85 @@ The script restarts services with `systemctl` and will gracefully skip migration
    ```bash
    sudo cp deploy/nginx/evinfra.conf /etc/nginx/sites-available/evinfra.conf
    sudo ln -s /etc/nginx/sites-available/evinfra.conf /etc/nginx/sites-enabled/evinfra.conf
+   ```
+
+2. **Setup SSL Certificates:**
+   
+   **Quick Setup (Recommended):**
+   ```bash
+   sudo chmod +x deploy/scripts/setup_ssl.sh
+   sudo deploy/scripts/setup_ssl.sh
+   ```
+   This interactive script will guide you through setting up certificates. **Choose option 1** to import a .pfx certificate from your IT department (for servers behind a firewall).
+   
+   **Manual Setup:**
+   
+   **Option A: Import .pfx Certificate from IT (For servers behind firewall)**
+   
+   If your IT department provides a .pfx file (e.g., `svgc32zevi.dot.ca.gov.pfx`):
+   ```bash
+   # Extract certificate and key from .pfx file
+   sudo mkdir -p /etc/pki/tls/certs
+   
+   # Extract certificate (you'll be prompted for the .pfx password)
+   sudo openssl pkcs12 -in /path/to/svgc32zevi.dot.ca.gov.pfx \
+     -clcerts -nokeys \
+     -out /etc/pki/tls/certs/svgc32zevi.dot.ca.gov.crt
+   
+   # Extract private key
+   sudo openssl pkcs12 -in /path/to/svgc32zevi.dot.ca.gov.pfx \
+     -nocerts -nodes \
+     -out /etc/pki/tls/certs/svgc32zevi.dot.ca.gov.key
+   
+   # Extract certificate chain (if present)
+   sudo openssl pkcs12 -in /path/to/svgc32zevi.dot.ca.gov.pfx \
+     -cacerts -nokeys \
+     -out /etc/pki/tls/certs/svgc32zevi.dot.ca.gov-chain.crt
+   
+   # Set proper permissions
+   sudo chmod 644 /etc/pki/tls/certs/svgc32zevi.dot.ca.gov.crt
+   sudo chmod 600 /etc/pki/tls/certs/svgc32zevi.dot.ca.gov.key
+   ```
+   
+   The nginx config is already configured to use these paths.
+   
+   **Option B: Using Let's Encrypt (Only if publicly accessible)**
+   
+   **Note:** This will NOT work if your server is behind a firewall. Skip this if you need to use certificates from IT.
+   ```bash
+   # Install certbot
+   sudo apt install certbot python3-certbot-nginx  # Ubuntu/Debian
+   # OR
+   sudo yum install certbot python3-certbot-nginx  # RHEL/CentOS
+   
+   # Obtain certificate
+   sudo certbot certonly --nginx -d svgc32zevi.dot.ca.gov
+   
+   # Certificates will be placed at:
+   # /etc/letsencrypt/live/svgc32zevi.dot.ca.gov/fullchain.pem
+   # /etc/letsencrypt/live/svgc32zevi.dot.ca.gov/privkey.pem
+   
+   # Setup auto-renewal
+   sudo systemctl enable certbot-renew.timer
+   sudo systemctl start certbot-renew.timer
+   
+   # Update nginx config to use Let's Encrypt paths:
+   # ssl_certificate /etc/letsencrypt/live/svgc32zevi.dot.ca.gov/fullchain.pem;
+   # ssl_certificate_key /etc/letsencrypt/live/svgc32zevi.dot.ca.gov/privkey.pem;
+   ```
+
+3. Validate and reload nginx:
+   ```bash
    sudo nginx -t
    sudo systemctl reload nginx
    ```
-2. TLS: replace `listen 80;` with your SSL setup (e.g., certbot).
+
+**Note:** The nginx config now includes HTTPS on port 443 and redirects HTTP (port 80) to HTTPS. Make sure your firewall allows both ports:
+```bash
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --reload
+```
 
 ## Alembic Migrations
 Run Alembic from the same venv:
@@ -119,3 +197,10 @@ alembic upgrade head
 - `journalctl -u evinfra-frontend -f`
 - `sudo nginx -t` to validate config.
 - If gunicorn fails to import app, ensure `WorkingDirectory` is the backend folder and the factory path `"app:create_app()"` is correct.
+
+## Minio
+Files are in /data/minio/evinfra
+Settings file is in /etc/default
+
+## Database backups
+Backups are in /opt/db-backups/

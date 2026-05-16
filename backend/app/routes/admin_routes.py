@@ -16,7 +16,6 @@ from flask import Blueprint, jsonify, request
 from ..auth import require_role
 from ..extensions import db
 from ..models import UserRole, Site
-from ..services.registration_service import _load_users, _users_file
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -171,25 +170,10 @@ def delete_role(role_id):
 @require_role("admin")
 def list_authelia_users():
     """
-    Return the list of users from Authelia's user database.
-
-    Response: [ { username, displayname, email, groups, has_role } ]
+    Return users who have an existing role assignment.
+    (LDAP backend — we no longer read from the file user database.)
     """
-    try:
-        users = _load_users(_users_file())
-    except Exception as exc:
-        return jsonify({"error": f"Could not read user database: {exc}"}), 500
-
-    # Build a set of usernames that already have a role assignment
-    assigned = {r.username for r in UserRole.query.all()}
-
-    result = []
-    for username, info in sorted(users.items()):
-        result.append({
-            "username": username,
-            "displayname": info.get("displayname", ""),
-            "email": info.get("email", ""),
-            "groups": info.get("groups", []),
-            "has_role": username in assigned,
-        })
+    assigned = UserRole.query.order_by(UserRole.username).all()
+    result = [{"username": r.username, "displayname": "", "email": "", "groups": [], "has_role": True}
+              for r in assigned]
     return jsonify(result)

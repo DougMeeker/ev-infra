@@ -73,6 +73,7 @@ function OidcAuthInner({ children }) {
 		import("./api").then(({ getMe }) =>
 			getMe()
 				.then((res) => {
+					console.log("[AuthProvider] /api/auth/me response:", res.data);
 					setRole(res.data?.role || null);
 					setDistrict(res.data?.district ?? null);
 					setSiteId(res.data?.site_id ?? null);

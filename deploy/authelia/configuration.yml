@@ -11,38 +11,26 @@ identity_validation:
     jwt_secret: "CHANGE_ME_RUN: authelia crypto rand --length 64"
 
 authentication_backend:
-  # ── TEMPORARY: file backend while awaiting LDAP bind credentials from IT ──
-  # To switch to AD/LDAP: fill in the password below and swap the comments.
-  file:
-    path: /etc/authelia/users_database.yml
-    password:
-      algorithm: argon2
-      argon2:
-        memory: 131072
-        iterations: 3
-        parallelism: 4
-        key_length: 32
-        salt_length: 16
-
-  # ldap:
-  #   implementation: activedirectory
-  #   address: "ldaps://SVGCCTDC1.ct.dot.ca.gov:636"
-  #   timeout: 5s
-  #   start_tls: false
-  #   user: "CN=authelia-bind,OU=Service Accounts,DC=ct,DC=dot,DC=ca,DC=gov"
-  #   password: "CHANGE_ME_BIND_PASSWORD"
-  #   base_dn: "DC=ct,DC=dot,DC=ca,DC=gov"
-  #   users_filter: "(&({username_attribute}={input})(objectClass=user))"
-  #   attributes:
-  #     username: "sAMAccountName"
-  #     display_name: "displayName"
-  #     mail: "mail"
-  #     group_name: "cn"
-  #   tls:
-  #     server_name: SVGCCTDC1.ct.dot.ca.gov
-  #     skip_verify: false
-  #     minimum_version: TLS1.2
-  #     trusted_cert: /etc/pki/ca-trust/source/anchors/ct-root-ca.crt
+  password_reset:
+    disable: true
+  ldap:
+    implementation: activedirectory
+    address: "ldaps://SVGCCTDC1.ct.dot.ca.gov:636"
+    timeout: 5s
+    start_tls: false
+    user: "CN=svc-EVI,OU=Service Accounts,OU=Users,OU=zAdmin,DC=ct,DC=dot,DC=ca,DC=gov"
+    password: "CHANGE_ME_BIND_PASSWORD"
+    base_dn: "DC=ct,DC=dot,DC=ca,DC=gov"
+    users_filter: "(&({username_attribute}={input})(objectClass=user))"
+    attributes:
+      username: "sAMAccountName"
+      display_name: "displayName"
+      mail: "mail"
+      group_name: "cn"
+    tls:
+      server_name: SVGCCTDC1.ct.dot.ca.gov
+      skip_verify: false
+      minimum_version: TLS1.2
 
 session:
   name: authelia_session
